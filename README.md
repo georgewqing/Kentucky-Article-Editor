@@ -7,7 +7,6 @@
 
 **License:** [MIT](./LICENSE) · **仓库：** https://github.com/CCFOX12/Kentucky-Article-Editor
 
-架构与决策备忘见 [`project-memory/`](./project-memory/README.md)（上下文重置后请先读）。
 
 ## 功能
 

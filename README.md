@@ -1,41 +1,44 @@
 # KENTUCKY
 
-本地写作桌面应用（Electron + React + TypeScript）。面向**专心写文章**：`.md` 所见即所得 + 可切源码；另有自由白板思维导图。界面气质接近 Cursor 工作台：少硬边框、统一色阶，支持深色 / 浅色与可调主体色。
+**English:** A local desktop writing app (Electron + React + TypeScript). Built for focused article writing: Markdown WYSIWYG with optional source mode, plus a freeform whiteboard mind map. The UI aims for a Cursor-like workbench feel—soft edges, a unified palette, dark/light themes, and a tunable accent color.
 
-> **开发说明：** 本项目由作者与 AI（Cursor Agent）协作开发。  
-> **更新原则：** 优先以作者个人写作与使用需求迭代，**在一定程度上是自用软件**。公开仓库欢迎围观与参考；功能路线、交互取舍可能不完全面向通用产品化。
+**中文：** 本地写作桌面应用（Electron + React + TypeScript）。面向**专心写文章**：`.md` 所见即所得 + 可切源码；另有自由白板思维导图。界面气质接近 Cursor 工作台：少硬边框、统一色阶，支持深色 / 浅色与可调主体色。
 
-**关于名字：** 为什么叫 KENTUCKY？因为最近《僵尸毁灭工程》B42 更新玩上头了（笑）。
+> **Development note / 开发说明:** Built collaboratively by the author and AI (Cursor Agent).  
+> **Update policy / 更新原则:** Features ship primarily for the author’s own writing needs—this is **partly a personal tool**. The public repo is welcome to browse and learn from; the roadmap and UX trade-offs may not match a fully productized app.
 
-**License:** [MIT](./LICENSE) · **仓库：** https://github.com/CCFOX12/Kentucky-Article-Editor
+**Why “KENTUCKY”? / 关于名字:** Named after the Kentucky map in *Project Zomboid*—the author got hooked on the B42 (Build 42) update. (Yes, that is the whole reason.) / 因为最近《僵尸毁灭工程》B42 更新玩上头了（笑）。
 
+**License:** [MIT](./LICENSE) · **Repo:** https://github.com/CCFOX12/Kentucky-Article-Editor
 
-## 功能
+Architecture and decision notes: [`project-memory/`](./project-memory/README.md) (read this after context resets). / 架构与决策备忘见同目录（上下文重置后请先读）。
 
-- **工作区：** 打开本地文件夹；欢迎页以卡片展示最近工作区（最多 6 个）
-- **资源管理器：** 文件树、顶栏 / 右键新建文件·文件夹·思维导图、删除、「在文件资源管理器中显示」；侧栏宽度可拖
-- **文本写作：** `.md` 为 TipTap 所见即所得 + 极简工具栏（可切 Monaco 源码、非空白字数）；`.txt` 等为软化 Monaco（淡行号）；脏标记与保存；关闭拼写红波浪线
-- **思维导图：** 独立 `.kmind` v2（React Flow 自由白板）；矩形 / 圆角矩形 / 椭圆；拖线落空可建节点并连边；自绘小地图；节点链接 / 插图 / 参考图 / 批注「黑下巴」；与正文弱联动、不同步
-- **多窗口：** Blender 式「新建窗口」（精简单文件）/「新建主窗口」（完整工作台 + 同工作区空标签）；同路径正文跨窗实时共享；应用内未保存对话框（保存 / 不保存 / 取消）
-- **分屏：** 编辑器左右分栏
-- **设置：** 深色 / 浅色、主体色（预设 + 取色器）、字号、中英 UI；菜单随语言切换
-- **架构预留：** 渲染层通过 `Platform` 抽象访问文件系统，便于未来大屏安卓复用 UI
+## Features / 功能
 
-## 明确不做（现阶段）
+- **Workspace / 工作区:** Open a local folder; welcome page shows up to 6 recent workspace cards. / 打开本地文件夹；欢迎页以卡片展示最近工作区（最多 6 个）。
+- **Explorer / 资源管理器:** File tree; create file/folder/mind map from toolbar or context menu; delete; “Reveal in File Explorer”; resizable sidebar. / 文件树、顶栏/右键新建、删除、「在文件资源管理器中显示」；侧栏宽度可拖。
+- **Writing / 文本写作:** `.md` via TipTap WYSIWYG + minimal toolbar (toggle Monaco source, non-whitespace character count); other text via softened Monaco; dirty flag + save; browser spellcheck squiggles disabled. / `.md` 为 TipTap 所见即所得 + 极简工具栏；`.txt` 等为软化 Monaco；脏标记与保存；关闭拼写红波浪线。
+- **Mind map / 思维导图:** Standalone `.kmind` v2 (React Flow freeform board); rectangle / rounded / ellipse; drag edges onto empty canvas to create linked nodes; custom minimap; node links, images, reference images, and note “chin” panels; weak coupling to articles (no auto-sync). / 独立 `.kmind` v2；节点链接/插图/参考图/批注「黑下巴」；与正文弱联动、不同步。
+- **Multi-window / 多窗口:** Blender-style **New Window** (slim single-file editor) and **New Main Window** (full workbench, same workspace, empty tabs); same-path buffers shared live across windows; in-app unsaved dialog (Save / Don’t Save / Cancel). / Blender 式新建窗口/新建主窗口；同路径正文跨窗实时共享；应用内未保存对话框。
+- **Split view / 分屏:** Side-by-side editor panes. / 编辑器左右分栏。
+- **Settings / 设置:** Dark/light, accent (presets + picker), font size, Chinese/English UI; menus follow locale. / 深色/浅色、主体色、字号、中英 UI。
+- **Portability / 架构预留:** Renderer talks to the filesystem only through a `Platform` abstraction (future large-screen Android reuse). / 渲染层经 `Platform` 抽象访问文件系统。
 
-- Markdown 左右分屏预览（WYSIWYG 即阅读态）、正文 ↔ 导图自动同步
-- 命令面板 / 扩展 / Git / 云同步
-- 手机窄屏布局
-- 精简窗内换文件、跨窗同步光标 / 选区
+## Out of scope (for now) / 明确不做（现阶段）
 
-## 快速开始
+- Split Markdown preview (WYSIWYG is the reading surface); auto-sync between article and mind map / Markdown 左右分屏预览、正文 ↔ 导图自动同步
+- Command palette / extensions / Git / cloud sync / 命令面板、扩展、Git、云同步
+- Phone-narrow layouts / 手机窄屏布局
+- Switching files inside a slim window; syncing caret/selection across windows / 精简窗内换文件、跨窗同步光标/选区
+
+## Quick start / 快速开始
 
 ```bash
 npm install
 npm run dev
 ```
 
-Windows PowerShell 若禁止 npm 脚本：
+If Windows PowerShell blocks npm scripts / 若 PowerShell 禁止 npm 脚本:
 
 ```bat
 cmd /c npm run dev
@@ -46,22 +49,22 @@ npm run typecheck
 npm run build
 ```
 
-产物在 `out/`。
+Build output is in `out/`. / 产物在 `out/`。
 
-## 快捷键
+## Shortcuts / 快捷键
 
-| 快捷键 | 作用 |
-|--------|------|
-| Ctrl+S | 保存 |
-| Ctrl+W | 关闭标签 |
-| Ctrl+B | 侧栏相关 |
-| Ctrl+O | 打开文件夹 |
-| Ctrl+, | 设置 |
+| Shortcut | Action (EN) | 作用（中文） |
+|----------|-------------|--------------|
+| Ctrl+S | Save | 保存 |
+| Ctrl+W | Close tab | 关闭标签 |
+| Ctrl+B | Sidebar | 侧栏相关 |
+| Ctrl+O | Open folder | 打开文件夹 |
+| Ctrl+, | Settings | 设置 |
 
-## 技术栈
+## Stack / 技术栈
 
 Electron · electron-vite · React 19 · TypeScript · Zustand · TipTap · Monaco · @xyflow/react · i18next
 
-## 贡献与反馈
+## Contributing / 贡献与反馈
 
-因以个人需求为优先，不保证接受所有功能请求或 PR 节奏。Issue / PR 仍可开，作者会按自身使用优先级决定是否合入。
+Personal needs come first—feature requests and PR timing are not guaranteed. Issues and PRs are still welcome; the author merges by personal priority. / 因以个人需求为优先，不保证接受所有功能请求或 PR 节奏。Issue / PR 仍可开，作者会按自身使用优先级决定是否合入。

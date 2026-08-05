@@ -1,5 +1,21 @@
 export type KMindShape = 'rect' | 'rounded' | 'ellipse'
 
+export type KMindLinkKind = 'file' | 'line'
+
+export interface KMindNodeLink {
+  /** Path relative to workspace root (forward slashes). */
+  path: string
+  kind: KMindLinkKind
+  /** 1-based line number when kind === 'line'. */
+  line?: number
+}
+
+export interface KMindNodeImage {
+  /** Path relative to workspace root, e.g. "ideas.assets/img_x.png". */
+  src: string
+  name: string
+}
+
 export interface KMindGraphNode {
   id: string
   text: string
@@ -8,6 +24,19 @@ export interface KMindGraphNode {
   y: number
   width: number
   height: number
+  link?: KMindNodeLink
+  image?: KMindNodeImage
+  /** Pane-imported reference image: no text chrome; resizable. */
+  imageOnly?: boolean
+  /**
+   * Node note (“chin”). Field presence means the chin exists (may be '').
+   * Cleared by removing the field entirely.
+   */
+  note?: string
+  /** Whether the note chin is expanded. Default false when omitted. */
+  noteOpen?: boolean
+  /** Optional hyperlink attached to the note (not the node title). */
+  noteLink?: KMindNodeLink
 }
 
 export interface KMindGraphEdge {
@@ -68,6 +97,33 @@ function isShape(v: unknown): v is KMindShape {
   return v === 'rect' || v === 'rounded' || v === 'ellipse'
 }
 
+function parseLink(raw: unknown): KMindNodeLink | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const o = raw as Record<string, unknown>
+  if (typeof o.path !== 'string' || !o.path.trim()) return undefined
+  const path = o.path.replace(/\\/g, '/')
+  // Legacy heading links → whole-file link.
+  if (o.kind === 'heading') {
+    return { path, kind: 'file' }
+  }
+  if (o.kind === 'line') {
+    const line = typeof o.line === 'number' ? Math.floor(o.line) : Number(o.line)
+    if (!Number.isFinite(line) || line < 1) return undefined
+    return { path, kind: 'line', line }
+  }
+  return { path, kind: 'file' }
+}
+
+function parseImage(raw: unknown): KMindNodeImage | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const o = raw as Record<string, unknown>
+  if (typeof o.src !== 'string' || !o.src.trim()) return undefined
+  return {
+    src: o.src.replace(/\\/g, '/'),
+    name: typeof o.name === 'string' && o.name.trim() ? o.name.trim() : o.src.split('/').pop() || 'image'
+  }
+}
+
 export function parseKMind(raw: string): KMindDocument {
   let data: unknown
   try {
@@ -96,14 +152,39 @@ export function parseKMind(raw: string): KMindDocument {
     if (!node || typeof node.id !== 'string') {
       throw new KMindFormatError('invalid_node')
     }
+    const link = parseLink(node.link)
+    const image = parseImage(node.image)
+    const imageOnly = node.imageOnly === true && Boolean(image)
+    const hasNote = Object.prototype.hasOwnProperty.call(node, 'note')
+    const note =
+      hasNote && typeof node.note === 'string'
+        ? node.note
+        : hasNote
+          ? ''
+          : undefined
+    const noteLink = note !== undefined ? parseLink(node.noteLink) : undefined
     return {
       id: node.id,
-      text: typeof node.text === 'string' ? node.text : `Node ${i + 1}`,
-      shape: isShape(node.shape) ? node.shape : 'rounded',
+      text: imageOnly
+        ? ''
+        : typeof node.text === 'string'
+          ? node.text
+          : `Node ${i + 1}`,
+      shape: imageOnly ? 'rounded' : isShape(node.shape) ? node.shape : 'rounded',
       x: typeof node.x === 'number' ? node.x : 0,
       y: typeof node.y === 'number' ? node.y : 0,
-      width: typeof node.width === 'number' ? node.width : 160,
-      height: typeof node.height === 'number' ? node.height : 48
+      width: typeof node.width === 'number' ? node.width : imageOnly ? 200 : 160,
+      height: typeof node.height === 'number' ? node.height : imageOnly ? 150 : 48,
+      ...(link ? { link } : {}),
+      ...(image ? { image } : {}),
+      ...(imageOnly ? { imageOnly: true } : {}),
+      ...(note !== undefined
+        ? {
+            note,
+            ...(node.noteOpen === true ? { noteOpen: true } : {}),
+            ...(noteLink ? { noteLink } : {})
+          }
+        : {})
     }
   })
 
@@ -140,4 +221,11 @@ export function parseKMind(raw: string): KMindDocument {
 
 export function serializeKMind(doc: KMindDocument): string {
   return JSON.stringify(doc, null, 2)
+}
+
+/** Assets dir sibling to the .kmind file: `ideas.kmind` → `ideas.assets`. */
+export function assetsDirForKmind(kmindPath: string): string {
+  const normalized = kmindPath.replace(/\\/g, '/')
+  const base = normalized.replace(/\.kmind$/i, '')
+  return `${base}.assets`
 }

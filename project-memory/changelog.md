@@ -71,3 +71,56 @@
 - 磁盘仍为 Markdown 文本（`tiptap-markdown` 往返）；无分屏预览
 - `.txt` 等非 md：软化 Monaco（淡行号、无缩进线）
 - 工具栏 active 态用 `useEditorState` 订阅事务，开关格式即时刷新（不必再打字才更新）
+
+## 10. 导图超链接 + 内嵌图片
+
+- `.kmind` 节点可选 `link` / `image`（仍 version 2）
+- 右键：链接到文件 / 链接到段落 / 清除链接；插入图片 / 移除图片（删 assets 副本）
+- 资源：`ideas.kmind` → `ideas.assets/`；Platform `copyFile` + `openImage` + `kentucky-file` 协议
+- 「链接到段落」：选 `.md`/`.txt` → 分屏 → 点行确认；跳转在 WYSIWYG 定位高亮（不显示行号），光标移动后清除
+- 旧 `kind: heading` 降级为整文件链接
+
+## 11. 导图参考图（PureRef 极简）
+
+- 节点可选 `imageOnly`；空白右键多选导入 → 复制进 `名.assets/`，网格错开摆放
+- 纯图：无文字区/文件名条；选中角点锁比例缩放（`NodeResizer`）；四边手柄可连线
+- 纯图右键仅移除图片 / 删除节点（均删节点+assets）；节点插图流程不变
+- Platform：`openImages`（`multiSelections`）；`openImage` 仍单选
+
+## 12. 导图节点批注（黑下巴）
+
+- 节点可选 `note` / `noteOpen` / `noteLink`；右键添加 → 展开聚焦；下巴绝对定位不撑高节点
+- 展开后 textarea 直接编辑；批注超链复用选文件/选行（`linkTarget: note`），文字后小图标跳转
+- 普通 / 插图 / 纯图节点均可；清除批注去掉下巴与批注链
+- **视觉定稿**：节点原描边不动；下巴另延同色描边（无顶边）；中间分割线=节点底边（含圆角）；侧线靠下巴上移 `--kmind-radius` 延长，勿伪元素另画
+- 内容区 `.kmind-node-shell` 按圆角裁切填色；切换箭头无悬停高亮
+- 批注输入：黑底、无滚动条、随文字增高（`overflow: hidden` + 高度同步）
+
+## 13. 字数统计修正 + 资源管理器「打开所在目录」
+
+- `wordCount.ts`：**非空白字符数**（中英均按码点计 1）；修正「一行英文只算 1」与 UI「字」不一致
+- Platform / IPC：`showItemInFolder`；目录→`shell.openPath`，文件→`shell.showItemInFolder`
+- 文件树右键：「在文件资源管理器中显示」（文件 / 文件夹 / 空白处→工作区根）
+
+## 14. 拼写波浪线 / 菜单精简
+
+- TipTap `spellcheck: false` + BrowserWindow `webPreferences.spellcheck: false`（去掉红波浪线）
+- 查看菜单去掉「切换开发者工具」（`AppMenuBar` + `menu.ts`）
+- 「了解 KENTUCKY」统一打开 https://github.com/CCFOX12/Kentucky-Article-Editor
+
+## 15. Blender 式多窗口
+
+- 「窗口」：新建窗口（精简单文件）/ 新建主窗口（完整台+同工作区空标签）
+- 主进程 `documentHub` + `windowRegistry`；同路径实时共享 content/dirty；任一窗保存两边清脏
+- `FloatWorkbench`（无顶栏菜单）；无活动文件时新建窗口灰显；关最后主窗退出；工作区无主窗持有则关 float
+
+## 16. 应用内未保存对话框
+
+- 关窗 / 关脏标签 / 关工作区：应用内「保存 / 不保存 / 取消」（勿用 `window.confirm` / `beforeunload`）
+- 主进程 `close` → `window:close-request` → 对话框 → `window:confirmClose`；`doc:discard` 回滚缓冲
+
+## 其它小修
+
+- 选项卡悬停用 `cursor: pointer`
+- 连线手柄圆心贴节点边缘（半进半出）；缩放时手柄不宜过大
+

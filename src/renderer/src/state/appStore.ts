@@ -1,11 +1,34 @@
 import { create } from 'zustand'
-import type { FileEntry } from '@/platform'
+import type { DocSnapshot, FileEntry, WindowRole } from '@/platform'
 import { getPlatform } from '@/platform'
-import { createEmptyKMind, serializeKMind } from '@/editors/kmind'
+import { createEmptyKMind, serializeKMind, type KMindNodeLink } from '@/editors/kmind'
 import i18n from '@/i18n'
+import { askUnsavedConfirm } from '@/state/unsavedDialogStore'
 
 export type EditorKind = 'text' | 'mindmap'
 export type ActiveView = 'explorer' | 'settings'
+
+export interface LinePickSession {
+  mindmapTabId: string
+  nodeId: string
+  targetPath: string
+  fileRel: string
+  /** Write back to node.title link vs noteLink. */
+  linkTarget: 'node' | 'note'
+}
+
+export interface LinePickResult {
+  mindmapTabId: string
+  nodeId: string
+  link: KMindNodeLink
+  linkTarget: 'node' | 'note'
+}
+
+export interface LineFlashRequest {
+  path: string
+  line: number
+  nonce: number
+}
 
 export interface OpenTab {
   id: string
@@ -15,6 +38,8 @@ export interface OpenTab {
   content: string
   originalContent: string
   dirty: boolean
+  /** Last applied DocumentHub revision (echo prevention). */
+  docRev: number
 }
 
 export interface RecentWorkspace {
@@ -24,7 +49,11 @@ export interface RecentWorkspace {
 
 export type Toast = { id: number; message: string; type: 'error' | 'info' } | null
 
+/** True while applying a remote DocumentHub snapshot (skip doc:patch echo). */
+let applyingFromHub = false
+
 interface AppState {
+  windowRole: WindowRole
   workspacePath: string | null
   fileTree: FileEntry[]
   sidebarVisible: boolean
@@ -36,7 +65,11 @@ interface AppState {
   splitEnabled: boolean
   recentFolders: RecentWorkspace[]
   toast: Toast
+  lineFlash: LineFlashRequest | null
+  linePickSession: LinePickSession | null
+  linePickResult: LinePickResult | null
 
+  setWindowRole: (role: WindowRole) => void
   setSidebarVisible: (v: boolean) => void
   toggleSidebar: () => void
   setSidebarWidth: (w: number) => void
@@ -50,13 +83,27 @@ interface AppState {
 
   openWorkspace: (path: string) => Promise<void>
   refreshTree: () => Promise<void>
-  closeWorkspace: () => void
+  closeWorkspace: () => Promise<void>
 
-  openFile: (path: string) => Promise<void>
+  openFile: (path: string, opts?: { line?: number }) => Promise<void>
+  applyDocSnapshot: (snap: DocSnapshot) => void
+  clearLineFlash: () => void
+  beginLinePick: (opts: {
+    mindmapTabId: string
+    nodeId: string
+    fileAbs: string
+    fileRel: string
+    linkTarget?: 'node' | 'note'
+  }) => Promise<void>
+  confirmLinePick: (line: number) => void
+  cancelLinePick: () => void
+  clearLinePickResult: () => void
   setActiveTab: (id: string) => void
   updateTabContent: (id: string, content: string) => void
   saveTab: (id?: string) => Promise<boolean>
-  closeTab: (id: string, force?: boolean) => boolean
+  discardTab: (id: string) => Promise<void>
+  closeTab: (id: string, force?: boolean) => Promise<boolean>
+  handleWindowCloseRequest: () => Promise<void>
   enableSplit: (tabId?: string) => void
   disableSplit: () => void
   setSplitTab: (id: string) => void
@@ -65,6 +112,9 @@ interface AppState {
   createFolder: (name: string, parentDir?: string) => Promise<void>
   createMindMap: (name: string, parentDir?: string) => Promise<void>
   deleteEntry: (targetPath: string) => Promise<void>
+
+  spawnNewWindow: () => Promise<void>
+  spawnNewMainWindow: () => Promise<void>
 }
 
 const RECENT_KEY = 'kentucky.recentFolders'
@@ -80,7 +130,6 @@ function tabIdFor(path: string): string {
 function parseRecent(raw: string): RecentWorkspace[] {
   const data = JSON.parse(raw) as unknown
   if (!Array.isArray(data)) return []
-  // Migrate legacy string[]
   if (data.length > 0 && typeof data[0] === 'string') {
     const now = Date.now()
     return (data as string[]).map((path, i) => ({
@@ -96,7 +145,15 @@ function parseRecent(raw: string): RecentWorkspace[] {
     }))
 }
 
+function pathsEqual(a: string, b: string): boolean {
+  return a.replace(/\//g, '\\').toLowerCase() === b.replace(/\//g, '\\').toLowerCase()
+}
+
+/** Guard against stacked close-request while dialog is open. */
+let windowCloseBusy = false
+
 export const useAppStore = create<AppState>((set, get) => ({
+  windowRole: 'main',
   workspacePath: null,
   fileTree: [],
   sidebarVisible: true,
@@ -108,7 +165,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   splitEnabled: false,
   recentFolders: [],
   toast: null,
+  lineFlash: null,
+  linePickSession: null,
+  linePickResult: null,
 
+  setWindowRole: (role) => set({ windowRole: role }),
   setSidebarVisible: (v) => set({ sidebarVisible: v }),
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   setSidebarWidth: (w) => set({ sidebarWidth: Math.min(480, Math.max(160, w)) }),
@@ -164,6 +225,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeView: 'explorer',
         sidebarVisible: true
       })
+      if (get().windowRole === 'main') {
+        void platform.reportWorkspace(path)
+      }
     } catch {
       get().showToast(i18n.t('errors.loadTreeFailed'))
     }
@@ -180,9 +244,26 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  closeWorkspace: () => {
-    const dirty = get().tabs.some((t) => t.dirty)
-    if (dirty && !window.confirm(i18n.t('editor.unsavedConfirm'))) return
+  closeWorkspace: async () => {
+    const dirtyTabs = get().tabs.filter((t) => t.dirty)
+    if (dirtyTabs.length > 0) {
+      const name = dirtyTabs.length === 1 ? dirtyTabs[0].title : undefined
+      const choice = await askUnsavedConfirm({ fileName: name })
+      if (choice === 'cancel') return
+      if (choice === 'save') {
+        for (const tab of dirtyTabs) {
+          const ok = await get().saveTab(tab.id)
+          if (!ok) return
+        }
+      } else {
+        for (const tab of dirtyTabs) {
+          await get().discardTab(tab.id)
+        }
+      }
+    }
+    for (const tab of get().tabs) {
+      void getPlatform().docUnsubscribe(tab.path)
+    }
     set({
       workspacePath: null,
       fileTree: [],
@@ -190,27 +271,54 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeTabId: null,
       splitTabId: null,
       splitEnabled: false,
-      activeView: 'explorer'
+      activeView: 'explorer',
+      lineFlash: null,
+      linePickSession: null,
+      linePickResult: null
     })
+    if (get().windowRole === 'main') {
+      void getPlatform().reportWorkspace(null)
+    }
   },
 
-  openFile: async (path) => {
-    const existing = get().tabs.find((t) => t.path === path)
+  openFile: async (path, opts) => {
+    const { windowRole, tabs } = get()
+    if (windowRole === 'float' && tabs.length > 0 && !pathsEqual(tabs[0].path, path)) {
+      return
+    }
+
+    const lineRaw = opts?.line
+    const line =
+      typeof lineRaw === 'number' && Number.isFinite(lineRaw) && lineRaw >= 1
+        ? Math.floor(lineRaw)
+        : undefined
+    if (line !== undefined) {
+      set({
+        lineFlash: { path, line, nonce: Date.now() }
+      })
+    }
+    const existing = get().tabs.find((t) => pathsEqual(t.path, path))
     if (existing) {
       set({ activeTabId: existing.id, activeView: 'explorer' })
+      void getPlatform().docOpen(path)
       return
     }
     const platform = getPlatform()
     try {
-      const content = await platform.readFile(path)
+      const snap = await platform.docOpen(path)
+      if (!snap) {
+        get().showToast(i18n.t('errors.openFailed'))
+        return
+      }
       const tab: OpenTab = {
-        id: tabIdFor(path),
-        path,
-        title: platform.basename(path),
-        kind: detectKind(path),
-        content,
-        originalContent: content,
-        dirty: false
+        id: tabIdFor(snap.path),
+        path: snap.path,
+        title: platform.basename(snap.path),
+        kind: detectKind(snap.path),
+        content: snap.content,
+        originalContent: snap.originalContent,
+        dirty: snap.dirty,
+        docRev: snap.rev
       }
       set((s) => ({
         tabs: [...s.tabs, tab],
@@ -222,14 +330,107 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  applyDocSnapshot: (snap) => {
+    applyingFromHub = true
+    try {
+      set((s) => {
+        const idx = s.tabs.findIndex((t) => pathsEqual(t.path, snap.path))
+        if (idx < 0) return s
+        const tab = s.tabs[idx]
+        if (snap.rev <= tab.docRev && tab.content === snap.content && tab.dirty === snap.dirty) {
+          return s
+        }
+        const next = [...s.tabs]
+        next[idx] = {
+          ...tab,
+          content: snap.content,
+          originalContent: snap.originalContent,
+          dirty: snap.dirty,
+          docRev: snap.rev
+        }
+        return { tabs: next }
+      })
+    } finally {
+      applyingFromHub = false
+    }
+  },
+
+  clearLineFlash: () => set({ lineFlash: null }),
+
+  beginLinePick: async ({ mindmapTabId, nodeId, fileAbs, fileRel, linkTarget = 'node' }) => {
+    await get().openFile(fileAbs)
+    const fileTabId = tabIdFor(fileAbs)
+    if (!get().tabs.some((t) => t.id === fileTabId)) return
+    set({
+      linePickSession: {
+        mindmapTabId,
+        nodeId,
+        targetPath: fileAbs,
+        fileRel,
+        linkTarget
+      },
+      linePickResult: null,
+      activeTabId: mindmapTabId,
+      splitEnabled: true,
+      splitTabId: fileTabId,
+      activeView: 'explorer'
+    })
+  },
+
+  confirmLinePick: (line) => {
+    const session = get().linePickSession
+    if (!session) return
+    const n = Math.floor(line)
+    if (!Number.isFinite(n) || n < 1) return
+    set({
+      linePickSession: null,
+      linePickResult: {
+        mindmapTabId: session.mindmapTabId,
+        nodeId: session.nodeId,
+        link: { path: session.fileRel, kind: 'line', line: n },
+        linkTarget: session.linkTarget
+      },
+      splitEnabled: false,
+      splitTabId: null,
+      activeTabId: session.mindmapTabId,
+      activeView: 'explorer'
+    })
+  },
+
+  cancelLinePick: () => {
+    const session = get().linePickSession
+    set({
+      linePickSession: null,
+      splitEnabled: false,
+      splitTabId: null,
+      ...(session ? { activeTabId: session.mindmapTabId, activeView: 'explorer' as const } : {})
+    })
+  },
+
+  clearLinePickResult: () => set({ linePickResult: null }),
+
   setActiveTab: (id) => set({ activeTabId: id, activeView: 'explorer' }),
 
-  updateTabContent: (id, content) =>
+  updateTabContent: (id, content) => {
+    const tab = get().tabs.find((t) => t.id === id)
     set((s) => ({
       tabs: s.tabs.map((t) =>
         t.id === id ? { ...t, content, dirty: content !== t.originalContent } : t
       )
-    })),
+    }))
+    if (!applyingFromHub && tab) {
+      void getPlatform()
+        .docPatch(tab.path, content)
+        .then((snap) => {
+          if (!snap) return
+          set((s) => ({
+            tabs: s.tabs.map((t) =>
+              pathsEqual(t.path, snap.path) ? { ...t, docRev: snap.rev, dirty: snap.dirty } : t
+            )
+          }))
+        })
+    }
+  },
 
   saveTab: async (id) => {
     const tabId = id ?? get().activeTabId
@@ -237,12 +438,34 @@ export const useAppStore = create<AppState>((set, get) => ({
     const tab = get().tabs.find((t) => t.id === tabId)
     if (!tab) return false
     try {
-      await getPlatform().writeFile(tab.path, tab.content)
-      set((s) => ({
-        tabs: s.tabs.map((t) =>
-          t.id === tabId ? { ...t, originalContent: t.content, dirty: false } : t
-        )
-      }))
+      const snap = await getPlatform().docSave(tab.path)
+      if (!snap) {
+        await getPlatform().writeFile(tab.path, tab.content)
+        set((s) => ({
+          tabs: s.tabs.map((t) =>
+            t.id === tabId ? { ...t, originalContent: t.content, dirty: false } : t
+          )
+        }))
+        return true
+      }
+      applyingFromHub = true
+      try {
+        set((s) => ({
+          tabs: s.tabs.map((t) =>
+            pathsEqual(t.path, snap.path)
+              ? {
+                  ...t,
+                  content: snap.content,
+                  originalContent: snap.originalContent,
+                  dirty: false,
+                  docRev: snap.rev
+                }
+              : t
+          )
+        }))
+      } finally {
+        applyingFromHub = false
+      }
       return true
     } catch {
       get().showToast(i18n.t('errors.saveFailed'))
@@ -250,12 +473,52 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  closeTab: (id, force = false) => {
+  discardTab: async (id) => {
+    const tab = get().tabs.find((t) => t.id === id)
+    if (!tab || !tab.dirty) return
+    const snap = await getPlatform().docDiscard(tab.path)
+    applyingFromHub = true
+    try {
+      if (snap) {
+        set((s) => ({
+          tabs: s.tabs.map((t) =>
+            pathsEqual(t.path, snap.path)
+              ? {
+                  ...t,
+                  content: snap.content,
+                  originalContent: snap.originalContent,
+                  dirty: false,
+                  docRev: snap.rev
+                }
+              : t
+          )
+        }))
+      } else {
+        set((s) => ({
+          tabs: s.tabs.map((t) =>
+            t.id === id ? { ...t, content: t.originalContent, dirty: false } : t
+          )
+        }))
+      }
+    } finally {
+      applyingFromHub = false
+    }
+  },
+
+  closeTab: async (id, force = false) => {
     const tab = get().tabs.find((t) => t.id === id)
     if (!tab) return true
-    if (!force && tab.dirty && !window.confirm(i18n.t('editor.unsavedConfirm'))) {
-      return false
+    if (!force && tab.dirty) {
+      const choice = await askUnsavedConfirm({ fileName: tab.title })
+      if (choice === 'cancel') return false
+      if (choice === 'save') {
+        const ok = await get().saveTab(id)
+        if (!ok) return false
+      } else {
+        await get().discardTab(id)
+      }
     }
+    void getPlatform().docUnsubscribe(tab.path)
     set((s) => {
       const tabs = s.tabs.filter((t) => t.id !== id)
       let activeTabId = s.activeTabId
@@ -270,7 +533,36 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       return { tabs, activeTabId, splitTabId, splitEnabled }
     })
+    if (get().windowRole === 'float') {
+      void getPlatform().confirmWindowClose()
+    }
     return true
+  },
+
+  handleWindowCloseRequest: async () => {
+    if (windowCloseBusy) return
+    windowCloseBusy = true
+    try {
+      const dirtyTabs = get().tabs.filter((t) => t.dirty)
+      if (dirtyTabs.length > 0) {
+        const name = dirtyTabs.length === 1 ? dirtyTabs[0].title : undefined
+        const choice = await askUnsavedConfirm({ fileName: name })
+        if (choice === 'cancel') return
+        if (choice === 'save') {
+          for (const tab of dirtyTabs) {
+            const ok = await get().saveTab(tab.id)
+            if (!ok) return
+          }
+        } else {
+          for (const tab of dirtyTabs) {
+            await get().discardTab(tab.id)
+          }
+        }
+      }
+      await getPlatform().confirmWindowClose()
+    } finally {
+      windowCloseBusy = false
+    }
   },
 
   enableSplit: (tabId) => {
@@ -341,12 +633,43 @@ export const useAppStore = create<AppState>((set, get) => ({
         (t) => t.path === targetPath || t.path.startsWith(targetPath + '\\') || t.path.startsWith(targetPath + '/')
       )
       for (const tab of tabs) {
-        get().closeTab(tab.id, true)
+        await get().closeTab(tab.id, true)
       }
       await getPlatform().delete(targetPath)
       await get().refreshTree()
     } catch {
       get().showToast(i18n.t('errors.deleteFailed'))
     }
+  },
+
+  spawnNewWindow: async () => {
+    const { workspacePath, activeTabId, tabs, windowRole } = get()
+    if (windowRole === 'float') {
+      const tab = tabs[0]
+      if (!tab || !workspacePath) return
+      await getPlatform().newFloatWindow({
+        filePath: tab.path,
+        workspacePath,
+        content: tab.content,
+        originalContent: tab.originalContent,
+        dirty: tab.dirty
+      })
+      return
+    }
+    if (!workspacePath || !activeTabId) return
+    const tab = tabs.find((t) => t.id === activeTabId)
+    if (!tab) return
+    await getPlatform().newFloatWindow({
+      filePath: tab.path,
+      workspacePath,
+      content: tab.content,
+      originalContent: tab.originalContent,
+      dirty: tab.dirty
+    })
+  },
+
+  spawnNewMainWindow: async () => {
+    const { workspacePath } = get()
+    await getPlatform().newMainWindow(workspacePath)
   }
 }))

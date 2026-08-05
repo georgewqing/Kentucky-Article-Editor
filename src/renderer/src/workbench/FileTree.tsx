@@ -161,6 +161,16 @@ export function FileTree({
               <div className="ctx-sep" />
               <button
                 type="button"
+                onClick={() => {
+                  const path = menu.entry!.path
+                  setMenu(null)
+                  void getPlatform().showItemInFolder(path)
+                }}
+              >
+                {t('explorer.revealInFolder')}
+              </button>
+              <button
+                type="button"
                 className="danger"
                 onClick={() => {
                   const path = menu.entry!.path
@@ -169,6 +179,19 @@ export function FileTree({
                 }}
               >
                 {t('explorer.delete')}
+              </button>
+            </>
+          ) : workspacePath ? (
+            <>
+              <div className="ctx-sep" />
+              <button
+                type="button"
+                onClick={() => {
+                  setMenu(null)
+                  void getPlatform().showItemInFolder(workspacePath)
+                }}
+              >
+                {t('explorer.revealInFolder')}
               </button>
             </>
           ) : null}

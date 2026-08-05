@@ -72,7 +72,7 @@ export function EditorArea() {
               title={t('editor.close')}
               onClick={(e) => {
                 e.stopPropagation()
-                closeTab(tab.id)
+                void closeTab(tab.id)
               }}
             >
               ×

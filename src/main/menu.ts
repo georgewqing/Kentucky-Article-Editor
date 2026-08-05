@@ -25,6 +25,8 @@ function labels(locale: MenuLocale) {
       zoomOut: '缩小',
       toggleFullscreen: '切换全屏',
       window: '窗口',
+      newWindow: '新建窗口',
+      newMainWindow: '新建主窗口',
       minimize: '最小化',
       zoom: '缩放',
       help: '帮助',
@@ -52,6 +54,8 @@ function labels(locale: MenuLocale) {
     zoomOut: 'Zoom Out',
     toggleFullscreen: 'Toggle Full Screen',
     window: 'Window',
+    newWindow: 'New Window',
+    newMainWindow: 'New Main Window',
     minimize: 'Minimize',
     zoom: 'Zoom',
     help: 'Help',
@@ -123,7 +127,6 @@ export function buildAppMenu(locale: MenuLocale = 'zh-CN'): Menu {
       label: L.view,
       submenu: [
         { role: 'reload', label: L.reload },
-        { role: 'toggleDevTools', label: L.toggleDevtools },
         { type: 'separator' },
         { role: 'resetZoom', label: L.actualSize },
         { role: 'zoomIn', label: L.zoomIn },
@@ -135,6 +138,21 @@ export function buildAppMenu(locale: MenuLocale = 'zh-CN'): Menu {
     {
       label: L.window,
       submenu: [
+        {
+          label: L.newWindow,
+          click: (_item, win) => {
+            const w = (win ?? BrowserWindow.getFocusedWindow()) as BrowserWindow | null
+            w?.webContents.send('menu:newWindow')
+          }
+        },
+        {
+          label: L.newMainWindow,
+          click: (_item, win) => {
+            const w = (win ?? BrowserWindow.getFocusedWindow()) as BrowserWindow | null
+            w?.webContents.send('menu:newMainWindow')
+          }
+        },
+        { type: 'separator' },
         { role: 'minimize', label: L.minimize },
         ...(isMac
           ? [{ role: 'zoom' as const, label: L.zoom }, { type: 'separator' as const }, { role: 'front' as const }]
@@ -147,7 +165,7 @@ export function buildAppMenu(locale: MenuLocale = 'zh-CN'): Menu {
         {
           label: L.learnMore,
           click: () => {
-            void shell.openExternal('https://github.com')
+            void shell.openExternal('https://github.com/CCFOX12/Kentucky-Article-Editor')
           }
         }
       ]
@@ -159,4 +177,12 @@ export function buildAppMenu(locale: MenuLocale = 'zh-CN'): Menu {
 
 export function applyAppMenu(locale: MenuLocale): void {
   Menu.setApplicationMenu(buildAppMenu(locale))
+  // Windows/Linux: hide native menubar (sluggish / no hover styling).
+  // Keep the Menu for accelerators; renderer shows a custom click menu instead.
+  if (process.platform !== 'darwin') {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.setAutoHideMenuBar(true)
+      win.setMenuBarVisibility(false)
+    }
+  }
 }

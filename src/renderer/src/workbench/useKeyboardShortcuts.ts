@@ -10,6 +10,7 @@ export function useKeyboardShortcuts() {
   const openWorkspace = useAppStore((s) => s.openWorkspace)
   const setActiveView = useAppStore((s) => s.setActiveView)
   const activeView = useAppStore((s) => s.activeView)
+  const windowRole = useAppStore((s) => s.windowRole)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -18,7 +19,7 @@ export function useKeyboardShortcuts() {
 
       const key = e.key.toLowerCase()
 
-      if (key === ',') {
+      if (key === ',' && windowRole !== 'float') {
         e.preventDefault()
         setActiveView(activeView === 'settings' ? 'explorer' : 'settings')
         return
@@ -32,17 +33,17 @@ export function useKeyboardShortcuts() {
 
       if (key === 'w' && activeTabId) {
         e.preventDefault()
-        closeTab(activeTabId)
+        void closeTab(activeTabId)
         return
       }
 
-      if (key === 'b') {
+      if (key === 'b' && windowRole !== 'float') {
         e.preventDefault()
         toggleSidebar()
         return
       }
 
-      if (key === 'o') {
+      if (key === 'o' && windowRole !== 'float') {
         e.preventDefault()
         void (async () => {
           const path = await getPlatform().openFolder()
@@ -60,6 +61,7 @@ export function useKeyboardShortcuts() {
     toggleSidebar,
     openWorkspace,
     setActiveView,
-    activeView
+    activeView,
+    windowRole
   ])
 }

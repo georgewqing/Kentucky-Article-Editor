@@ -1,21 +1,13 @@
-/** CJK-aware count: each Han/kana/hangul char = 1; Latin runs count as words. */
+/**
+ * 字数（不计空白）：每个非空白码点计 1。
+ * 中文写作场景下 UI 显示「N 字」；英文/数字同样按字符计，避免整行连续字母只算 1「词」。
+ */
 export function countArticleWords(text: string): number {
-  const normalized = text.replace(/\s+/g, ' ').trim()
-  if (!normalized) return 0
-
-  const cjk =
-    normalized.match(
-      /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/g
-    ) ?? []
-  const cjkChars = cjk.reduce((n, s) => n + s.length, 0)
-
-  const withoutCjk = normalized
-    .replace(
-      /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/g,
-      ' '
-    )
-    .trim()
-  const latinWords = withoutCjk ? withoutCjk.split(/\s+/).filter(Boolean).length : 0
-
-  return cjkChars + latinWords
+  if (!text) return 0
+  let n = 0
+  for (const ch of text) {
+    if (/\s/.test(ch)) continue
+    n += 1
+  }
+  return n
 }

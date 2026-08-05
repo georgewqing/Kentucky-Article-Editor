@@ -1,15 +1,41 @@
 {
   "name": "kentucky",
   "version": "0.1.0",
-  "description": "KENTUCKY — VSCode-inspired local text writing app",
+  "description": "KENTUCKY — local Markdown writing + freeform mind maps",
   "main": "./out/main/index.js",
-  "author": "KENTUCKY",
+  "author": "leyang chen",
   "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json"
+    "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
+    "dist": "npm run build && electron-builder --win portable",
+    "dist:dir": "npm run build && electron-builder --win dir"
+  },
+  "build": {
+    "appId": "com.ccfox12.kentucky",
+    "productName": "KENTUCKY",
+    "copyright": "Copyright © leyang chen",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    }
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -36,6 +62,7 @@
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
     "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
     "electron-vite": "^3.1.0",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"

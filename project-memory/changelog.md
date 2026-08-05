@@ -119,6 +119,11 @@
 - 关窗 / 关脏标签 / 关工作区：应用内「保存 / 不保存 / 取消」（勿用 `window.confirm` / `beforeunload`）
 - 主进程 `close` → `window:close-request` → 对话框 → `window:confirmClose`；`doc:discard` 回滚缓冲
 
+## 17. Windows 便携 exe
+
+- `electron-builder` target `portable`；`npm run dist` → `release/KENTUCKY-*-portable.exe`
+- 用户下载后双击运行，无需先解压；体积大（自带 Chromium）
+
 ## 其它小修
 
 - 选项卡悬停用 `cursor: pointer`

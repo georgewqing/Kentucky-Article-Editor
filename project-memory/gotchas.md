@@ -33,6 +33,7 @@
 - 多窗口：正文走 DocumentHub；`updateTabContent` 经 `doc:patch`，远端 `doc:apply` 时用 `applyingFromHub` / `docRev` 防回环；导图需监听 `tab.content` 外同步（勿只在 `tabId` 时 load）。
 - 关最后 **主窗** 才 `app.quit()`；精简窗不保活。主窗 `reportWorkspace(null)` 且无其它主窗仍开该工作区 → destroy 对应 float。
 - 精简窗**不要**挂 `beforeunload` 拦关窗；关窗走主进程 `close` → `window:close-request` → 应用内「保存 / 不保存 / 取消」对话框，再 `window:confirmClose`。
+- 启动：主窗 `show: false`，先弹轻量 `splash.html`（与 boot-splash 同款），`ready-to-show` / `did-finish-load` 后再显示主窗并关闪屏；便携 exe 解压阶段仍可能短暂系统转圈（Electron 尚未起来）。
 - 预加载 / IPC 变更后须**重启** Electron 进程，热更新不够。
 - 链接对话框用应用内表单，**勿用** `window.prompt`。
 - 字数：`wordCount.ts` 计**非空白码点**（中英一视同仁）；勿按英文「词」分词，否则一行 `dddd…` 只算 1，UI「字」会对不上。

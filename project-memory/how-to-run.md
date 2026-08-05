@@ -28,6 +28,22 @@ npm run build
 
 产物在 `out/`（main、preload、renderer）。
 
+### Windows 便携 exe（下载即开、无需解压）
+
+```bash
+npm run dist
+```
+
+产物：`release/KENTUCKY-<version>-portable.exe`（electron-builder `portable`）。用户双击即可；体积含 Chromium，通常一百多 MB 起。
+
+国内若下载 Electron/NSIS 工具超时，可先设镜像再打包：
+
+```powershell
+$env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+$env:ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-builder-binaries/"
+npm run dist
+```
+
 ## 快捷键
 
 | 快捷键 | 作用 |

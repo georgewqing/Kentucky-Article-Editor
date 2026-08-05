@@ -51,6 +51,22 @@ npm run build
 
 Build output is in `out/`. / 产物在 `out/`。
 
+### Windows portable `.exe` (download & run) / 便携版（下载即开）
+
+```bash
+npm run dist
+```
+
+Produces a **single** file: `release/KENTUCKY-0.1.0-portable.exe`. Double-click to run—no unzip step for the user. Size is large (Chromium + app). / 生成单个 `release/KENTUCKY-0.1.0-portable.exe`，下载后双击即可，用户无需解压；体积较大（含 Chromium）。
+
+If Electron/NSIS downloads time out in China, set mirrors first: / 国内下载超时可先设镜像：
+
+```powershell
+$env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+$env:ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-builder-binaries/"
+npm run dist
+```
+
 ## Shortcuts / 快捷键
 
 | Shortcut | Action (EN) | 作用（中文） |

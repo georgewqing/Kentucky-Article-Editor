@@ -43,6 +43,8 @@ export interface CreateWindowOpts {
   role?: WindowRole
   workspacePath?: string | null
   filePath?: string
+  /** Show branded splash while the main window loads (first launch). */
+  showSplash?: boolean
 }
 
 function loadRenderer(win: BrowserWindow): void {
@@ -53,11 +55,42 @@ function loadRenderer(win: BrowserWindow): void {
   }
 }
 
+function createSplashWindow(): BrowserWindow {
+  const splash = new BrowserWindow({
+    width: 440,
+    height: 300,
+    frame: false,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    center: true,
+    show: false,
+    backgroundColor: '#141414',
+    autoHideMenuBar: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      spellcheck: false
+    }
+  })
+
+  void splash.loadFile(join(__dirname, '../renderer/splash.html'))
+  splash.once('ready-to-show', () => {
+    if (!splash.isDestroyed()) splash.show()
+  })
+  return splash
+}
+
 const forceCloseIds = new Set<number>()
 
 function createWindow(opts: CreateWindowOpts = {}): BrowserWindow {
   const role: WindowRole = opts.role ?? 'main'
   const isFloat = role === 'float'
+  const splash = opts.showSplash && !isFloat ? createSplashWindow() : null
 
   const win = new BrowserWindow({
     width: isFloat ? 960 : 1280,
@@ -66,6 +99,7 @@ function createWindow(opts: CreateWindowOpts = {}): BrowserWindow {
     minHeight: isFloat ? 360 : 600,
     title: 'KENTUCKY',
     backgroundColor: '#141414',
+    show: false,
     autoHideMenuBar: process.platform !== 'darwin',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -107,12 +141,31 @@ function createWindow(opts: CreateWindowOpts = {}): BrowserWindow {
     const meta = getWindowMeta(win)
     removeWindowMeta(win)
     forceCloseIds.delete(win.id)
+    if (splash && !splash.isDestroyed()) {
+      splash.destroy()
+    }
     if (meta?.role === 'main') {
       const remaining = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed())
       if (countMainWindows(remaining) === 0) {
         app.quit()
       }
     }
+  })
+
+  let revealed = false
+  const revealMain = (): void => {
+    if (revealed || win.isDestroyed()) return
+    revealed = true
+    win.show()
+    if (splash && !splash.isDestroyed()) {
+      splash.close()
+    }
+  }
+
+  win.once('ready-to-show', revealMain)
+  // Fallback if ready-to-show is delayed by large bundles
+  win.webContents.once('did-finish-load', () => {
+    if (!win.isVisible()) revealMain()
   })
 
   loadRenderer(win)
@@ -140,11 +193,11 @@ app.whenReady().then(() => {
   })
 
   applyAppMenu('zh-CN')
-  createWindow({ role: 'main' })
+  createWindow({ role: 'main', showSplash: true })
 
   app.on('activate', () => {
     const all = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed())
-    if (countMainWindows(all) === 0) createWindow({ role: 'main' })
+    if (countMainWindows(all) === 0) createWindow({ role: 'main', showSplash: true })
   })
 })
 

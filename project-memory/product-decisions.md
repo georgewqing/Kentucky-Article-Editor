@@ -23,6 +23,7 @@
 | Markdown 预览 | **不设分屏预览**；WYSIWYG 即阅读/写作态；源码模式看原始 Markdown |
 | 多窗口 | Blender 式：**新建主窗口**=完整工作台+同工作区+空标签；**新建窗口**=精简单文件窗（无顶栏菜单，含 `.kmind`）；同路径正文经 DocumentHub **实时共享**；欢迎页无活动文件时「新建窗口」灰显；关最后主窗退出；无主窗持有该工作区时关掉其精简窗 |
 | 未保存确认 | 关窗 / 关脏标签 / 关工作区用应用内对话框（保存 / 不保存 / 取消），风格跟工作台一致；不用系统 `confirm` / `beforeunload` |
+| 分发 | Windows：`electron-builder` **portable** 单文件 exe（下载双击即开，用户无需解压）；非真正「几 MB 单体」，自带 Chromium |
 | 拼写检查 | 正文关闭浏览器拼写检查（无红波浪线） |
 | 帮助链接 | 「了解 KENTUCKY」→ https://github.com/CCFOX12/Kentucky-Article-Editor |
 | 未来 | 大屏安卓平板（不做手机专用布局）；渲染层可移植 |

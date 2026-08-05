@@ -1,0 +1,76 @@
+{
+  "app": {
+    "name": "KENTUCKY",
+    "tagline": "Local writing workspace"
+  },
+  "welcome": {
+    "title": "Welcome to KENTUCKY",
+    "subtitle": "Open a folder to start writing",
+    "openFolder": "Open Folder",
+    "closeFolder": "Close Folder",
+    "recent": "Recent",
+    "recentWorkspaces": "Recent workspaces",
+    "noRecent": "No recent folders",
+    "removeRecent": "Remove"
+  },
+  "explorer": {
+    "title": "Explorer",
+    "newFile": "New File",
+    "newFolder": "New Folder",
+    "newMindMap": "New Mind Map",
+    "refresh": "Refresh",
+    "empty": "No folder opened",
+    "promptFileName": "File name (e.g. notes.md)",
+    "promptFolderName": "Folder name",
+    "promptMindMapName": "Mind map name (e.g. ideas.kmind)",
+    "create": "Create",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "confirmDelete": "Delete \"{{name}}\"?"
+  },
+  "editor": {
+    "untitled": "Untitled",
+    "dirty": "Unsaved",
+    "save": "Save",
+    "close": "Close",
+    "splitEditor": "Split Editor",
+    "closeSplit": "Close Split",
+    "unsavedConfirm": "You have unsaved changes. Discard them?",
+    "noEditor": "Open a file from the explorer",
+    "mindMapRoot": "Central Topic",
+    "newNode": "New node"
+  },
+  "mindmap": {
+    "addChild": "Add child node",
+    "addSibling": "Add sibling node",
+    "removeNode": "Delete node"
+  },
+  "status": {
+    "noWorkspace": "No folder",
+    "language": "Language",
+    "ready": "Ready"
+  },
+  "activity": {
+    "explorer": "Explorer",
+    "settings": "Settings"
+  },
+  "settings": {
+    "title": "Settings",
+    "desc": "Appearance and language for KENTUCKY.",
+    "appearance": "Appearance",
+    "theme": "Color mode",
+    "dark": "Dark",
+    "light": "Light",
+    "accent": "Accent color",
+    "customAccent": "Custom color",
+    "fontSize": "Editor font size",
+    "language": "Language"
+  },
+  "errors": {
+    "openFailed": "Failed to open file",
+    "saveFailed": "Failed to save file",
+    "createFailed": "Failed to create",
+    "loadTreeFailed": "Failed to load folder",
+    "deleteFailed": "Failed to delete"
+  }
+}

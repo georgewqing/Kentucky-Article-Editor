@@ -1,0 +1,76 @@
+{
+  "app": {
+    "name": "KENTUCKY",
+    "tagline": "本地写作工作区"
+  },
+  "welcome": {
+    "title": "欢迎使用 KENTUCKY",
+    "subtitle": "打开文件夹开始写作",
+    "openFolder": "打开文件夹",
+    "closeFolder": "关闭文件夹",
+    "recent": "最近打开",
+    "recentWorkspaces": "最近工作区",
+    "noRecent": "暂无最近文件夹",
+    "removeRecent": "移除"
+  },
+  "explorer": {
+    "title": "资源管理器",
+    "newFile": "新建文件",
+    "newFolder": "新建文件夹",
+    "newMindMap": "新建思维导图",
+    "refresh": "刷新",
+    "empty": "尚未打开文件夹",
+    "promptFileName": "文件名（如 notes.md）",
+    "promptFolderName": "文件夹名",
+    "promptMindMapName": "思维导图名（如 ideas.kmind）",
+    "create": "创建",
+    "cancel": "取消",
+    "delete": "删除",
+    "confirmDelete": "确定删除「{{name}}」？"
+  },
+  "editor": {
+    "untitled": "未命名",
+    "dirty": "未保存",
+    "save": "保存",
+    "close": "关闭",
+    "splitEditor": "分屏编辑",
+    "closeSplit": "关闭分屏",
+    "unsavedConfirm": "有未保存的更改，确定丢弃吗？",
+    "noEditor": "从资源管理器打开文件",
+    "mindMapRoot": "中心主题",
+    "newNode": "新节点"
+  },
+  "mindmap": {
+    "addChild": "添加子节点",
+    "addSibling": "添加同级节点",
+    "removeNode": "删除节点"
+  },
+  "status": {
+    "noWorkspace": "未打开文件夹",
+    "language": "语言",
+    "ready": "就绪"
+  },
+  "activity": {
+    "explorer": "资源管理器",
+    "settings": "设置"
+  },
+  "settings": {
+    "title": "设置",
+    "desc": "调整 KENTUCKY 的外观与语言。",
+    "appearance": "外观",
+    "theme": "配色模式",
+    "dark": "深色",
+    "light": "浅色",
+    "accent": "主体色",
+    "customAccent": "自定义颜色",
+    "fontSize": "编辑器字号",
+    "language": "语言"
+  },
+  "errors": {
+    "openFailed": "打开文件失败",
+    "saveFailed": "保存失败",
+    "createFailed": "创建失败",
+    "loadTreeFailed": "加载文件夹失败",
+    "deleteFailed": "删除失败"
+  }
+}

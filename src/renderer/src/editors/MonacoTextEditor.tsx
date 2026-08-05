@@ -2,6 +2,7 @@ import Editor from '@monaco-editor/react'
 import { useAppStore } from '@/state/appStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { getPlatform } from '@/platform'
+import { SOFT_MONACO_OPTIONS, defineKentuckyMonacoThemes } from './softMonaco'
 
 function languageForPath(path: string): string {
   const ext = getPlatform().extname(path)
@@ -38,21 +39,15 @@ export function MonacoTextEditor({ tabId }: { tabId: string }) {
     <div className="monaco-host">
       <Editor
         height="100%"
-        theme={themeMode === 'light' ? 'vs' : 'vs-dark'}
+        theme={themeMode === 'light' ? 'kentucky-light' : 'kentucky-dark'}
         language={languageForPath(tab.path)}
         value={tab.content}
         path={tab.path}
         onChange={(value) => updateTabContent(tabId, value ?? '')}
+        beforeMount={defineKentuckyMonacoThemes}
         options={{
-          fontSize,
-          fontFamily: "Cascadia Code, Consolas, 'Courier New', monospace",
-          minimap: { enabled: false },
-          wordWrap: 'on',
-          automaticLayout: true,
-          scrollBeyondLastLine: false,
-          renderLineHighlight: 'line',
-          padding: { top: 8 },
-          overviewRulerBorder: false
+          ...SOFT_MONACO_OPTIONS,
+          fontSize
         }}
       />
     </div>

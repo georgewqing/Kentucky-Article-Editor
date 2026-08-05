@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/state/appStore'
+import { getPlatform } from '@/platform'
 import { MonacoTextEditor } from '@/editors/MonacoTextEditor'
+import { MarkdownArticleEditor } from '@/editors/MarkdownArticleEditor'
 import { MindMapEditor } from '@/editors/MindMapEditor'
 
 function EditorPane({ tabId }: { tabId: string | null }) {
@@ -15,10 +17,14 @@ function EditorPane({ tabId }: { tabId: string | null }) {
     )
   }
 
+  const isMarkdown = getPlatform().extname(tab.path) === '.md'
+
   return (
     <div className="editor-pane">
       {tab.kind === 'mindmap' ? (
         <MindMapEditor tabId={tab.id} />
+      ) : isMarkdown ? (
+        <MarkdownArticleEditor tabId={tab.id} />
       ) : (
         <MonacoTextEditor tabId={tab.id} />
       )}

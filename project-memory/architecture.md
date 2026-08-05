@@ -11,8 +11,8 @@
 | 壳 | Electron 37 + electron-vite |
 | UI | React 19 + TypeScript |
 | 状态 | Zustand（`appStore` + `settingsStore`） |
-| 文本编辑 | Monaco（本地打包，`monacoSetup.ts`，不走 CDN） |
-| 思维导图 | Mind Elixir 4（径向；自有 `.kmind` JSON） |
+| 文本编辑 | `.md`：TipTap WYSIWYG + Monaco 源码；其它：软化 Monaco（`monacoSetup.ts` 本地打包） |
+| 思维导图 | @xyflow/react 自由白板；自有 `.kmind` v2（nodes + edges） |
 | i18n | i18next（`zh-CN` / `en`） |
 | 主题 | CSS 变量 + `applyTheme(mode, accent)` |
 
@@ -42,7 +42,7 @@ Kentucky/
           applyTheme.ts    由 accent + mode 衍生 CSS 变量
         i18n/
         workbench/         活动栏、侧栏、欢迎页、设置、编辑区、状态栏
-        editors/           Monaco、MindMap、kmind 格式
+        editors/           TipTap 文章、Monaco、MindMap、kmind 格式
         styles/global.css
     state/
       appStore.ts          仅 re-export（IDE 旧路径兼容）
@@ -95,17 +95,25 @@ Renderer (React)
 
 | 扩展名 | 编辑器 |
 |--------|--------|
-| `.md` / `.txt` 等文本 | Monaco |
-| `.kmind` | MindMapEditor |
+| `.md` | MarkdownArticleEditor（TipTap WYSIWYG + Monaco 源码） |
+| `.txt` 等文本 | MonacoTextEditor（软化） |
+| `.kmind` | MindMapEditor（React Flow 白板） |
 
-## `.kmind` 格式
+## `.kmind` 格式（v2）
 
-自有 JSON（不以 Mind Elixir 私有格式为源）：
+自由图（非树）：
 
 ```json
 {
-  "version": 1,
-  "root": { "id": "root", "text": "...", "children": [] },
+  "version": 2,
+  "nodes": [
+    { "id": "n1", "text": "主题", "shape": "rounded", "x": 120, "y": 80, "width": 160, "height": 48 }
+  ],
+  "edges": [
+    { "id": "e1", "source": "n1", "target": "n2", "sourceHandle": "sb", "targetHandle": "tt" }
+  ],
   "viewport": { "x": 0, "y": 0, "zoom": 1 }
 }
 ```
+
+`shape`: `"rect" | "rounded" | "ellipse"`。边可选 `sourceHandle` / `targetHandle`（如 `sb`/`tt`）；缺失时按节点相对位置推断，避免 smoothstep 并到同一条主干。v1 树格式已废弃，打开时提示并给空白画布。

@@ -1,27 +1,27 @@
 # KENTUCKY
 
-本地文本写作桌面应用（Electron + React + TypeScript）。界面气质接近 Cursor 工作台：少硬边框、统一色阶，支持深色 / 浅色与可调主体色。
+本地写作桌面应用（Electron + React + TypeScript）。面向**专心写文章**：`.md` 所见即所得 + 可切源码；另有自由白板思维导图。界面气质接近 Cursor 工作台：少硬边框、统一色阶，支持深色 / 浅色与可调主体色。
 
 > **开发说明：** 本项目由作者与 AI（Cursor Agent）协作开发。  
 > **更新原则：** 优先以作者个人写作与使用需求迭代，**在一定程度上是自用软件**。公开仓库欢迎围观与参考；功能路线、交互取舍可能不完全面向通用产品化。
 
-**License:** [MIT](./LICENSE)
+**License:** [MIT](./LICENSE) · **仓库：** https://github.com/CCFOX12/Kentucky-Article-Editor
 
-架构与决策备忘见 [`project-memory/`](./project-memory/README.md)。
+架构与决策备忘见 [`project-memory/`](./project-memory/README.md)（上下文重置后请先读）。
 
 ## 功能
 
 - **工作区：** 打开本地文件夹；欢迎页以卡片展示最近工作区（最多 6 个）
 - **资源管理器：** 文件树、顶栏 / 右键新建文件·文件夹·思维导图、删除；侧栏宽度可拖
-- **文本写作：** Monaco 多标签编辑（侧重 `.md` / `.txt`），脏标记与保存
-- **思维导图：** 独立 `.kmind`（JSON），径向层级编辑，右键增删节点；与正文弱联动、不同步
+- **文本写作：** `.md` 为 TipTap 所见即所得 + 极简工具栏（可切 Monaco 源码、CJK 字数）；`.txt` 等为软化 Monaco（淡行号）；脏标记与保存
+- **思维导图：** 独立 `.kmind` v2（React Flow 自由白板）；矩形 / 圆角矩形 / 椭圆；拖线落空可建节点并连边；自绘小地图；与正文弱联动、不同步
 - **分屏：** 编辑器左右分栏
 - **设置：** 深色 / 浅色、主体色（预设 + 取色器）、字号、中英 UI；原生菜单随语言切换
 - **架构预留：** 渲染层通过 `Platform` 抽象访问文件系统，便于未来大屏安卓复用 UI
 
 ## 明确不做（现阶段）
 
-- Markdown 实时预览、正文 ↔ 导图自动同步
+- Markdown 左右分屏预览（WYSIWYG 即阅读态）、正文 ↔ 导图自动同步
 - 命令面板 / 扩展 / Git / 云同步
 - 手机窄屏布局
 
@@ -57,7 +57,7 @@ npm run build
 
 ## 技术栈
 
-Electron · electron-vite · React 19 · TypeScript · Zustand · Monaco · Mind Elixir · i18next
+Electron · electron-vite · React 19 · TypeScript · Zustand · TipTap · Monaco · @xyflow/react · i18next
 
 ## 贡献与反馈
 

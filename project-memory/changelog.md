@@ -46,3 +46,28 @@
 - MIT License（Copyright leyang chen）
 - README 标明功能、与 AI 协作开发、优先个人需求自用更新
 - 仓库：https://github.com/CCFOX12/Kentucky-Article-Editor
+
+## 8. 自由白板思维导图
+
+- 移除 Mind Elixir；改用 `@xyflow/react`
+- `.kmind` 升级为 **v2**（nodes/edges/viewport）；废弃 v1 树格式
+- 节点形状：矩形 / 圆角矩形 / 椭圆；手柄拖出连线；右键/工具栏增删改
+- MiniMap 跟主题：accent 节点色、elev 背景、弱遮罩、去默认阴影的简约边框
+- 修复点阵不可见（勿用近透明 `--border`）；MiniMap 尺寸走 `style` 避免 SVG 被 CSS 裁切
+- 拖线落空：弹出与右键相同的「添加节点」菜单；创建后自动接到原连线；点空白取消
+- MiniMap 仅细线框，背景贴合画布，去掉厚重黑边底板
+- 落空建节点：自动接到离源节点最近一侧的手柄（不再默认顶边）
+- MiniMap 单层灰底（`--bg-elev-3`），去掉外圈黑边与 mask 描边
+- MiniMap 视口 mask 改为透明（暗色 mask 会在边缘形成「黑圈」）
+- 拉远连线：放大 connectionRadius + 手柄随缩放补偿；落点靠近节点时吸附连边
+- 自定义小地图绘制边（官方 MiniMap 不渲染 edges）
+- 小地图节点勿用 `.react-flow__minimap-node`（浅色主题 CSS fill 会盖成一片白）
+- `.kmind` 边持久化 `sourceHandle`/`targetHandle`；缺省时按相对位置推断，避免保存后连线并干
+
+## 9. Markdown 专心写作
+
+- `.md`：TipTap 所见即所得 + 极简工具栏；可切 Monaco 源码
+- 工具栏：粗斜删/链接/行内代码、H1–H3、引用、列表、任务列表、代码块、分隔线、撤销重做、CJK 字数
+- 磁盘仍为 Markdown 文本（`tiptap-markdown` 往返）；无分屏预览
+- `.txt` 等非 md：软化 Monaco（淡行号、无缩进线）
+- 工具栏 active 态用 `useEditorState` 订阅事务，开关格式即时刷新（不必再打字才更新）

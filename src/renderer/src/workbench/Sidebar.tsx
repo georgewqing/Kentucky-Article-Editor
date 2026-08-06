@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/state/appStore'
 import { FileTree } from './FileTree'
 
-type CreateKind = 'file' | 'folder' | 'mindmap' | null
+type CreateKind = 'file' | 'folder' | 'mindmap' | 'dialogue' | null
 
 export function Sidebar() {
   const { t } = useTranslation()
@@ -15,6 +15,7 @@ export function Sidebar() {
   const createFile = useAppStore((s) => s.createFile)
   const createFolder = useAppStore((s) => s.createFolder)
   const createMindMap = useAppStore((s) => s.createMindMap)
+  const createDialogue = useAppStore((s) => s.createDialogue)
   const dragging = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -27,7 +28,8 @@ export function Sidebar() {
     const defaults: Record<Exclude<CreateKind, null>, string> = {
       file: 'untitled.md',
       folder: 'folder',
-      mindmap: 'ideas.kmind'
+      mindmap: 'ideas.kmind',
+      dialogue: 'scene.dialogue.csv'
     }
     setCreateKind(kind)
     setCreateParent(parentDir)
@@ -56,7 +58,8 @@ export function Sidebar() {
     cancelCreate()
     if (kind === 'file') await createFile(trimmed, parent)
     else if (kind === 'folder') await createFolder(trimmed, parent)
-    else await createMindMap(trimmed, parent)
+    else if (kind === 'mindmap') await createMindMap(trimmed, parent)
+    else await createDialogue(trimmed, parent)
   }
 
   const promptLabel =
@@ -64,7 +67,9 @@ export function Sidebar() {
       ? t('explorer.promptFileName')
       : createKind === 'folder'
         ? t('explorer.promptFolderName')
-        : t('explorer.promptMindMapName')
+        : createKind === 'mindmap'
+          ? t('explorer.promptMindMapName')
+          : t('explorer.promptDialogueName')
 
   const onSashDown = (e: ReactMouseEvent) => {
     e.preventDefault()
@@ -114,6 +119,14 @@ export function Sidebar() {
               onClick={() => openCreate('mindmap')}
             >
               ◉
+            </button>
+            <button
+              type="button"
+              title={t('explorer.newDialogue')}
+              disabled={!workspacePath}
+              onClick={() => openCreate('dialogue')}
+            >
+              ◈
             </button>
             <button
               type="button"

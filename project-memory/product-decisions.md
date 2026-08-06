@@ -26,11 +26,15 @@
 | 分发 | Windows：`electron-builder` **portable** 单文件 exe（下载双击即开，用户无需解压）；非真正「几 MB 单体」，自带 Chromium |
 | 拼写检查 | 正文关闭浏览器拼写检查（无红波浪线） |
 | 帮助链接 | 「了解 KENTUCKY」→ https://github.com/CCFOX12/Kentucky-Article-Editor |
+| 台词对话 | **独立功能**（非 Markdown 混写）；磁盘真相 = `*.dialogue.csv` + 工作区根固定 `characters.csv`；UI 类聊天；`speaker` 存角色 **id**；稳定 id `{scene\|stem}_{charId}_{###}`；改字默认不改 id；仅「复制为新台词」生成新 id；工作区级 id 冲突顺延并 toast |
+| 台词角色 | 须先创建再 `@`；可删（警告）；孤儿台词显示「未知角色」；列：`id,name,color,note`（无 `display_name`） |
+| 台词导出 | 完整管线 CSV（可选 emotion/condition/audio）+ 本地化 `keys,<lang>`；范围=当前文件或勾选句子；不做全工作区一键导出 |
+| Godot 热编辑 | **同路径磁盘联动**（非进程内 API）：Kentucky 打开工程内 `dialogue/` 当工作区，`Ctrl+S` 写同一份 CSV。Godot 侧插件由项目自研；契约见 `extras/godot-kentucky-dialogue/README.md`。仍不做双向实时协议 |
 | 未来 | 大屏安卓平板（不做手机专用布局）；渲染层可移植 |
 
 ## MVP 页面范围
 
-欢迎页 + 资源管理器/多标签编辑 + 可拖拽分栏 + 思维导图编辑。
+欢迎页 + 资源管理器/多标签编辑 + 可拖拽分栏 + 思维导图编辑 + 台词对话编辑。
 
 ## 主题与设置
 
@@ -57,3 +61,5 @@
 - 导图参考图：旋转、透明度、锁定、裁剪、分组、独立窗口、从文件夹拖入画布；带文字插图节点的边框缩放
 - 导图批注：多条评论、作者时间戳、Markdown/富文本、全局展开/折叠、批注搜索
 - 多窗口：精简窗内换文件、跨窗同步光标/选区、主窗标签列表镜像
+- 台词 v1：分支/条件可视化、表达式编辑器、Godot **双向实时协议**、多语言对照编辑、音频播放/资源库、Markdown 内嵌台词、`characters.csv` 路径可配置、全工作区台词一键导出  
+  （Godot 侧可用同目录 + 可选监视插件；不等于 Kentucky 内嵌引擎同步）

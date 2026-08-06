@@ -1,8 +1,8 @@
 # KENTUCKY
 
-**English:** A local desktop writing app (Electron + React + TypeScript). Built for focused article writing: Markdown WYSIWYG with optional source mode, plus a freeform whiteboard mind map. The UI aims for a Cursor-like workbench feel—soft edges, a unified palette, dark/light themes, and a tunable accent color.
+**English:** A local desktop writing app (Electron + React + TypeScript). Built for focused article writing: Markdown WYSIWYG with optional source mode, a freeform whiteboard mind map, and a chat-style dialogue CSV editor for game/script writing. The UI aims for a Cursor-like workbench feel—soft edges, a unified palette, dark/light themes, and a tunable accent color.
 
-**中文：** 本地写作桌面应用（Electron + React + TypeScript）。面向**专心写文章**：`.md` 所见即所得 + 可切源码；另有自由白板思维导图。界面气质接近 Cursor 工作台：少硬边框、统一色阶，支持深色 / 浅色与可调主体色。
+**中文：** 本地写作桌面应用（Electron + React + TypeScript）。面向**专心写文章**与**台词**：`.md` 所见即所得 + 可切源码；自由白板思维导图；聊天式 `.dialogue.csv` 编辑器。界面气质接近 Cursor 工作台：少硬边框、统一色阶，支持深色 / 浅色与可调主体色。
 
 > **Development note / 开发说明:** Built collaboratively by the author and AI (Cursor Agent).  
 > **Update policy / 更新原则:** Features ship primarily for the author’s own writing needs—this is **partly a personal tool**. The public repo is welcome to browse and learn from; the roadmap and UX trade-offs may not match a fully productized app.
@@ -16,12 +16,13 @@ Architecture and decision notes: [`project-memory/`](./project-memory/README.md)
 ## Features / 功能
 
 - **Workspace / 工作区:** Open a local folder; welcome page shows up to 6 recent workspace cards. / 打开本地文件夹；欢迎页以卡片展示最近工作区（最多 6 个）。
-- **Explorer / 资源管理器:** File tree; create file/folder/mind map from toolbar or context menu; delete; “Reveal in File Explorer”; resizable sidebar. / 文件树、顶栏/右键新建、删除、「在文件资源管理器中显示」；侧栏宽度可拖。
+- **Explorer / 资源管理器:** File tree; create file / folder / mind map / dialogue from toolbar or context menu; delete; “Reveal in File Explorer”; resizable sidebar. / 文件树、顶栏/右键新建（含台词）、删除、「在文件资源管理器中显示」；侧栏宽度可拖。
 - **Writing / 文本写作:** `.md` via TipTap WYSIWYG + minimal toolbar (toggle Monaco source, non-whitespace character count); other text via softened Monaco; dirty flag + save; browser spellcheck squiggles disabled. / `.md` 为 TipTap 所见即所得 + 极简工具栏；`.txt` 等为软化 Monaco；脏标记与保存；关闭拼写红波浪线。
 - **Mind map / 思维导图:** Standalone `.kmind` v2 (React Flow freeform board); rectangle / rounded / ellipse; drag edges onto empty canvas to create linked nodes; custom minimap; node links, images, reference images, and note “chin” panels; weak coupling to articles (no auto-sync). / 独立 `.kmind` v2；节点链接/插图/参考图/批注「黑下巴」；与正文弱联动、不同步。
+- **Dialogue / 台词:** Chat-style editor for `*.dialogue.csv` + workspace-root `characters.csv`; `speaker` stores character **id**; stable line ids (`{scene}_{charId}_{###}`); Cursor-like composer; pipeline + locale CSV export. Open a Godot project’s `dialogue/` folder as the workspace for **same-file** hot edit—Godot-side reload plugins are project-owned; data contract: [`extras/godot-kentucky-dialogue/README.md`](./extras/godot-kentucky-dialogue/README.md). / 聊天式台词编辑；稳定 id；可打开 Godot 台词目录同文件热编辑；引擎侧插件自研，契约见 extras。
 - **Multi-window / 多窗口:** Blender-style **New Window** (slim single-file editor) and **New Main Window** (full workbench, same workspace, empty tabs); same-path buffers shared live across windows; in-app unsaved dialog (Save / Don’t Save / Cancel). / Blender 式新建窗口/新建主窗口；同路径正文跨窗实时共享；应用内未保存对话框。
 - **Split view / 分屏:** Side-by-side editor panes. / 编辑器左右分栏。
-- **Settings / 设置:** Dark/light, accent (presets + picker), font size, Chinese/English UI; menus follow locale. / 深色/浅色、主体色、字号、中英 UI。
+- **Settings / 设置:** Dark/light, accent (presets + picker), font size, Chinese/English UI; menus follow locale; startup splash follows saved accent. / 深色/浅色、主体色、字号、中英 UI；启动闪屏跟主体色。
 - **Portability / 架构预留:** Renderer talks to the filesystem only through a `Platform` abstraction (future large-screen Android reuse). / 渲染层经 `Platform` 抽象访问文件系统。
 
 ## Out of scope (for now) / 明确不做（现阶段）
@@ -30,6 +31,8 @@ Architecture and decision notes: [`project-memory/`](./project-memory/README.md)
 - Command palette / extensions / Git / cloud sync / 命令面板、扩展、Git、云同步
 - Phone-narrow layouts / 手机窄屏布局
 - Switching files inside a slim window; syncing caret/selection across windows / 精简窗内换文件、跨窗同步光标/选区
+- Godot bidirectional live protocol (Kentucky does not embed Godot or push IPC) / Godot 双向实时协议（不同路径磁盘联动）
+- Bundled Godot editor plugin (use the extras contract in your own project) / 不附带 Godot 插件（契约在 extras，插件自研）
 
 ## Quick start / 快速开始
 
@@ -43,6 +46,8 @@ If Windows PowerShell blocks npm scripts / 若 PowerShell 禁止 npm 脚本:
 ```bat
 cmd /c npm run dev
 ```
+
+**Cursor / VS Code:** Run and Debug → **Debug All** → **F5** (see [`project-memory/how-to-run.md`](./project-memory/how-to-run.md)). / 可用 F5 调试（详见 how-to-run）。
 
 ```bash
 npm run typecheck

@@ -124,6 +124,58 @@
 - `electron-builder` target `portable`；`npm run dist` → `release/KENTUCKY-*-portable.exe`
 - 用户下载后双击运行，无需先解压；体积大（自带 Chromium）
 
+## 18. 台词对话编辑器（完整）
+
+独立功能（非 Markdown 混写）：聊天式写台词 + Godot 可用的稳定 id CSV。
+
+### 数据契约
+
+| 文件 | 位置 | 列 |
+|------|------|-----|
+| `*.dialogue.csv` | 任意子目录 | `id,speaker,text,note,emotion,scene,condition,audio` |
+| `characters.csv` | **工作区根固定**（不可配置） | `id,name,color,note` |
+
+- `speaker` 存角色 **id**，不存显示名；行序 = 播放序
+- 普通 `.csv` 仍 Monaco；仅 `.dialogue.csv` → DialogueEditor
+- 稳定 id：`{scene|stem}_{characterId}_{###}`；改 text/meta/speaker/scene **默认不改 id**；仅「复制为新台词」生成新 id；工作区全部 `.dialogue.csv` 查重顺延并 toast
+
+### 新增 / 改动文件
+
+| 路径 | 作用 |
+|------|------|
+| `src/renderer/src/editors/dialogueCsv.ts` | 解析/序列化、id 分配、管线/本地化导出 |
+| `src/renderer/src/editors/DialogueEditor.tsx` | 气泡流、@/说话人选择、创建角色、详情、拖拽重排、多选、导出对话框 |
+| `src/renderer/src/state/appStore.ts` | `EditorKind` + `dialogue`；`detectKind` / `createDialogue` |
+| `src/renderer/src/workbench/EditorArea.tsx` | 路由到 DialogueEditor |
+| `src/renderer/src/workbench/FloatWorkbench.tsx` | 精简窗同样路由 |
+| `src/renderer/src/workbench/Sidebar.tsx` | 「新建台词」入口 |
+| `src/renderer/src/workbench/FileTree.tsx` | 右键新建台词 + D 图标 |
+| `src/main/index.ts` | `TEXT_EXTS` 加入 `.csv`（树里可见） |
+| `src/renderer/src/styles/global.css` | `.dialogue-*` 样式 |
+| `src/renderer/src/i18n/locales/en.json` / `zh-CN.json` | `explorer.*` + `dialogue.*` |
+| `README.md` + `project-memory/*` | 功能说明与决策 |
+
+### UI / 导出行为
+
+- 底部输入：选说话人（或 `@`）+ 回车追加；模式下拉含「创建角色」
+- 气泡：点改正文；详情编 note/emotion/condition/scene/audio；换说话人 id 不变；删句确认；拖拽重排
+- 导出：当前文件或勾选句子 → 管线 CSV（可选 emotion/condition/audio）或本地化 `keys,<lang>`；**不做**全工作区一键导出
+
+### 明确不做（v1）
+
+分支可视化、表达式编辑器、Godot 双向同步、多语言对照编辑、音频播放、Markdown 内嵌台词、`characters.csv` 路径可配置
+
+## 19. Cursor / VS Code 调试配置
+
+- 新增 `.vscode/launch.json`（electron-vite 官方推荐）：`Debug All` = 主进程 + 渲染进程；F5 即可跑起来调试
+- `how-to-run.md` 补充 Run and Debug 步骤
+
+## 20. Godot 台词热编辑联动
+
+- 文档：打开工程内 `dialogue/` 当 Kentucky 工作区；`Ctrl+S` 写同一份磁盘 CSV（非进程内 API）
+- **不附带** Godot 插件；完整契约写在 `extras/godot-kentucky-dialogue/README.md`，由各项目自研监视/重载
+- 仍不做 Kentucky↔Godot 双向实时协议
+
 ## 其它小修
 
 - 选项卡悬停用 `cursor: pointer`

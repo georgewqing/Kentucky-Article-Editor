@@ -46,6 +46,8 @@ export interface Platform {
   /** OS platform: darwin keeps native menu; win32/linux use custom menubar. */
   getOsPlatform(): Promise<string>
   setMenuLocale(locale: 'zh-CN' | 'en'): Promise<void>
+  /** Sync theme to main-process userData so the startup splash matches. */
+  persistTheme(payload: { themeMode?: 'dark' | 'light'; accent?: string }): Promise<void>
   runMenuAction(action: string): Promise<void>
   onMenuOpenFolder(cb: () => void): () => void
   onMenuSave(cb: () => void): () => void
@@ -158,6 +160,9 @@ export function createElectronPlatform(): Platform {
     setMenuLocale: async (locale) => {
       await api.setMenuLocale(locale)
     },
+    persistTheme: async (payload) => {
+      await api.persistTheme(payload)
+    },
     runMenuAction: async (action) => {
       await api.runMenuAction(action)
     },
@@ -218,6 +223,7 @@ export function createBrowserStubPlatform(): Platform {
     relativeTo,
     getOsPlatform: async () => 'browser',
     setMenuLocale: async () => undefined,
+    persistTheme: async () => undefined,
     runMenuAction: async () => undefined,
     onMenuOpenFolder: () => () => undefined,
     onMenuSave: () => () => undefined,

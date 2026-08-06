@@ -19,6 +19,22 @@ PowerShell 脚本策略报错时：
 cmd /c npm run dev
 ```
 
+### Cursor / VS Code 一键调试（推荐）
+
+1. 打开本仓库为工作区
+2. 左侧 **Run and Debug**（或 `Ctrl+Shift+D`）
+3. 顶部下拉选 **Debug All**
+4. 按 **F5**（或点绿色三角）
+
+会启动 `electron-vite`（带 sourcemap），并同时附加：
+
+- **主进程**（Node 调试）
+- **渲染进程**（Chrome 远程调试端口 `9222`）
+
+在 `src/main/**` 或 `src/renderer/src/**` 打断点即可命中。只需主进程时选 **Debug Main Process**。
+
+配置文件：`.vscode/launch.json`（跟 electron-vite 官方调试指南一致）。
+
 ## 构建 / 检查
 
 ```bash
@@ -60,5 +76,28 @@ npm run dist
 2. 新建 `.md`：默认写作视图用工具栏排版；可切源码看 Markdown；保存；右键删除
 3. 新建 `.txt`：无工具栏的软化 Monaco
 4. 新建 `.kmind`：自由拖节点、改三种形状、从边缘拖出连线；拖到空白可弹出「添加节点」并自动连边；Delete 删除
-5. 设置：深/浅色、改主体色、刷新仍保留
-6. 语言中英切换 → 顶栏原生菜单语言同步
+5. 新建台词 `.dialogue.csv`：先「创建角色」，再选说话人写台词；改字后 id 不变；导出管线/本地化 CSV
+6. 设置：深/浅色、改主体色、刷新仍保留
+7. 语言中英切换 → 顶栏原生菜单语言同步
+
+## Godot 台词热编辑（同路径联动）
+
+Kentucky **不**内嵌 Godot，**不**附带引擎插件，也不做双向实时协议。热编辑靠「两边读同一份磁盘文件」：
+
+```text
+YourGodotProject/
+  dialogue/                 ← Kentucky「打开文件夹」选这里（工作区根）
+    characters.csv
+    tavern.dialogue.csv
+  scripts/
+    dialogue_loader.gd      ← 运行时读 res://dialogue/...
+  addons/
+    (your plugin)           ← 监视/重载由你在 Godot 工程实现
+```
+
+1. 在 Kentucky 打开 `dialogue/`（因 `characters.csv` 固定在工作区根）。
+2. 编辑 `.dialogue.csv`，`Ctrl+S` → 磁盘立刻更新。
+3. 游戏直接读这些路径；**不要**再维护一份平行导出副本当热编辑主路径。
+4. 列定义、id 规则、CSV 转义、建议监视点：见 [`extras/godot-kentucky-dialogue/README.md`](../extras/godot-kentucky-dialogue/README.md)。
+
+类比：Kentucky ≈ 外部 DCC；Godot 读盘——联动靠路径，不是进程间推送。

@@ -2,10 +2,11 @@ import { create } from 'zustand'
 import type { DocSnapshot, FileEntry, WindowRole } from '@/platform'
 import { getPlatform } from '@/platform'
 import { createEmptyKMind, serializeKMind, type KMindNodeLink } from '@/editors/kmind'
+import { emptyDialogueCsv, isDialoguePath } from '@/editors/dialogueCsv'
 import i18n from '@/i18n'
 import { askUnsavedConfirm } from '@/state/unsavedDialogStore'
 
-export type EditorKind = 'text' | 'mindmap'
+export type EditorKind = 'text' | 'mindmap' | 'dialogue'
 export type ActiveView = 'explorer' | 'settings'
 
 export interface LinePickSession {
@@ -111,6 +112,7 @@ interface AppState {
   createFile: (name: string, parentDir?: string) => Promise<void>
   createFolder: (name: string, parentDir?: string) => Promise<void>
   createMindMap: (name: string, parentDir?: string) => Promise<void>
+  createDialogue: (name: string, parentDir?: string) => Promise<void>
   deleteEntry: (targetPath: string) => Promise<void>
 
   spawnNewWindow: () => Promise<void>
@@ -120,6 +122,7 @@ interface AppState {
 const RECENT_KEY = 'kentucky.recentFolders'
 
 function detectKind(path: string): EditorKind {
+  if (isDialoguePath(path)) return 'dialogue'
   return getPlatform().extname(path) === '.kmind' ? 'mindmap' : 'text'
 }
 
@@ -617,6 +620,29 @@ export const useAppStore = create<AppState>((set, get) => ({
     const rootText = i18n.t('editor.mindMapRoot')
     try {
       await platform.writeFile(path, serializeKMind(createEmptyKMind(rootText)))
+      await get().refreshTree()
+      await get().openFile(path)
+    } catch {
+      get().showToast(i18n.t('errors.createFailed'))
+    }
+  },
+
+  createDialogue: async (name, parentDir) => {
+    const { workspacePath } = get()
+    const base = parentDir ?? workspacePath
+    if (!base) return
+    const platform = getPlatform()
+    let fileName = name.trim()
+    if (!fileName.toLowerCase().endsWith('.dialogue.csv')) {
+      if (fileName.toLowerCase().endsWith('.csv')) {
+        fileName = fileName.slice(0, -4) + '.dialogue.csv'
+      } else {
+        fileName += '.dialogue.csv'
+      }
+    }
+    const path = platform.joinPath(base, fileName)
+    try {
+      await platform.writeFile(path, emptyDialogueCsv())
       await get().refreshTree()
       await get().openFile(path)
     } catch {

@@ -44,10 +44,12 @@ Kentucky/
           applyTheme.ts    由 accent + mode 衍生 CSS 变量
         i18n/
         workbench/         活动栏、侧栏、欢迎页、设置、编辑区、FloatWorkbench
-        editors/           TipTap 文章、Monaco、MindMap、kmind 格式
+        editors/           TipTap 文章、Monaco、MindMap、Dialogue、kmind/dialogueCsv
         styles/global.css
     state/
       appStore.ts          仅 re-export（IDE 旧路径兼容）
+  .vscode/
+    launch.json            Cursor/VS Code：F5 调试 Electron（主进程+渲染）
 ```
 
 路径别名：`@/*` → `src/renderer/src/*`（见 `tsconfig.json` / `electron.vite.config.ts`）。
@@ -105,6 +107,15 @@ Renderer (React)
 | `.md` | MarkdownArticleEditor（TipTap WYSIWYG + Monaco 源码） |
 | `.txt` 等文本 | MonacoTextEditor（软化） |
 | `.kmind` | MindMapEditor（React Flow 白板） |
+| `.dialogue.csv` | DialogueEditor（聊天式台词；普通 `.csv` 仍走 Monaco） |
+| 工作区根 `characters.csv` | Monaco（角色表；由对话编辑器自动读写） |
+
+## 台词 CSV
+
+- **台词文件** `*.dialogue.csv`：列 `id,speaker,text,note,emotion,scene,condition,audio`；行序=播放序；`speaker`=角色 id
+- **角色表** 工作区根 `characters.csv`：`id,name,color,note`（路径固定不可配）
+- 解析/序列化：`src/renderer/src/editors/dialogueCsv.ts`
+- 稳定 id：`allocateDialogueId` 在工作区所有 `.dialogue.csv` 内查重顺延
 
 ## `.kmind` 格式（v2）
 

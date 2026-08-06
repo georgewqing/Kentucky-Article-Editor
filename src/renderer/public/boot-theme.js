@@ -1,17 +1,42 @@
-/* Early splash theme — loaded as classic script (CSP: script-src 'self'). */
+/* Early splash theme — loaded as classic script (CSP: script-src 'self').
+ * Order: URL query (main→splash window) > localStorage (in-app boot-splash) > defaults.
+ */
 ;(function () {
   var DEFAULT_ACCENT = '#88c0d0'
   var accent = DEFAULT_ACCENT
   var dark = true
+  var modeFromQuery = false
+  var accentFromQuery = false
+
+  try {
+    var params = new URLSearchParams(window.location.search || '')
+    var qa = params.get('accent')
+    if (qa) {
+      qa = qa.trim()
+      if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(qa)) {
+        accent = qa
+        accentFromQuery = true
+      }
+    }
+    var qm = params.get('mode')
+    if (qm === 'light') {
+      dark = false
+      modeFromQuery = true
+    } else if (qm === 'dark') {
+      dark = true
+      modeFromQuery = true
+    }
+  } catch (e) {}
+
   try {
     var raw = localStorage.getItem('kentucky.settings')
     if (raw) {
       var s = JSON.parse(raw)
-      if (typeof s.accent === 'string') {
+      if (!accentFromQuery && typeof s.accent === 'string') {
         var a = s.accent.trim()
         if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(a)) accent = a
       }
-      if (s.themeMode === 'light') dark = false
+      if (!modeFromQuery && s.themeMode === 'light') dark = false
     }
   } catch (e) {}
 

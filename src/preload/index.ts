@@ -42,6 +42,8 @@ const api = {
   setMenuLocale: (locale: 'zh-CN' | 'en'): Promise<boolean> =>
     ipcRenderer.invoke('app:setMenuLocale', locale),
   getOsPlatform: (): Promise<NodeJS.Platform> => ipcRenderer.invoke('app:getOsPlatform'),
+  persistTheme: (payload: { themeMode?: 'dark' | 'light'; accent?: string }): Promise<boolean> =>
+    ipcRenderer.invoke('theme:persist', payload),
   runMenuAction: (action: string): Promise<boolean> => ipcRenderer.invoke('menu:runAction', action),
 
   getWindowBootstrap: (): Promise<WindowBootstrap> => ipcRenderer.invoke('window:getBootstrap'),

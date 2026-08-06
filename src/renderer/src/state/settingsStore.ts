@@ -4,6 +4,7 @@ import {
   DEFAULT_ACCENT,
   type ThemeMode
 } from '@/theme/applyTheme'
+import { getPlatform } from '@/platform'
 
 const SETTINGS_KEY = 'kentucky.settings'
 
@@ -21,8 +22,25 @@ interface SettingsState extends AppSettings {
   hydrate: () => void
 }
 
-function persist(partial: AppSettings): void {
+function persistLocal(partial: AppSettings): void {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(partial))
+}
+
+/** Mirror theme into main-process userData for the startup splash window. */
+function syncSplashTheme(partial: AppSettings): void {
+  try {
+    void getPlatform().persistTheme({
+      themeMode: partial.themeMode,
+      accent: partial.accent
+    })
+  } catch {
+    /* browser stub / preload not ready */
+  }
+}
+
+function persist(partial: AppSettings): void {
+  persistLocal(partial)
+  syncSplashTheme(partial)
 }
 
 function readStored(): AppSettings {
@@ -63,6 +81,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const stored = readStored()
     applyTheme(stored.themeMode, stored.accent)
     set({ ...stored, hydrated: true })
+    // Migrate existing localStorage theme so next cold-start splash matches.
+    syncSplashTheme(stored)
   },
 
   setThemeMode: (themeMode) => {
@@ -82,6 +102,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setFontSize: (n) => {
     const fontSize = Math.min(24, Math.max(11, n))
     set({ fontSize })
-    persist(snapshot(get()))
+    persistLocal(snapshot(get()))
   }
 }))

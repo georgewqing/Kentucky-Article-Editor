@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { FileEntry } from '@/platform'
 import { getPlatform } from '@/platform'
 import { useAppStore } from '@/state/appStore'
+import { isDialoguePath } from '@/editors/dialogueCsv'
 
 type MenuState = {
   x: number
@@ -14,6 +15,7 @@ type MenuState = {
 
 function FileIcon({ entry }: { entry: FileEntry }) {
   if (entry.isDirectory) return <span className="tree-icon tree-icon-folder">▸</span>
+  if (isDialoguePath(entry.path)) return <span className="tree-icon tree-icon-dialogue">D</span>
   const ext = getPlatform().extname(entry.path)
   if (ext === '.kmind') return <span className="tree-icon tree-icon-mind">M</span>
   if (ext === '.md') return <span className="tree-icon tree-icon-md">MD</span>
@@ -79,7 +81,7 @@ export function FileTree({
   onRequestCreate
 }: {
   entries: FileEntry[]
-  onRequestCreate: (kind: 'file' | 'folder' | 'mindmap', parentDir: string) => void
+  onRequestCreate: (kind: 'file' | 'folder' | 'mindmap' | 'dialogue', parentDir: string) => void
 }) {
   const { t } = useTranslation()
   const workspacePath = useAppStore((s) => s.workspacePath)
@@ -155,6 +157,15 @@ export function FileTree({
             }}
           >
             {t('explorer.newMindMap')}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onRequestCreate('dialogue', menu.targetDir)
+              setMenu(null)
+            }}
+          >
+            {t('explorer.newDialogue')}
           </button>
           {menu.entry ? (
             <>

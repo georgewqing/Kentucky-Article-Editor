@@ -25,6 +25,11 @@ import {
   updateWindowMeta,
   type WindowRole
 } from './windowRegistry'
+import {
+  readSplashTheme,
+  splashBackgroundColor,
+  writeSplashTheme
+} from './themeSettings'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -56,6 +61,7 @@ function loadRenderer(win: BrowserWindow): void {
 }
 
 function createSplashWindow(): BrowserWindow {
+  const theme = readSplashTheme()
   const splash = new BrowserWindow({
     width: 440,
     height: 300,
@@ -68,7 +74,7 @@ function createSplashWindow(): BrowserWindow {
     alwaysOnTop: true,
     center: true,
     show: false,
-    backgroundColor: '#141414',
+    backgroundColor: splashBackgroundColor(theme),
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
@@ -78,7 +84,12 @@ function createSplashWindow(): BrowserWindow {
     }
   })
 
-  void splash.loadFile(join(__dirname, '../renderer/splash.html'))
+  void splash.loadFile(join(__dirname, '../renderer/splash.html'), {
+    query: {
+      accent: theme.accent,
+      mode: theme.themeMode
+    }
+  })
   splash.once('ready-to-show', () => {
     if (!splash.isDestroyed()) splash.show()
   })
@@ -211,6 +222,14 @@ ipcMain.handle('app:setMenuLocale', (_e, locale: MenuLocale) => {
 })
 
 ipcMain.handle('app:getOsPlatform', () => process.platform)
+
+ipcMain.handle(
+  'theme:persist',
+  (_e, payload: { themeMode?: 'dark' | 'light'; accent?: string }) => {
+    writeSplashTheme(payload ?? {})
+    return true
+  }
+)
 
 ipcMain.handle('window:getBootstrap', (e) => {
   const win = BrowserWindow.fromWebContents(e.sender)
@@ -462,7 +481,19 @@ export interface FileEntry {
   children?: FileEntry[]
 }
 
-const TEXT_EXTS = new Set(['.md', '.txt', '.kmind', '.json', '.ts', '.tsx', '.js', '.jsx', '.css', '.html'])
+const TEXT_EXTS = new Set([
+  '.md',
+  '.txt',
+  '.kmind',
+  '.csv',
+  '.json',
+  '.ts',
+  '.tsx',
+  '.js',
+  '.jsx',
+  '.css',
+  '.html'
+])
 
 function shouldInclude(name: string, isDirectory: boolean): boolean {
   if (name.startsWith('.')) return false

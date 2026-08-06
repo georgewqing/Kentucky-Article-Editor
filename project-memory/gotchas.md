@@ -34,6 +34,7 @@
 - 关最后 **主窗** 才 `app.quit()`；精简窗不保活。主窗 `reportWorkspace(null)` 且无其它主窗仍开该工作区 → destroy 对应 float。
 - 精简窗**不要**挂 `beforeunload` 拦关窗；关窗走主进程 `close` → `window:close-request` → 应用内「保存 / 不保存 / 取消」对话框，再 `window:confirmClose`。
 - 启动：主窗 `show: false`，先弹轻量 `splash.html`（与 boot-splash 同款），`ready-to-show` / `did-finish-load` 后再显示主窗并关闪屏；便携 exe 解压阶段仍可能短暂系统转圈（Electron 尚未起来）。
+- 闪屏主题：独立 BrowserWindow **读不到**主窗 localStorage（dev 为 http、闪屏为 file）。主题写入 `userData/kentucky-theme.json`（`theme:persist`）；闪屏用 query `accent`/`mode` 注入。改主体色后需至少启动一次主窗才会同步到下次闪屏。
 - 预加载 / IPC 变更后须**重启** Electron 进程，热更新不够。
 - 链接对话框用应用内表单，**勿用** `window.prompt`。
 - 字数：`wordCount.ts` 计**非空白码点**（中英一视同仁）；勿按英文「词」分词，否则一行 `dddd…` 只算 1，UI「字」会对不上。
@@ -70,6 +71,9 @@
 - 写作与思维导图 **不自动同步**。
 - 欢迎卡片最多展示 6 个，不做真实文件夹截图。
 - 渲染层只依赖 `getPlatform()`，为以后安卓平板留口。
+- 台词：仅 `*.dialogue.csv` 走 DialogueEditor；普通 `.csv`（含 `characters.csv`）仍 Monaco。`characters.csv` 路径固定工作区根，勿做成可配置。
+- 台词 id 唯一性要扫工作区全部 `.dialogue.csv`（不只当前文件）；改 text/meta 默认不改 id。
+- Godot 热编辑：打开工程内 `dialogue/` 当工作区即可同文件联动；监视/重载插件在 **Godot 工程自研**，契约见 `extras/godot-kentucky-dialogue/README.md`。勿把「导出 CSV」当热编辑主路径。
 
 ## Windows 启动
 

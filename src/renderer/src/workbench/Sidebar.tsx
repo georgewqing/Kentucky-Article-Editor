@@ -18,21 +18,31 @@ export function Sidebar() {
   const createDialogue = useAppStore((s) => s.createDialogue)
   const dragging = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const sceneInputRef = useRef<HTMLInputElement>(null)
 
   const [createKind, setCreateKind] = useState<CreateKind>(null)
   const [name, setName] = useState('')
   const [createParent, setCreateParent] = useState<string | undefined>(undefined)
 
+  const [godotScene, setGodotScene] = useState('')
+  const [dialogueId, setDialogueId] = useState('')
+
   const openCreate = (kind: CreateKind, parentDir?: string) => {
     if (!workspacePath || !kind) return
-    const defaults: Record<Exclude<CreateKind, null>, string> = {
+    setCreateParent(parentDir)
+    if (kind === 'dialogue') {
+      setCreateKind('dialogue')
+      setGodotScene('')
+      setDialogueId('')
+      requestAnimationFrame(() => sceneInputRef.current?.focus())
+      return
+    }
+    const defaults: Record<'file' | 'folder' | 'mindmap', string> = {
       file: 'untitled.md',
       folder: 'folder',
-      mindmap: 'ideas.kmind',
-      dialogue: 'scene.dialogue.csv'
+      mindmap: 'ideas.kmind'
     }
     setCreateKind(kind)
-    setCreateParent(parentDir)
     setName(defaults[kind])
     requestAnimationFrame(() => {
       inputRef.current?.focus()
@@ -44,12 +54,18 @@ export function Sidebar() {
     setCreateKind(null)
     setName('')
     setCreateParent(undefined)
+    setGodotScene('')
+    setDialogueId('')
   }
 
   const submitCreate = async (e?: FormEvent) => {
     e?.preventDefault()
+    if (!createKind || createKind === 'dialogue') {
+      cancelCreate()
+      return
+    }
     const trimmed = name.trim()
-    if (!trimmed || !createKind) {
+    if (!trimmed) {
       cancelCreate()
       return
     }
@@ -58,8 +74,17 @@ export function Sidebar() {
     cancelCreate()
     if (kind === 'file') await createFile(trimmed, parent)
     else if (kind === 'folder') await createFolder(trimmed, parent)
-    else if (kind === 'mindmap') await createMindMap(trimmed, parent)
-    else await createDialogue(trimmed, parent)
+    else await createMindMap(trimmed, parent)
+  }
+
+  const submitDialogue = async (e?: FormEvent) => {
+    e?.preventDefault()
+    const scene = godotScene.trim()
+    const id = dialogueId.trim()
+    if (!scene || !id) return
+    const parent = createParent
+    cancelCreate()
+    await createDialogue({ godotScene: scene, dialogueId: id }, parent)
   }
 
   const promptLabel =
@@ -67,9 +92,7 @@ export function Sidebar() {
       ? t('explorer.promptFileName')
       : createKind === 'folder'
         ? t('explorer.promptFolderName')
-        : createKind === 'mindmap'
-          ? t('explorer.promptMindMapName')
-          : t('explorer.promptDialogueName')
+        : t('explorer.promptMindMapName')
 
   const onSashDown = (e: ReactMouseEvent) => {
     e.preventDefault()
@@ -89,6 +112,8 @@ export function Sidebar() {
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
   }
+
+  const inlineCreate = createKind === 'file' || createKind === 'folder' || createKind === 'mindmap'
 
   return (
     <>
@@ -139,7 +164,7 @@ export function Sidebar() {
           </div>
         </div>
 
-        {createKind ? (
+        {inlineCreate ? (
           <form className="sidebar-create" onSubmit={(e) => void submitCreate(e)}>
             <label className="sidebar-create-label">{promptLabel}</label>
             <input
@@ -177,6 +202,52 @@ export function Sidebar() {
         </div>
       </aside>
       <div className="sash" onMouseDown={onSashDown} role="separator" aria-orientation="vertical" />
+
+      {createKind === 'dialogue' ? (
+        <div className="app-dialog-backdrop" role="presentation">
+          <form className="app-dialog" onSubmit={(e) => void submitDialogue(e)}>
+            <h2 className="app-dialog-title">{t('dialogue.createDialogueTitle')}</h2>
+            <p className="app-dialog-body">{t('dialogue.createDialogueHintAutoName')}</p>
+            <div className="dialogue-char-form">
+              <label>
+                {t('dialogue.godotScene')}
+                <input
+                  ref={sceneInputRef}
+                  value={godotScene}
+                  required
+                  placeholder={t('dialogue.godotScenePlaceholder')}
+                  onChange={(e) => setGodotScene(e.target.value)}
+                  spellCheck={false}
+                />
+              </label>
+              <label>
+                {t('dialogue.dialogueId')}
+                <input
+                  value={dialogueId}
+                  required
+                  placeholder={t('dialogue.dialogueIdPlaceholder')}
+                  onChange={(e) => setDialogueId(e.target.value)}
+                  spellCheck={false}
+                />
+              </label>
+            </div>
+            <div className="app-dialog-actions">
+              <button type="button" className="app-dialog-btn ghost" onClick={cancelCreate}>
+                {t('explorer.cancel')}
+              </button>
+              <div className="app-dialog-actions-end">
+                <button
+                  type="submit"
+                  className="app-dialog-btn primary"
+                  disabled={!godotScene.trim() || !dialogueId.trim()}
+                >
+                  {t('explorer.create')}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </>
   )
 }

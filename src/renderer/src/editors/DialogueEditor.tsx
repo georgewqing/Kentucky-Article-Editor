@@ -22,8 +22,11 @@ import {
   exportPipelineCsv,
   fileStemFromPath,
   isDialoguePath,
+  dialogueMetaPathFor,
   parseCharactersCsv,
   parseDialogueCsv,
+  parseDialogueFileMeta,
+  type DialogueFileMeta,
   serializeCharactersCsv,
   serializeDialogueCsv,
   slugifyCharacterId
@@ -85,6 +88,7 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
   const [mentionOpen, setMentionOpen] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
+  const [editingCharacter, setEditingCharacter] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [exportOpen, setExportOpen] = useState(false)
@@ -92,18 +96,21 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
   const [editText, setEditText] = useState('')
   const [dragId, setDragId] = useState<string | null>(null)
   const [idManual, setIdManual] = useState(false)
+  const [fileMeta, setFileMeta] = useState<DialogueFileMeta | null>(null)
 
   const [newChar, setNewChar] = useState({
     id: '',
     name: '',
     color: CHARACTER_COLOR_PRESETS[0],
-    note: ''
+    note: '',
+    model_node: ''
   })
   const applyingRef = useRef(false)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const fileStem = tab ? fileStemFromPath(tab.path) : 'dialogue'
+  const defaultScene = fileMeta?.dialogue_id?.trim() || fileStem
   const charMap = useMemo(() => {
     const m = new Map<string, Character>()
     for (const c of characters) m.set(c.id, c)
@@ -146,6 +153,32 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
   }, [loadCharacters])
 
   useEffect(() => {
+    if (!tab) {
+      setFileMeta(null)
+      return
+    }
+    let cancelled = false
+    const load = async (): Promise<void> => {
+      try {
+        const metaPath = dialogueMetaPathFor(tab.path)
+        const platform = getPlatform()
+        if (!(await platform.exists(metaPath))) {
+          if (!cancelled) setFileMeta(null)
+          return
+        }
+        const raw = await platform.readFile(metaPath)
+        if (!cancelled) setFileMeta(parseDialogueFileMeta(raw))
+      } catch {
+        if (!cancelled) setFileMeta(null)
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [tab?.path])
+
+  useEffect(() => {
     if (!tab) return
     if (applyingRef.current) return
     setLines(parseDialogueCsv(tab.content || emptyDialogueCsv()))
@@ -183,7 +216,7 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
       return
     }
     const existing = await collectWorkspaceDialogueIds(workspacePath, fileTree, tab?.path, lines)
-    const scene = fileStem
+    const scene = defaultScene
     const id = allocateDialogueId(existing, {
       scene,
       fileStem,
@@ -264,23 +297,72 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
   const submitCreateCharacter = async (e?: FormEvent): Promise<void> => {
     e?.preventDefault()
     const name = newChar.name.trim()
+    const modelNode = newChar.model_node.trim()
     if (!name) return
+    if (!modelNode) {
+      showToast(t('dialogue.modelNodeRequired'), 'error')
+      return
+    }
     let id = (newChar.id.trim() || slugifyCharacterId(name)).replace(/\s+/g, '_')
     if (!id) id = 'char'
+    if (editingCharacter) {
+      if (!selectedSpeaker) return
+      const next = characters.map((c) =>
+        c.id === selectedSpeaker
+          ? {
+              ...c,
+              name,
+              color: newChar.color || CHARACTER_COLOR_PRESETS[0],
+              note: newChar.note,
+              model_node: modelNode
+            }
+          : c
+      )
+      await saveCharacters(next)
+      setCreateOpen(false)
+      setEditingCharacter(false)
+      setPickerOpen(false)
+      setIdManual(false)
+      setNewChar({ id: '', name: '', color: CHARACTER_COLOR_PRESETS[0], note: '', model_node: '' })
+      return
+    }
     if (characters.some((c) => c.id === id)) {
       showToast(t('dialogue.characterIdConflict'), 'error')
       return
     }
     const next = [
       ...characters,
-      { id, name, color: newChar.color || CHARACTER_COLOR_PRESETS[0], note: newChar.note }
+      {
+        id,
+        name,
+        color: newChar.color || CHARACTER_COLOR_PRESETS[0],
+        note: newChar.note,
+        model_node: modelNode
+      }
     ]
     await saveCharacters(next)
     setSelectedSpeaker(id)
     setCreateOpen(false)
+    setEditingCharacter(false)
     setPickerOpen(false)
     setIdManual(false)
-    setNewChar({ id: '', name: '', color: CHARACTER_COLOR_PRESETS[0], note: '' })
+    setNewChar({ id: '', name: '', color: CHARACTER_COLOR_PRESETS[0], note: '', model_node: '' })
+  }
+
+  const openEditCharacter = (): void => {
+    const c = selectedSpeaker ? charMap.get(selectedSpeaker) : undefined
+    if (!c) return
+    setPickerOpen(false)
+    setEditingCharacter(true)
+    setIdManual(true)
+    setNewChar({
+      id: c.id,
+      name: c.name,
+      color: c.color,
+      note: c.note,
+      model_node: c.model_node || ''
+    })
+    setCreateOpen(true)
   }
 
   const deleteCharacter = async (id: string): Promise<void> => {
@@ -353,9 +435,11 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
           {t('dialogue.export')}
         </button>
         <span className="dialogue-toolbar-hint">
-          {selectedIds.size > 0
-            ? t('dialogue.selectedCount', { count: selectedIds.size })
-            : t('dialogue.lineCount', { count: lines.length })}
+          {fileMeta
+            ? t('dialogue.metaHint', { scene: fileMeta.godot_scene, id: fileMeta.dialogue_id })
+            : selectedIds.size > 0
+              ? t('dialogue.selectedCount', { count: selectedIds.size })
+              : t('dialogue.lineCount', { count: lines.length })}
         </span>
       </div>
 
@@ -581,6 +665,7 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
                     type="button"
                     onClick={() => {
                       setPickerOpen(false)
+                      setEditingCharacter(false)
                       setCreateOpen(true)
                       setIdManual(false)
                       setNewChar({
@@ -588,12 +673,18 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
                         name: '',
                         color:
                           CHARACTER_COLOR_PRESETS[characters.length % CHARACTER_COLOR_PRESETS.length],
-                        note: ''
+                        note: '',
+                        model_node: ''
                       })
                     }}
                   >
                     {t('dialogue.createCharacter')}
                   </button>
+                  {selectedSpeaker ? (
+                    <button type="button" onClick={() => openEditCharacter()}>
+                      {t('dialogue.editCharacter')}
+                    </button>
+                  ) : null}
                   {selectedSpeaker ? (
                     <button
                       type="button"
@@ -628,7 +719,9 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
       {createOpen ? (
         <div className="app-dialog-backdrop" role="presentation">
           <form className="app-dialog" onSubmit={(e) => void submitCreateCharacter(e)}>
-            <h2 className="app-dialog-title">{t('dialogue.createCharacter')}</h2>
+            <h2 className="app-dialog-title">
+              {editingCharacter ? t('dialogue.editCharacter') : t('dialogue.createCharacter')}
+            </h2>
             <div className="dialogue-char-form">
               <label>
                 {t('dialogue.characterName')}
@@ -640,7 +733,7 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
                     setNewChar((s) => ({
                       ...s,
                       name,
-                      id: idManual ? s.id : slugifyCharacterId(name)
+                      id: editingCharacter || idManual ? s.id : slugifyCharacterId(name)
                     }))
                   }}
                 />
@@ -649,10 +742,21 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
                 {t('dialogue.characterId')}
                 <input
                   value={newChar.id}
+                  disabled={editingCharacter}
                   onChange={(e) => {
                     setIdManual(true)
                     setNewChar((s) => ({ ...s, id: e.target.value.trim() }))
                   }}
+                />
+              </label>
+              <label>
+                {t('dialogue.modelNode')}
+                <input
+                  value={newChar.model_node}
+                  required
+                  placeholder={t('dialogue.modelNodePlaceholder')}
+                  onChange={(e) => setNewChar((s) => ({ ...s, model_node: e.target.value }))}
+                  spellCheck={false}
                 />
               </label>
               <label>
@@ -683,12 +787,19 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
               </label>
             </div>
             <div className="app-dialog-actions">
-              <button type="button" className="app-dialog-btn ghost" onClick={() => setCreateOpen(false)}>
+              <button
+                type="button"
+                className="app-dialog-btn ghost"
+                onClick={() => {
+                  setCreateOpen(false)
+                  setEditingCharacter(false)
+                }}
+              >
                 {t('editor.cancel')}
               </button>
               <div className="app-dialog-actions-end">
                 <button type="submit" className="app-dialog-btn primary">
-                  {t('explorer.create')}
+                  {editingCharacter ? t('dialogue.saveCharacter') : t('explorer.create')}
                 </button>
               </div>
             </div>

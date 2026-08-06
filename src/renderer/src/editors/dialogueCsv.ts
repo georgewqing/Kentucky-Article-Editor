@@ -16,17 +16,87 @@ export interface Character {
   name: string
   color: string
   note: string
+  /** Godot model / character node name for plugin linkage. */
+  model_node: string
+}
+
+/** File-level Godot binding, stored beside `*.dialogue.csv` as `*.dialogue.meta.json`. */
+export interface DialogueFileMeta {
+  godot_scene: string
+  dialogue_id: string
 }
 
 export const DIALOGUE_HEADER =
   'id,speaker,text,note,emotion,scene,condition,audio' as const
 
-export const CHARACTERS_HEADER = 'id,name,color,note' as const
+export const CHARACTERS_HEADER = 'id,name,color,note,model_node' as const
 
 export const DIALOGUE_EXT = '.dialogue.csv'
+export const DIALOGUE_META_EXT = '.dialogue.meta.json'
 
 export function isDialoguePath(path: string): boolean {
   return path.replace(/\\/g, '/').toLowerCase().endsWith(DIALOGUE_EXT)
+}
+
+export function isDialogueMetaPath(path: string): boolean {
+  return path.replace(/\\/g, '/').toLowerCase().endsWith(DIALOGUE_META_EXT)
+}
+
+/** `foo.dialogue.csv` → `foo.dialogue.meta.json` */
+export function dialogueMetaPathFor(dialogueCsvPath: string): string {
+  const lower = dialogueCsvPath.toLowerCase()
+  const idx = lower.lastIndexOf(DIALOGUE_EXT)
+  if (idx >= 0 && idx === lower.length - DIALOGUE_EXT.length) {
+    return dialogueCsvPath.slice(0, idx) + DIALOGUE_META_EXT
+  }
+  return dialogueCsvPath + DIALOGUE_META_EXT
+}
+
+export function parseDialogueFileMeta(text: string): DialogueFileMeta | null {
+  try {
+    const parsed = JSON.parse(text) as Partial<DialogueFileMeta>
+    const godot_scene = typeof parsed.godot_scene === 'string' ? parsed.godot_scene.trim() : ''
+    const dialogue_id = typeof parsed.dialogue_id === 'string' ? parsed.dialogue_id.trim() : ''
+    if (!godot_scene || !dialogue_id) return null
+    return { godot_scene, dialogue_id }
+  } catch {
+    return null
+  }
+}
+
+export function serializeDialogueFileMeta(meta: DialogueFileMeta): string {
+  return JSON.stringify(
+    {
+      godot_scene: meta.godot_scene.trim(),
+      dialogue_id: meta.dialogue_id.trim()
+    },
+    null,
+    2
+  ) + '\n'
+}
+
+/** Filename stem from Godot scene path/name (e.g. res://scenes/tavern.tscn → tavern). */
+export function sceneStemFromGodotScene(godotScene: string): string {
+  const raw = godotScene.trim().replace(/\\/g, '/')
+  const base = raw.split('/').filter(Boolean).pop() || raw
+  const noExt = base.replace(/\.(tscn|scn|res)$/i, '')
+  return sanitizeIdPart(noExt) || 'scene'
+}
+
+/**
+ * Auto file name: `{sceneStem}_{dialogueId}.dialogue.csv`
+ * e.g. res://scenes/tavern.tscn + intro → tavern_intro.dialogue.csv
+ */
+export function dialogueFileNameFromMeta(godotScene: string, dialogueId: string): string {
+  const scenePart = sceneStemFromGodotScene(godotScene)
+  const idPart = sanitizeIdPart(dialogueId) || 'dialogue'
+  return `${scenePart}_${idPart}${DIALOGUE_EXT}`
+}
+
+/** @deprecated Prefer dialogueFileNameFromMeta(scene, id) */
+export function dialogueFileNameFromId(dialogueId: string): string {
+  const stem = sanitizeIdPart(dialogueId) || 'dialogue'
+  return `${stem}${DIALOGUE_EXT}`
 }
 
 export function emptyDialogueCsv(): string {
@@ -177,6 +247,7 @@ export function parseCharactersCsv(text: string): Character[] {
   const nameI = colIndex(header, 'name')
   const colorI = colIndex(header, 'color')
   const noteI = colIndex(header, 'note')
+  const modelI = colIndex(header, 'model_node')
   if (idI < 0 || nameI < 0) return []
   const out: Character[] = []
   for (let r = 1; r < rows.length; r++) {
@@ -188,16 +259,17 @@ export function parseCharactersCsv(text: string): Character[] {
       id,
       name: get(nameI).trim() || id,
       color: get(colorI).trim() || '#88c0d0',
-      note: get(noteI)
+      note: get(noteI),
+      model_node: get(modelI).trim()
     })
   }
   return out
 }
 
 export function serializeCharactersCsv(chars: Character[]): string {
-  const rows: string[][] = [['id', 'name', 'color', 'note']]
+  const rows: string[][] = [['id', 'name', 'color', 'note', 'model_node']]
   for (const c of chars) {
-    rows.push([c.id, c.name, c.color, c.note])
+    rows.push([c.id, c.name, c.color, c.note, c.model_node ?? ''])
   }
   return serializeCsv(rows)
 }

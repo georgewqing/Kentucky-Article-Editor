@@ -87,8 +87,9 @@ Kentucky **不**内嵌 Godot，**不**附带引擎插件，也不做双向实时
 ```text
 YourGodotProject/
   dialogue/                 ← Kentucky「打开文件夹」选这里（工作区根）
-    characters.csv
-    tavern.dialogue.csv
+    characters.csv          ← 含 model_node
+    tavern_intro.dialogue.csv
+    tavern_intro.dialogue.meta.json
   scripts/
     dialogue_loader.gd      ← 运行时读 res://dialogue/...
   addons/
@@ -96,8 +97,11 @@ YourGodotProject/
 ```
 
 1. 在 Kentucky 打开 `dialogue/`（因 `characters.csv` 固定在工作区根）。
-2. 编辑 `.dialogue.csv`，`Ctrl+S` → 磁盘立刻更新。
-3. 游戏直接读这些路径；**不要**再维护一份平行导出副本当热编辑主路径。
-4. 列定义、id 规则、CSV 转义、建议监视点：见 [`extras/godot-kentucky-dialogue/README.md`](../extras/godot-kentucky-dialogue/README.md)。
+2. **新建台词**信息卡：只填 Godot 场景 + 对话标识 → 自动生成文件名并写 `*.dialogue.meta.json`（卡上无改名入口）。
+3. **创建角色**须填模型节点名 `model_node`（写入 `characters.csv`）；可「编辑当前角色」。
+4. 需要改文件名：资源管理器 **右键 → 重命名**（台词会同步改 meta）。
+5. 编辑 `.dialogue.csv`，`Ctrl+S` → 磁盘立刻更新。
+6. 游戏直接读这些路径；**不要**再维护一份平行导出副本当热编辑主路径。
+7. **完整协议**：[`extras/godot-kentucky-dialogue/README.md`](../extras/godot-kentucky-dialogue/README.md)。
 
 类比：Kentucky ≈ 外部 DCC；Godot 读盘——联动靠路径，不是进程间推送。

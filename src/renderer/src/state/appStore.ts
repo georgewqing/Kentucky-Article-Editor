@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { DocSnapshot, FileEntry, WindowRole } from '@/platform'
 import { getPlatform } from '@/platform'
 import { createEmptyKMind, serializeKMind, type KMindNodeLink } from '@/editors/kmind'
-import { emptyDialogueCsv, isDialoguePath } from '@/editors/dialogueCsv'
+import { emptyDialogueCsv, isDialoguePath, dialogueMetaPathFor, serializeDialogueFileMeta, dialogueFileNameFromMeta } from '@/editors/dialogueCsv'
 import i18n from '@/i18n'
 import { askUnsavedConfirm } from '@/state/unsavedDialogStore'
 
@@ -112,7 +112,11 @@ interface AppState {
   createFile: (name: string, parentDir?: string) => Promise<void>
   createFolder: (name: string, parentDir?: string) => Promise<void>
   createMindMap: (name: string, parentDir?: string) => Promise<void>
-  createDialogue: (name: string, parentDir?: string) => Promise<void>
+  createDialogue: (
+    opts: { godotScene: string; dialogueId: string; fileName?: string },
+    parentDir?: string
+  ) => Promise<void>
+  renameEntry: (targetPath: string, newName: string) => Promise<void>
   deleteEntry: (targetPath: string) => Promise<void>
 
   spawnNewWindow: () => Promise<void>
@@ -627,12 +631,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  createDialogue: async (name, parentDir) => {
+  createDialogue: async (opts, parentDir) => {
     const { workspacePath } = get()
     const base = parentDir ?? workspacePath
     if (!base) return
+    const godotScene = opts.godotScene.trim()
+    const dialogueId = opts.dialogueId.trim()
+    if (!godotScene || !dialogueId) {
+      get().showToast(i18n.t('dialogue.metaRequired'))
+      return
+    }
     const platform = getPlatform()
-    let fileName = name.trim()
+    let fileName = (opts.fileName ?? dialogueFileNameFromMeta(godotScene, dialogueId)).trim()
     if (!fileName.toLowerCase().endsWith('.dialogue.csv')) {
       if (fileName.toLowerCase().endsWith('.csv')) {
         fileName = fileName.slice(0, -4) + '.dialogue.csv'
@@ -641,12 +651,87 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
     const path = platform.joinPath(base, fileName)
+    const metaPath = dialogueMetaPathFor(path)
     try {
       await platform.writeFile(path, emptyDialogueCsv())
+      await platform.writeFile(
+        metaPath,
+        serializeDialogueFileMeta({ godot_scene: godotScene, dialogue_id: dialogueId })
+      )
       await get().refreshTree()
       await get().openFile(path)
     } catch {
       get().showToast(i18n.t('errors.createFailed'))
+    }
+  },
+
+  renameEntry: async (targetPath, newName) => {
+    const platform = getPlatform()
+    let nextName = newName.trim()
+    if (!nextName || nextName.includes('/') || nextName.includes('\\')) {
+      get().showToast(i18n.t('errors.renameFailed'))
+      return
+    }
+    const dir = platform.dirname(targetPath)
+    const newPath = platform.joinPath(dir, nextName)
+    if (pathsEqual(targetPath, newPath)) return
+
+    const openTab = get().tabs.find((t) => pathsEqual(t.path, targetPath))
+    if (openTab?.dirty) {
+      const choice = await askUnsavedConfirm({ fileName: openTab.title })
+      if (choice === 'cancel') return
+      if (choice === 'save') {
+        const ok = await get().saveTab(openTab.id)
+        if (!ok) return
+      } else {
+        await get().discardTab(openTab.id)
+      }
+    }
+
+    const wasActive = openTab && get().activeTabId === openTab.id
+    if (openTab) {
+      const closed = await get().closeTab(openTab.id, true)
+      if (!closed) return
+    }
+
+    try {
+      if (await platform.exists(newPath)) {
+        get().showToast(i18n.t('errors.renameExists'))
+        if (openTab) await get().openFile(targetPath)
+        return
+      }
+      await platform.rename(targetPath, newPath)
+
+      if (isDialoguePath(targetPath)) {
+        const oldMeta = dialogueMetaPathFor(targetPath)
+        try {
+          if (await platform.exists(oldMeta)) {
+            if (isDialoguePath(newPath)) {
+              const newMeta = dialogueMetaPathFor(newPath)
+              if (!(await platform.exists(newMeta))) {
+                await platform.rename(oldMeta, newMeta)
+              } else {
+                await platform.delete(oldMeta)
+              }
+            } else {
+              await platform.delete(oldMeta)
+            }
+          }
+        } catch {
+          /* meta best-effort */
+        }
+      }
+
+      await get().refreshTree()
+      if (openTab) {
+        await get().openFile(newPath)
+        if (!wasActive) {
+          /* openFile sets active; fine for rename UX */
+        }
+      }
+    } catch {
+      get().showToast(i18n.t('errors.renameFailed'))
+      if (openTab) await get().openFile(targetPath)
     }
   },
 
@@ -661,7 +746,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       for (const tab of tabs) {
         await get().closeTab(tab.id, true)
       }
-      await getPlatform().delete(targetPath)
+      const platform = getPlatform()
+      await platform.delete(targetPath)
+      if (isDialoguePath(targetPath)) {
+        const metaPath = dialogueMetaPathFor(targetPath)
+        try {
+          if (await platform.exists(metaPath)) await platform.delete(metaPath)
+        } catch {
+          /* ignore missing meta */
+        }
+      }
       await get().refreshTree()
     } catch {
       get().showToast(i18n.t('errors.deleteFailed'))

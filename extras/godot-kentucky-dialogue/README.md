@@ -1,8 +1,28 @@
 # KENTUCKY ↔ Godot 台词兼容说明（给 Godot 侧自研插件）
 
-> **本仓库不附带 Godot 插件。** 以下为数据契约与联动约定，便于你在自己的 Godot 工程里写监视/重载逻辑。
+> **本仓库不附带 Godot 插件。** 以下为数据契约与联动约定（协议），便于你在自己的 Godot 工程里写监视/重载逻辑。  
+> 权威实现对照：`src/renderer/src/editors/dialogueCsv.ts`、`DialogueEditor.tsx`、`appStore.createDialogue` / `renameEntry`。
 
 Kentucky 只保证：打开文件夹后编辑，`Ctrl+S` **写同一份磁盘文件**。引擎里「热更新」完全由你的 Godot 代码负责（读盘 / 监视 mtime / `EditorFileSystem.scan` 等）。
+
+---
+
+## 0. 协议速览（v1）
+
+| 项 | 约定 |
+|----|------|
+| 工作区 | Kentucky 打开 Godot 工程的 `dialogue/`（或等价目录）为根 |
+| 角色表 | 根目录 `characters.csv`：`id,name,color,note,model_node` |
+| 台词源 | `*.dialogue.csv`：`id,speaker,text,note,emotion,scene,condition,audio` |
+| 文件级绑定 | 同 stem 旁路 `*.dialogue.meta.json`：`godot_scene` + `dialogue_id` |
+| 新建文件名 | **自动** `{sceneStem}_{dialogueId}.dialogue.csv`（信息卡不提供改名） |
+| 改名 | 资源管理器右键重命名；若为台词文件则同步改 `.meta.json` |
+| 删除 | 删 `.dialogue.csv` 时尝试删对应 `.meta.json` |
+| `speaker` | 存角色 **id**；`model_node` 供插件找场景节点 |
+| 联动方式 | **同路径磁盘**，无 IPC / 无内嵌引擎 |
+
+文件名中 `sceneStem`：取 `godot_scene` 路径最后一段，去掉 `.tscn` / `.scn` / `.res` 后做 id 净化。  
+例：`res://scenes/tavern.tscn` + `intro` → `tavern_intro.dialogue.csv` + `tavern_intro.dialogue.meta.json`。
 
 ---
 
@@ -13,13 +33,13 @@ Kentucky 只保证：打开文件夹后编辑，`Ctrl+S` **写同一份磁盘文
 ```text
 YourGodotProject/
   dialogue/                    ← Kentucky「打开文件夹」指向这里
-    characters.csv             ← 角色表（必须在此根目录）
-    tavern.dialogue.csv        ← 台词源文件（扩展名必须是 .dialogue.csv）
-    intro.dialogue.csv
+    characters.csv             ← 角色表（含 model_node）
+    intro.dialogue.csv         ← 台词源
+    intro.dialogue.meta.json   ← 文件级 Godot 绑定（场景 + 对话 id）
   scripts/
-    your_dialogue_loader.gd    ← 你的加载器：读上述路径
+    your_dialogue_loader.gd
   addons/
-    your_plugin/               ← 你自己的监视插件（本仓库不提供）
+    your_plugin/
 ```
 
 热编辑主路径 = 上述 **源文件**。Kentucky「导出管线 CSV / 本地化 CSV」是可选副本，**不要**当成热编辑真相，除非你自己再接线。
@@ -31,6 +51,7 @@ YourGodotProject/
 | 文件 | Kentucky 行为 |
 |------|----------------|
 | `*.dialogue.csv` | 打开 → 对话编辑器（聊天 UI） |
+| `*.dialogue.meta.json` | 旁路元数据（普通 JSON 文本）；新建台词时写入 |
 | `characters.csv` | 普通文本（Monaco）；由对话编辑器创建/更新角色时自动读写 |
 | 其它 `*.csv` | Monaco，**不会**当台词编辑 |
 
@@ -45,7 +66,7 @@ YourGodotProject/
 **表头（固定列名，顺序建议如下）：**
 
 ```text
-id,name,color,note
+id,name,color,note,model_node
 ```
 
 | 列 | 必须 | 说明 |
@@ -54,20 +75,49 @@ id,name,color,note
 | `name` | 是 | UI 显示名 |
 | `color` | 否 | 气泡/名字颜色，如 `#88c0d0`；缺省 Kentucky 用默认色 |
 | `note` | 否 | 作者备注 |
+| `model_node` | 创建时必填 | Godot 模型/角色节点名（如 `NPC_Guard`），供插件按节点联动 |
 
 规则：
 
 - 必须先有角色才能在 Kentucky 里发言（`@` / 说话人选择器只列已创建角色）。
 - 可删除角色：仍被引用的台词保留原 `speaker` id，UI 显示「未知角色」。
 - **没有** `display_name` 列。
+- 旧文件缺 `model_node` 列时解析为空字符串；写回时始终输出 5 列。
 
 示例：
 
 ```csv
-id,name,color,note
-guard,守卫,#d08770,酒馆门口
-rea,莉娅,#88c0d0,
+id,name,color,note,model_node
+guard,守卫,#d08770,酒馆门口,NPC_Guard
+rea,莉娅,#88c0d0,,NPC_Rea
 ```
+
+---
+
+## 3.1 台词文件级元数据 `*.dialogue.meta.json`
+
+与 `*.dialogue.csv` 同目录、同 stem：
+
+```text
+intro.dialogue.csv
+intro.dialogue.meta.json
+```
+
+```json
+{
+  "godot_scene": "res://scenes/tavern.tscn",
+  "dialogue_id": "intro"
+}
+```
+
+| 字段 | 必须 | 说明 |
+|------|------|------|
+| `godot_scene` | 是 | Godot 场景路径或约定名（自由文本，Kentucky 不校验存在） |
+| `dialogue_id` | 是 | 该场景内对话标识；新建台词行默认 `scene` 列也用此值 |
+
+新建台词（资源管理器信息卡）必填上述两字段后才创建文件；**文件名自动生成**为 `{场景名}_{对话标识}.dialogue.csv`（场景取路径最后一段并去掉 `.tscn` 等，例如 `res://scenes/tavern.tscn` + `intro` → `tavern_intro.dialogue.csv`）。信息卡**不提供**改名入口；需要改名时在资源管理器右键「重命名」（台词会同步改对应 `.meta.json`）。删除 `.dialogue.csv` 时会尝试一并删除对应 `.meta.json`。
+
+Godot 插件建议：监视目录时同时读 meta，用 `godot_scene` + `dialogue_id` 挂到场景/对话资源。
 
 ---
 
@@ -86,7 +136,7 @@ id,speaker,text,note,emotion,scene,condition,audio
 | `text` | 是 | 台词正文（可含逗号/换行，见 CSV 转义） |
 | `note` | 否 | 作者备注 |
 | `emotion` | 否 | 情绪（配音向，自由文本） |
-| `scene` | 否 | 场景标签；新建默认 = 文件名 stem（去掉 `.dialogue.csv`） |
+| `scene` | 否 | 场景标签；新建默认 = meta 的 `dialogue_id`（无 meta 则用文件 stem） |
 | `condition` | 否 | 简单条件/标记，自由文本，**非**表达式引擎 |
 | `audio` | 否 | 音频文件名（仅字段，Kentucky 不播放） |
 
@@ -123,7 +173,7 @@ Kentucky 使用近似 RFC4180：
 - 空文件/仅表头：合法（0 句台词）。
 - 表头列名匹配时 **大小写不敏感**；台词文件若缺 `id`/`speaker`/`text` 列则视为无效（打开为空列表）。历史兼容：表头可用 `key` 代替 `id`。
 
-序列化时 Kentucky **始终写出完整 8 列**（即使可选列为空字符串）。
+序列化时 Kentucky **始终写出完整 8 列**（即使可选列为空字符串）。角色表始终写出 5 列（含 `model_node`）。
 
 ---
 
@@ -160,10 +210,10 @@ Kentucky 使用近似 RFC4180：
 伪需求清单（实现细节由你定）：
 
 - [ ] 可配置监视根路径（默认 `res://dialogue`）
-- [ ] 检测 mtime / 增删
+- [ ] 检测 mtime / 增删（`*.dialogue.csv`、`*.dialogue.meta.json`、`characters.csv`）
+- [ ] 读 meta 的 `godot_scene` / `dialogue_id`，读角色的 `model_node`
 - [ ] 通知 `EditorFileSystem`（若需要 FileSystem 面板刷新）
 - [ ] 向游戏对话系统发「这些路径变了」事件（路径列表）
-- [ ] （可选）运行时 `start_watch`，方便编辑器 F5 边玩边改
 
 Kentucky **不会**注册名为 `KentuckyDialogueBus` 的 autoload——那只是此前草案命名；你的总线叫什么都可以。
 
@@ -174,10 +224,12 @@ Kentucky **不会**注册名为 `KentuckyDialogueBus` 的 autoload——那只�
 最小可用：
 
 ```text
-load_characters(path) -> Dictionary[id -> { name, color, note }]
+load_characters(path) -> Dictionary[id -> { name, color, note, model_node }]
 load_dialogue(path)   -> Array[{ id, speaker, text, note, emotion, scene, condition, audio }]
-                         # 保持 CSV 行序
+load_meta(path)       -> { godot_scene, dialogue_id }  # from *.dialogue.meta.json
+                         # 台词行保持 CSV 行序
 resolve_speaker(line) -> character or fallback "unknown"
+resolve_node(char)    -> char.model_node  # 驱动场景节点
 ```
 
 播放时用 `speaker` 查角色表；缺角色时应用兜底名（Kentucky UI 文案为「未知角色」），**不要丢弃该行**（id 仍有效）。

@@ -176,6 +176,15 @@
 - **不附带** Godot 插件；完整契约写在 `extras/godot-kentucky-dialogue/README.md`，由各项目自研监视/重载
 - 仍不做 Kentucky↔Godot 双向实时协议
 
+## 21. 台词 Godot 元数据字段
+
+- 新建台词信息卡：必填 `godot_scene` + `dialogue_id` → 旁路 `*.dialogue.meta.json`
+- 文件名自动 `{sceneStem}_{dialogueId}.dialogue.csv`；信息卡无改名入口
+- 资源管理器右键重命名（`renameEntry`）；台词同步改对应 meta
+- 角色表增加 `model_node`（创建/编辑必填）；新台词行默认 `scene` = meta.`dialogue_id`
+- 删除 `.dialogue.csv` 时尝试删除对应 meta
+- 协议全文：`extras/godot-kentucky-dialogue/README.md`（含 §0 协议速览）
+
 ## 其它小修
 
 - 选项卡悬停用 `cursor: pointer`

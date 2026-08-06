@@ -29,7 +29,7 @@
 | 台词对话 | **独立功能**（非 Markdown 混写）；磁盘真相 = `*.dialogue.csv` + 工作区根固定 `characters.csv`；UI 类聊天；`speaker` 存角色 **id**；稳定 id `{scene\|stem}_{charId}_{###}`；改字默认不改 id；仅「复制为新台词」生成新 id；工作区级 id 冲突顺延并 toast |
 | 台词角色 | 须先创建再 `@`；可删（警告）；孤儿台词显示「未知角色」；列：`id,name,color,note`（无 `display_name`） |
 | 台词导出 | 完整管线 CSV（可选 emotion/condition/audio）+ 本地化 `keys,<lang>`；范围=当前文件或勾选句子；不做全工作区一键导出 |
-| Godot 热编辑 | **同路径磁盘联动**（非进程内 API）：Kentucky 打开工程内 `dialogue/` 当工作区，`Ctrl+S` 写同一份 CSV。Godot 侧插件由项目自研；契约见 `extras/godot-kentucky-dialogue/README.md`。仍不做双向实时协议 |
+| Godot 热编辑 | **同路径磁盘联动**（非进程内 API）：打开工程内 `dialogue/` 当工作区；`Ctrl+S` 写盘。新建台词写 `*.dialogue.meta.json`（`godot_scene`/`dialogue_id`），文件名自动 `场景_对话.dialogue.csv`，改名走资源管理器重命名（同步 meta）；角色含 `model_node`。插件自研；契约见 `extras/godot-kentucky-dialogue/README.md`。不做双向实时协议 |
 | 未来 | 大屏安卓平板（不做手机专用布局）；渲染层可移植 |
 
 ## MVP 页面范围

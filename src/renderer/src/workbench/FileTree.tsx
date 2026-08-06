@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { FileEntry } from '@/platform'
 import { getPlatform } from '@/platform'
@@ -86,7 +86,11 @@ export function FileTree({
   const { t } = useTranslation()
   const workspacePath = useAppStore((s) => s.workspacePath)
   const deleteEntry = useAppStore((s) => s.deleteEntry)
+  const renameEntry = useAppStore((s) => s.renameEntry)
   const [menu, setMenu] = useState<MenuState>(null)
+  const [renameTarget, setRenameTarget] = useState<FileEntry | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const renameRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const close = () => setMenu(null)
@@ -98,6 +102,14 @@ export function FileTree({
     }
   }, [])
 
+  useEffect(() => {
+    if (!renameTarget) return
+    requestAnimationFrame(() => {
+      renameRef.current?.focus()
+      renameRef.current?.select()
+    })
+  }, [renameTarget])
+
   const openMenu = (e: MouseEvent, entry: FileEntry | null) => {
     e.preventDefault()
     e.stopPropagation()
@@ -108,6 +120,16 @@ export function FileTree({
         : getPlatform().dirname(entry.path)
       : workspacePath
     setMenu({ x: e.clientX, y: e.clientY, entry, targetDir })
+  }
+
+  const submitRename = async (e?: FormEvent) => {
+    e?.preventDefault()
+    const target = renameTarget
+    const next = renameValue.trim()
+    setRenameTarget(null)
+    setRenameValue('')
+    if (!target || !next || next === target.name) return
+    await renameEntry(target.path, next)
   }
 
   return (
@@ -173,6 +195,17 @@ export function FileTree({
               <button
                 type="button"
                 onClick={() => {
+                  const entry = menu.entry!
+                  setMenu(null)
+                  setRenameTarget(entry)
+                  setRenameValue(entry.name)
+                }}
+              >
+                {t('explorer.rename')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
                   const path = menu.entry!.path
                   setMenu(null)
                   void getPlatform().showItemInFolder(path)
@@ -206,6 +239,49 @@ export function FileTree({
               </button>
             </>
           ) : null}
+        </div>
+      ) : null}
+
+      {renameTarget ? (
+        <div className="app-dialog-backdrop" role="presentation">
+          <form className="app-dialog" onSubmit={(e) => void submitRename(e)}>
+            <h2 className="app-dialog-title">{t('explorer.rename')}</h2>
+            <div className="dialogue-char-form">
+              <label>
+                {t('explorer.promptRename')}
+                <input
+                  ref={renameRef}
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.preventDefault()
+                      setRenameTarget(null)
+                      setRenameValue('')
+                    }
+                  }}
+                  spellCheck={false}
+                />
+              </label>
+            </div>
+            <div className="app-dialog-actions">
+              <button
+                type="button"
+                className="app-dialog-btn ghost"
+                onClick={() => {
+                  setRenameTarget(null)
+                  setRenameValue('')
+                }}
+              >
+                {t('explorer.cancel')}
+              </button>
+              <div className="app-dialog-actions-end">
+                <button type="submit" className="app-dialog-btn primary" disabled={!renameValue.trim()}>
+                  {t('explorer.rename')}
+                </button>
+              </div>
+            </div>
+          </form>
         </div>
       ) : null}
     </div>

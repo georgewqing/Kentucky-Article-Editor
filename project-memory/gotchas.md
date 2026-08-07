@@ -73,7 +73,8 @@
 - 渲染层只依赖 `getPlatform()`，为以后安卓平板留口。
 - 台词：仅 `*.dialogue.csv` 走 DialogueEditor；普通 `.csv`（含 `characters.csv`）仍 Monaco。`characters.csv` 路径固定工作区根，勿做成可配置。
 - 台词 id 唯一性要扫工作区全部 `.dialogue.csv`（不只当前文件）；改 text/meta 默认不改 id。
-- Godot 热编辑：打开工程内 `dialogue/` 当工作区即可同文件联动；监视/重载插件在 **Godot 工程自研**，契约见 `extras/godot-kentucky-dialogue/README.md`。勿把「导出 CSV」当热编辑主路径。
+- Godot 热编辑：打开工程内 `dialogue/` 当工作区即可同文件联动；监视/重载插件在 **Godot 工程自研**，契约见 `extras/godot-kentucky-dialogue/README.md`（**v1.1**）。勿把「导出 CSV」当热编辑主路径。
+- 台词演出列：`focus_node` / `font_size` / `text_color`；`font_size` 空与 `0` 磁盘统一空串；`text_color` 仅 `#RGB`/`#RRGGBB`/`#RRGGBBAA`；Kentucky 不校验节点存在。
 - 台词 meta：`foo.dialogue.csv` 对应 `foo.dialogue.meta.json`（非 `.dialogue.csv.meta.json`）；删台词 / 重命名台词文件时同步处理 meta。
 - 新建台词文件名由场景 stem + 对话标识自动生成；信息卡不提供改名，改名用资源管理器右键。
 

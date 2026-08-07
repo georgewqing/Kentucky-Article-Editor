@@ -23,6 +23,8 @@ import {
   fileStemFromPath,
   isDialoguePath,
   dialogueMetaPathFor,
+  normalizeFontSize,
+  normalizeTextColor,
   parseCharactersCsv,
   parseDialogueCsv,
   parseDialogueFileMeta,
@@ -92,6 +94,8 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [exportOpen, setExportOpen] = useState(false)
+  /** Line ids with Godot staging subsection expanded (default collapsed). */
+  const [stagingOpenIds, setStagingOpenIds] = useState<Set<string>>(() => new Set())
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
   const [dragId, setDragId] = useState<string | null>(null)
@@ -230,7 +234,10 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
       emotion: '',
       scene,
       condition: '',
-      audio: ''
+      audio: '',
+      focus_node: '',
+      font_size: '',
+      text_color: ''
     }
     persist([...lines, line])
     setDraft('')
@@ -247,6 +254,31 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
 
   const updateLine = (id: string, patch: Partial<DialogueLine>): void => {
     persist(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)))
+  }
+
+  const updateStagingField = (
+    id: string,
+    field: 'focus_node' | 'font_size' | 'text_color',
+    raw: string,
+    commit: boolean
+  ): void => {
+    if (field === 'focus_node') {
+      updateLine(id, { focus_node: raw })
+      return
+    }
+    if (!commit) {
+      updateLine(id, { [field]: raw } as Partial<DialogueLine>)
+      return
+    }
+    if (field === 'font_size') {
+      const n = normalizeFontSize(raw)
+      if (!n.ok) showToast(t('dialogue.invalidFontSize'), 'error')
+      updateLine(id, { font_size: n.value })
+      return
+    }
+    const n = normalizeTextColor(raw)
+    if (!n.ok) showToast(t('dialogue.invalidTextColor'), 'error')
+    updateLine(id, { text_color: n.value })
   }
 
   const deleteLine = (id: string): void => {
@@ -381,7 +413,15 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
 
   const runExport = async (
     mode: 'pipeline' | 'locale',
-    opts: { emotion: boolean; condition: boolean; audio: boolean; lang: string }
+    opts: {
+      emotion: boolean
+      condition: boolean
+      audio: boolean
+      focus_node: boolean
+      font_size: boolean
+      text_color: boolean
+      lang: string
+    }
   ): Promise<void> => {
     const data = exportSelection()
     if (data.length === 0) {
@@ -585,6 +625,100 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
                           onChange={(e) => updateLine(line.id, { audio: e.target.value })}
                         />
                       </label>
+                      <div className="dialogue-staging">
+                        <button
+                          type="button"
+                          className="dialogue-staging-toggle"
+                          onClick={() =>
+                            setStagingOpenIds((prev) => {
+                              const n = new Set(prev)
+                              if (n.has(line.id)) n.delete(line.id)
+                              else n.add(line.id)
+                              return n
+                            })
+                          }
+                        >
+                          {stagingOpenIds.has(line.id)
+                            ? t('dialogue.stagingCollapse')
+                            : t('dialogue.staging')}
+                        </button>
+                        {stagingOpenIds.has(line.id) ? (
+                          <div className="dialogue-staging-fields">
+                            <label>
+                              {t('dialogue.focusNode')}
+                              <input
+                                value={line.focus_node ?? ''}
+                                placeholder={t('dialogue.focusNodePlaceholder')}
+                                onChange={(e) =>
+                                  updateStagingField(line.id, 'focus_node', e.target.value, false)
+                                }
+                                spellCheck={false}
+                              />
+                            </label>
+                            <label>
+                              {t('dialogue.fontSize')}
+                              <input
+                                type="number"
+                                min={0}
+                                inputMode="numeric"
+                                value={line.font_size ?? ''}
+                                placeholder={t('dialogue.fontSizePlaceholder')}
+                                onChange={(e) =>
+                                  updateStagingField(line.id, 'font_size', e.target.value, false)
+                                }
+                                onBlur={(e) =>
+                                  updateStagingField(line.id, 'font_size', e.target.value, true)
+                                }
+                              />
+                            </label>
+                            <label>
+                              {t('dialogue.textColor')}
+                              <div className="dialogue-color-row">
+                                <input
+                                  type="color"
+                                  value={
+                                    /^#[0-9a-fA-F]{6}$/.test(line.text_color ?? '')
+                                      ? line.text_color
+                                      : /^#[0-9a-fA-F]{3}$/.test(line.text_color ?? '')
+                                        ? `#${(line.text_color as string)
+                                            .slice(1)
+                                            .split('')
+                                            .map((c) => c + c)
+                                            .join('')}`
+                                        : '#ffffff'
+                                  }
+                                  onChange={(e) =>
+                                    updateStagingField(line.id, 'text_color', e.target.value, true)
+                                  }
+                                  title={t('dialogue.textColor')}
+                                />
+                                <input
+                                  value={line.text_color ?? ''}
+                                  placeholder={t('dialogue.textColorPlaceholder')}
+                                  onChange={(e) =>
+                                    updateStagingField(line.id, 'text_color', e.target.value, false)
+                                  }
+                                  onBlur={(e) =>
+                                    updateStagingField(line.id, 'text_color', e.target.value, true)
+                                  }
+                                  spellCheck={false}
+                                />
+                                {(line.text_color ?? '') ? (
+                                  <button
+                                    type="button"
+                                    className="dialogue-staging-clear"
+                                    onClick={() =>
+                                      updateStagingField(line.id, 'text_color', '', true)
+                                    }
+                                  >
+                                    {t('dialogue.clearColor')}
+                                  </button>
+                                ) : null}
+                              </div>
+                            </label>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -749,12 +883,13 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
                   }}
                 />
               </label>
-              <label>
+              <label title={t('dialogue.modelNodeHint')}>
                 {t('dialogue.modelNode')}
                 <input
                   value={newChar.model_node}
                   required
                   placeholder={t('dialogue.modelNodePlaceholder')}
+                  title={t('dialogue.modelNodeHint')}
                   onChange={(e) => setNewChar((s) => ({ ...s, model_node: e.target.value }))}
                   spellCheck={false}
                 />
@@ -827,14 +962,35 @@ function ExportDialog({
   onClose: () => void
   onExport: (
     mode: 'pipeline' | 'locale',
-    opts: { emotion: boolean; condition: boolean; audio: boolean; lang: string }
+    opts: {
+      emotion: boolean
+      condition: boolean
+      audio: boolean
+      focus_node: boolean
+      font_size: boolean
+      text_color: boolean
+      lang: string
+    }
   ) => void
 }) {
   const { t } = useTranslation()
   const [emotion, setEmotion] = useState(true)
   const [condition, setCondition] = useState(true)
   const [audio, setAudio] = useState(true)
+  const [focusNode, setFocusNode] = useState(true)
+  const [fontSize, setFontSize] = useState(true)
+  const [textColor, setTextColor] = useState(true)
   const [lang, setLang] = useState(langDefault)
+
+  const opts = {
+    emotion,
+    condition,
+    audio,
+    focus_node: focusNode,
+    font_size: fontSize,
+    text_color: textColor,
+    lang
+  }
 
   return (
     <div className="app-dialog-backdrop" role="presentation">
@@ -859,6 +1015,30 @@ function ExportDialog({
             audio
           </label>
           <label>
+            <input
+              type="checkbox"
+              checked={focusNode}
+              onChange={(e) => setFocusNode(e.target.checked)}
+            />
+            focus_node
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={fontSize}
+              onChange={(e) => setFontSize(e.target.checked)}
+            />
+            font_size
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={textColor}
+              onChange={(e) => setTextColor(e.target.checked)}
+            />
+            text_color
+          </label>
+          <label>
             {t('dialogue.localeLang')}
             <input value={lang} onChange={(e) => setLang(e.target.value.trim() || 'zh')} />
           </label>
@@ -871,14 +1051,14 @@ function ExportDialog({
             <button
               type="button"
               className="app-dialog-btn"
-              onClick={() => onExport('locale', { emotion, condition, audio, lang })}
+              onClick={() => onExport('locale', opts)}
             >
               {t('dialogue.exportLocale')}
             </button>
             <button
               type="button"
               className="app-dialog-btn primary"
-              onClick={() => onExport('pipeline', { emotion, condition, audio, lang })}
+              onClick={() => onExport('pipeline', opts)}
             >
               {t('dialogue.exportPipeline')}
             </button>

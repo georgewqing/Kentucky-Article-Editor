@@ -2019,6 +2019,82 @@ input[type='color'] {
   font-size: 12px;
 }
 
+.dialogue-staging {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.dialogue-staging-toggle {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.dialogue-staging-toggle:hover {
+  color: var(--accent);
+}
+
+.dialogue-staging-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+
+.dialogue-staging-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.dialogue-staging-fields > label:first-child {
+  grid-column: 1 / -1;
+}
+
+.dialogue-staging-fields input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.dialogue-staging-fields .dialogue-color-row {
+  align-items: center;
+}
+
+.dialogue-staging-fields .dialogue-color-row > input:not([type='color']) {
+  flex: 1;
+  min-width: 0;
+}
+
+.dialogue-staging-clear {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  padding: 2px 6px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.dialogue-staging-clear:hover {
+  color: var(--accent);
+}
+
 .dialogue-composer {
   flex-shrink: 0;
   border-top: 1px solid var(--border);

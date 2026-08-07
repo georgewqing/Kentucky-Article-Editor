@@ -9,6 +9,12 @@ export interface DialogueLine {
   scene: string
   condition: string
   audio: string
+  /** Camera focus node name; empty → executor falls back to character model_node. */
+  focus_node: string
+  /** Pixel font size as decimal string; empty/`0` → Godot UI default (disk always ''). */
+  font_size: string
+  /** Body color `#RGB` / `#RRGGBB` / `#RRGGBBAA`; empty → Godot default. */
+  text_color: string
 }
 
 export interface Character {
@@ -27,7 +33,29 @@ export interface DialogueFileMeta {
 }
 
 export const DIALOGUE_HEADER =
-  'id,speaker,text,note,emotion,scene,condition,audio' as const
+  'id,speaker,text,note,emotion,scene,condition,audio,focus_node,font_size,text_color' as const
+
+/** Valid `text_color`: empty, or #RGB / #RRGGBB / #RRGGBBAA (case-insensitive). */
+const TEXT_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
+
+/**
+ * Empty and `0` both mean default; disk writes empty string.
+ * Positive integer strings kept; other non-empty values are invalid → ''.
+ */
+export function normalizeFontSize(value: string): { value: string; ok: boolean } {
+  const raw = value.trim()
+  if (!raw || raw === '0') return { value: '', ok: true }
+  if (/^[1-9]\d*$/.test(raw)) return { value: raw, ok: true }
+  return { value: '', ok: false }
+}
+
+/** Empty or #RGB / #RRGGBB / #RRGGBBAA. Invalid → ''. */
+export function normalizeTextColor(value: string): { value: string; ok: boolean } {
+  const raw = value.trim()
+  if (!raw) return { value: '', ok: true }
+  if (TEXT_COLOR_RE.test(raw)) return { value: raw, ok: true }
+  return { value: '', ok: false }
+}
 
 export const CHARACTERS_HEADER = 'id,name,color,note,model_node' as const
 
@@ -194,7 +222,10 @@ export function parseDialogueCsv(text: string): DialogueLine[] {
     emotion: colIndex(header, 'emotion'),
     scene: colIndex(header, 'scene'),
     condition: colIndex(header, 'condition'),
-    audio: colIndex(header, 'audio')
+    audio: colIndex(header, 'audio'),
+    focus_node: colIndex(header, 'focus_node'),
+    font_size: colIndex(header, 'font_size'),
+    text_color: colIndex(header, 'text_color')
   }
   // Also accept key as id alias
   if (idx.id < 0) idx.id = colIndex(header, 'key')
@@ -214,7 +245,10 @@ export function parseDialogueCsv(text: string): DialogueLine[] {
       emotion: get(idx.emotion),
       scene: get(idx.scene),
       condition: get(idx.condition),
-      audio: get(idx.audio)
+      audio: get(idx.audio),
+      focus_node: get(idx.focus_node).trim(),
+      font_size: normalizeFontSize(get(idx.font_size)).value,
+      text_color: normalizeTextColor(get(idx.text_color)).value
     })
   }
   return lines
@@ -222,7 +256,19 @@ export function parseDialogueCsv(text: string): DialogueLine[] {
 
 export function serializeDialogueCsv(lines: DialogueLine[]): string {
   const rows: string[][] = [
-    ['id', 'speaker', 'text', 'note', 'emotion', 'scene', 'condition', 'audio']
+    [
+      'id',
+      'speaker',
+      'text',
+      'note',
+      'emotion',
+      'scene',
+      'condition',
+      'audio',
+      'focus_node',
+      'font_size',
+      'text_color'
+    ]
   ]
   for (const line of lines) {
     rows.push([
@@ -233,7 +279,10 @@ export function serializeDialogueCsv(lines: DialogueLine[]): string {
       line.emotion,
       line.scene,
       line.condition,
-      line.audio
+      line.audio,
+      line.focus_node ?? '',
+      normalizeFontSize(line.font_size ?? '').value,
+      normalizeTextColor(line.text_color ?? '').value
     ])
   }
   return serializeCsv(rows)
@@ -312,18 +361,31 @@ export function allocateDialogueId(
 
 export function exportPipelineCsv(
   lines: DialogueLine[],
-  cols: { emotion: boolean; condition: boolean; audio: boolean }
+  cols: {
+    emotion: boolean
+    condition: boolean
+    audio: boolean
+    focus_node?: boolean
+    font_size?: boolean
+    text_color?: boolean
+  }
 ): string {
   const header = ['id', 'speaker', 'text', 'note', 'scene']
   if (cols.emotion) header.push('emotion')
   if (cols.condition) header.push('condition')
   if (cols.audio) header.push('audio')
+  if (cols.focus_node) header.push('focus_node')
+  if (cols.font_size) header.push('font_size')
+  if (cols.text_color) header.push('text_color')
   const rows: string[][] = [header]
   for (const line of lines) {
     const row = [line.id, line.speaker, line.text, line.note, line.scene]
     if (cols.emotion) row.push(line.emotion)
     if (cols.condition) row.push(line.condition)
     if (cols.audio) row.push(line.audio)
+    if (cols.focus_node) row.push(line.focus_node ?? '')
+    if (cols.font_size) row.push(normalizeFontSize(line.font_size ?? '').value)
+    if (cols.text_color) row.push(normalizeTextColor(line.text_color ?? '').value)
     rows.push(row)
   }
   return serializeCsv(rows)

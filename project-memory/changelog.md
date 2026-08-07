@@ -185,6 +185,14 @@
 - 删除 `.dialogue.csv` 时尝试删除对应 meta
 - 协议全文：`extras/godot-kentucky-dialogue/README.md`（含 §0 协议速览）
 
+## 22. Godot 协议 v1.1 — 演出声明列
+
+- `*.dialogue.csv` 表头升为 11 列：追加 `focus_node,font_size,text_color`；旧 8 列可读，写回始终 11 列
+- `font_size` 空与 `0` = 默认，磁盘统一空串；`text_color` 合法 `#RGB` / `#RRGGBB` / `#RRGGBBAA`
+- 对话编辑器详情内可折叠「Godot 演出」声明区（风格对齐现有 details）；复制为新台词保留演出字段
+- 管线导出可选带三列；locale 仍仅 id+text
+- extras / product-decisions / architecture 对齐声明器·执行器与角色 5 列（含 `model_node`）
+
 ## 其它小修
 
 - 选项卡悬停用 `cursor: pointer`

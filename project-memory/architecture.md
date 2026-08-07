@@ -112,10 +112,11 @@ Renderer (React)
 
 ## 台词 CSV
 
-- **台词文件** `*.dialogue.csv`：列 `id,speaker,text,note,emotion,scene,condition,audio`；行序=播放序；`speaker`=角色 id
-- **角色表** 工作区根 `characters.csv`：`id,name,color,note`（路径固定不可配）
+- **台词文件** `*.dialogue.csv`：列 `id,speaker,text,note,emotion,scene,condition,audio,focus_node,font_size,text_color`（写回始终 11 列；旧 8 列可读）；行序=播放序；`speaker`=角色 id
+- **角色表** 工作区根 `characters.csv`：`id,name,color,note,model_node`（路径固定不可配）
 - 解析/序列化：`src/renderer/src/editors/dialogueCsv.ts`
 - 稳定 id：`allocateDialogueId` 在工作区所有 `.dialogue.csv` 内查重顺延
+- Godot 契约：`extras/godot-kentucky-dialogue/README.md`（协议 v1.1）
 
 ## `.kmind` 格式（v2）
 

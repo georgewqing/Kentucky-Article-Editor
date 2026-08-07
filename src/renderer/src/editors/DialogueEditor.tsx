@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next'
 import type { FileEntry } from '@/platform'
 import { getPlatform } from '@/platform'
 import { useAppStore } from '@/state/appStore'
+import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 import {
   allocateDialogueId,
   CHARACTER_COLOR_PRESETS,
@@ -112,6 +113,7 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
   const applyingRef = useRef(false)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  useOverlayScroll(listRef)
 
   const fileStem = tab ? fileStemFromPath(tab.path) : 'dialogue'
   const defaultScene = fileMeta?.dialogue_id?.trim() || fileStem
@@ -483,7 +485,7 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
         </span>
       </div>
 
-      <div className="dialogue-list" ref={listRef}>
+      <div className="dialogue-list kentucky-overlay-scroll" ref={listRef}>
         {lines.length === 0 ? (
           <div className="dialogue-empty">{t('dialogue.empty')}</div>
         ) : (

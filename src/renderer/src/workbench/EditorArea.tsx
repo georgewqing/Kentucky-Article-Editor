@@ -5,6 +5,7 @@ import { MonacoTextEditor } from '@/editors/MonacoTextEditor'
 import { MarkdownArticleEditor } from '@/editors/MarkdownArticleEditor'
 import { MindMapEditor } from '@/editors/MindMapEditor'
 import { DialogueEditor } from '@/editors/DialogueEditor'
+import { CharactersEditor } from '@/editors/CharactersEditor'
 
 function EditorPane({ tabId }: { tabId: string | null }) {
   const { t } = useTranslation()
@@ -26,6 +27,8 @@ function EditorPane({ tabId }: { tabId: string | null }) {
         <MindMapEditor tabId={tab.id} />
       ) : tab.kind === 'dialogue' ? (
         <DialogueEditor tabId={tab.id} />
+      ) : tab.kind === 'characters' ? (
+        <CharactersEditor tabId={tab.id} />
       ) : isMarkdown ? (
         <MarkdownArticleEditor tabId={tab.id} />
       ) : (

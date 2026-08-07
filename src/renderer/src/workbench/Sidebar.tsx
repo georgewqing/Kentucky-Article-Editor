@@ -1,6 +1,7 @@
 import { useRef, useState, type MouseEvent as ReactMouseEvent, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/state/appStore'
+import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 import { FileTree } from './FileTree'
 
 type CreateKind = 'file' | 'folder' | 'mindmap' | 'dialogue' | null
@@ -19,6 +20,8 @@ export function Sidebar() {
   const dragging = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const sceneInputRef = useRef<HTMLInputElement>(null)
+  const sidebarBodyRef = useRef<HTMLDivElement>(null)
+  useOverlayScroll(sidebarBodyRef)
 
   const [createKind, setCreateKind] = useState<CreateKind>(null)
   const [name, setName] = useState('')
@@ -190,7 +193,7 @@ export function Sidebar() {
           </form>
         ) : null}
 
-        <div className="sidebar-body">
+        <div className="sidebar-body kentucky-overlay-scroll" ref={sidebarBodyRef}>
           {!workspacePath ? (
             <div className="sidebar-empty">{t('explorer.empty')}</div>
           ) : (

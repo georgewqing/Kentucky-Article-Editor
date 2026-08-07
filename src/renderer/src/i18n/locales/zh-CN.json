@@ -172,6 +172,13 @@
     "condition": "条件",
     "audio": "音频"
   },
+  "characters": {
+    "add": "添加角色",
+    "count": "{{count}} 个角色",
+    "empty": "还没有角色 — 点上方添加",
+    "confirmDelete": "确定删除该角色？台词里的引用将显示为未知角色。",
+    "idLocked": "角色 ID 创建后不可改（台词 speaker 引用此值）"
+  },
   "article": {
     "placeholder": "开始写作…",
     "bold": "粗体",

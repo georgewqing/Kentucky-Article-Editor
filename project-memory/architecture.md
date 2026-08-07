@@ -112,7 +112,8 @@ Renderer (React)
 | `.txt` 等文本 | MonacoTextEditor（软化） |
 | `.kmind` | MindMapEditor（React Flow 白板） |
 | `.dialogue.csv` | DialogueEditor（聊天式台词；普通 `.csv` 仍走 Monaco） |
-| 工作区根 `characters.csv` | Monaco（角色表；由对话编辑器自动读写） |
+| `characters.csv` | CharactersEditor（角色卡片；basename 匹配） |
+| 工作区根 `characters.csv` | 同上（角色表；台词编辑器也会读写） |
 
 ## 台词 CSV
 

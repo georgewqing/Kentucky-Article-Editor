@@ -172,6 +172,13 @@
     "condition": "Condition",
     "audio": "Audio"
   },
+  "characters": {
+    "add": "Add character",
+    "count": "{{count}} characters",
+    "empty": "No characters yet — add one above",
+    "confirmDelete": "Delete this character? Lines that reference it will show as unknown.",
+    "idLocked": "Character id cannot change after create (dialogue speaker references it)"
+  },
   "article": {
     "placeholder": "Start writing…",
     "bold": "Bold",

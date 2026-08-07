@@ -98,7 +98,7 @@ YourGodotProject/
 
 1. 在 Kentucky 打开 `dialogue/`（因 `characters.csv` 固定在工作区根）。
 2. **新建台词**信息卡：只填 Godot 场景 + 对话标识 → 自动生成文件名并写 `*.dialogue.meta.json`（卡上无改名入口）。
-3. **创建角色**须填模型节点名 `model_node`（写入 `characters.csv`）；可「编辑当前角色」。
+3. **创建角色**须填模型节点名 `model_node`（写入 `characters.csv`）；也可直接打开 `characters.csv` 用卡片页管理；台词里可「编辑当前角色」。
 4. 需要改文件名：资源管理器 **右键 → 重命名**（台词会同步改 meta）。
 5. 编辑 `.dialogue.csv`（详情里可展开「Godot 演出」填对焦/字号/颜色），`Ctrl+S` → 磁盘立刻更新（写回 11 列）。
 6. 游戏直接读这些路径；**不要**再维护一份平行导出副本当热编辑主路径。

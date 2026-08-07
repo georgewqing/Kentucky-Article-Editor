@@ -27,7 +27,7 @@
 | 拼写检查 | 正文关闭浏览器拼写检查（无红波浪线） |
 | 帮助链接 | 「了解 KENTUCKY」→ https://github.com/CCFOX12/Kentucky-Article-Editor |
 | 台词对话 | **独立功能**（非 Markdown 混写）；磁盘真相 = `*.dialogue.csv`（11 列）+ 工作区根固定 `characters.csv`；UI 类聊天；`speaker` 存角色 **id**；稳定 id `{scene\|stem}_{charId}_{###}`；改字/演出字段默认不改 id；仅「复制为新台词」生成新 id（并复制演出三字段）；工作区级 id 冲突顺延并 toast；列 `emotion` UI 称「配音」 |
-| 台词角色 | 须先创建再 `@`；可删（警告）；孤儿台词显示「未知角色」；列：`id,name,color,note,model_node`（无 `display_name`；创建时 `model_node` 必填） |
+| 台词角色 | 须先创建再 `@`；可删（警告）；孤儿台词显示「未知角色」；列：`id,name,color,note,model_node`（无 `display_name`；创建时 `model_node` 必填）；打开 `characters.csv` 用 **CharactersEditor 卡片 UI**（非 Monaco） |
 | 台词导出 | 完整管线 CSV（可选 emotion/condition/audio/focus_node/font_size/text_color）+ 本地化 `keys,<lang>`（仅 id+text）；范围=当前文件或勾选句子；不做全工作区一键导出 |
 | Godot 热编辑 | **同路径磁盘联动**（非进程内 API）：打开工程内 `dialogue/` 当工作区；`Ctrl+S` 写盘。协议 **v1.1**：台词含可选演出声明 `focus_node`/`font_size`/`text_color`（写回始终 11 列；旧 8 列可读）。新建台词写 `*.dialogue.meta.json`（`godot_scene`/`dialogue_id`），文件名自动 `场景_对话.dialogue.csv`，改名走资源管理器重命名（同步 meta）。Kentucky=声明器，插件=执行器；契约见 `extras/godot-kentucky-dialogue/README.md`。不做双向实时协议 |
 | 活动栏 | 视窗键=起始页（`home`，不关工作区、隐藏侧栏）；文件夹键=当前项目资源管理器/编辑区；齿轮=设置 |

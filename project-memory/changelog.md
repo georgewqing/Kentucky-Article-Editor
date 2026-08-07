@@ -219,6 +219,23 @@
 - `build/icon.png`：灰白 K，安卓式圆角（透明角）；`package.json` / 主窗口 / 闪屏引用
 - 不保留 SVG 底稿
 
+## 28. 台词列表可滚动
+
+- `.editor-area` / `.editor-pane` 补 `min-height: 0` + `overflow: hidden`，避免 flex 撑开导致无法下滑
+- `.dialogue-list` 使用 `flex: 1 1 0` 作为滚动容器
+
+## 29. 叠加滚动条（主题色）
+
+- `.kentucky-overlay-scroll` + `useOverlayScroll`：滑轨透明、滑块用 accent
+- **仅上下滚动时**显示；停滚 **1 秒**后隐藏；光标移动不触发
+- 已用于台词列表、资源管理器侧栏、角色卡片列表
+
+## 30. 角色表卡片编辑器
+
+- basename `characters.csv` → `CharactersEditor`（不再走 Monaco）
+- 卡片展示：色点 / 显示名 / `@id` / `model_node` / 备注；详情可编辑；id 创建后锁定
+- 添删角色；`Ctrl+S` 写回 5 列 CSV；与台词编辑器共享 `parseCharactersCsv` / `serializeCharactersCsv`
+
 ## 其它小修
 
 - 选项卡悬停用 `cursor: pointer`

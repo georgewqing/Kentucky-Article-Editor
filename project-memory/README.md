@@ -6,8 +6,8 @@
 
 1. **写作** — `.md` TipTap WYSIWYG + Monaco 源码；软化非 md 文本编辑  
 2. **思维导图** — `.kmind` v2 自由白板（React Flow；链接 / 插图 / 参考图 / 批注）  
-3. **台词对话** — `.dialogue.csv`（11 列，含可选演出声明）+ `characters.csv`（含 `model_node`）+ `*.dialogue.meta.json`；稳定 id；Godot 同目录热编辑协议 **v1.1** 见 extras  
-4. **工作台** — 文件夹工作区、活动栏起始页/资源管理器切换、多窗口（DocumentHub）、设置主题、灰白应用图标、中英 i18n  
+3. **台词对话** — `.dialogue.csv`（11 列，含可选演出声明）+ `characters.csv` 角色卡片编辑器（含 `model_node`）+ `*.dialogue.meta.json`；稳定 id；Godot 同目录热编辑协议 **v1.1** 见 extras  
+4. **工作台** — 文件夹工作区、活动栏起始页/资源管理器切换、叠加主题色滚动条、多窗口（DocumentHub）、设置主题、灰白应用图标、中英 i18n  
 
 | 文档 | 内容 |
 |------|------|

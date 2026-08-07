@@ -79,7 +79,7 @@
 - 台词 meta：`foo.dialogue.csv` 对应 `foo.dialogue.meta.json`（非 `.dialogue.csv.meta.json`）；删台词 / 重命名台词文件时同步处理 meta。资源管理器里 meta **视觉上**挂在 csv 下可折叠且默认收起（磁盘仍同级）。
 - 活动栏：视窗键=`home`（起始页、藏侧栏、不关项目）；文件夹键=`explorer`；勿把视窗键做成 `closeWorkspace`。
 - 新建台词文件名由场景 stem + 对话标识自动生成；信息卡不提供改名，改名用资源管理器右键。
-- 应用图标只维护 `build/icon.png`（无 SVG 底稿）。
+- 台词列表滚动：`.editor-area` / `.editor-pane` 须 `min-height: 0` + `overflow: hidden`，否则 `.dialogue-list` 的 `overflow-y: auto` 不生效。
 
 ## Windows 启动
 

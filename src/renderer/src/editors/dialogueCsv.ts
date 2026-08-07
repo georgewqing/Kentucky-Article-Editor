@@ -72,6 +72,12 @@ export function isDialogueMetaPath(path: string): boolean {
   return path.replace(/\\/g, '/').toLowerCase().endsWith(DIALOGUE_META_EXT)
 }
 
+/** Workspace role table: basename must be characters.csv (any folder). */
+export function isCharactersPath(path: string): boolean {
+  const base = path.replace(/\\/g, '/').split('/').pop() || ''
+  return base.toLowerCase() === 'characters.csv'
+}
+
 /** `foo.dialogue.csv` → `foo.dialogue.meta.json` */
 export function dialogueMetaPathFor(dialogueCsvPath: string): string {
   const lower = dialogueCsvPath.toLowerCase()

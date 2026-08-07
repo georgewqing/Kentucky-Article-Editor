@@ -2,11 +2,11 @@ import { create } from 'zustand'
 import type { DocSnapshot, FileEntry, WindowRole } from '@/platform'
 import { getPlatform } from '@/platform'
 import { createEmptyKMind, serializeKMind, type KMindNodeLink } from '@/editors/kmind'
-import { emptyDialogueCsv, isDialoguePath, dialogueMetaPathFor, serializeDialogueFileMeta, dialogueFileNameFromMeta } from '@/editors/dialogueCsv'
+import { emptyDialogueCsv, isDialoguePath, isCharactersPath, dialogueMetaPathFor, serializeDialogueFileMeta, dialogueFileNameFromMeta } from '@/editors/dialogueCsv'
 import i18n from '@/i18n'
 import { askUnsavedConfirm } from '@/state/unsavedDialogStore'
 
-export type EditorKind = 'text' | 'mindmap' | 'dialogue'
+export type EditorKind = 'text' | 'mindmap' | 'dialogue' | 'characters'
 export type ActiveView = 'explorer' | 'settings' | 'home'
 
 export interface LinePickSession {
@@ -127,6 +127,7 @@ const RECENT_KEY = 'kentucky.recentFolders'
 
 function detectKind(path: string): EditorKind {
   if (isDialoguePath(path)) return 'dialogue'
+  if (isCharactersPath(path)) return 'characters'
   return getPlatform().extname(path) === '.kmind' ? 'mindmap' : 'text'
 }
 

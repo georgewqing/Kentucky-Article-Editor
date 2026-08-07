@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { FileEntry } from '@/platform'
 import { getPlatform } from '@/platform'
 import { useAppStore } from '@/state/appStore'
-import { isDialogueMetaPath, isDialoguePath, nestDialogueMetaInTree } from '@/editors/dialogueCsv'
+import { isCharactersPath, isDialogueMetaPath, isDialoguePath, nestDialogueMetaInTree } from '@/editors/dialogueCsv'
 
 type MenuState = {
   x: number
@@ -16,6 +16,7 @@ type MenuState = {
 function FileIcon({ entry }: { entry: FileEntry }) {
   if (entry.isDirectory) return <span className="tree-icon tree-icon-folder">▸</span>
   if (isDialoguePath(entry.path)) return <span className="tree-icon tree-icon-dialogue">D</span>
+  if (isCharactersPath(entry.path)) return <span className="tree-icon tree-icon-chars">C</span>
   if (isDialogueMetaPath(entry.path)) return <span className="tree-icon tree-icon-meta">m</span>
   const ext = getPlatform().extname(entry.path)
   if (ext === '.kmind') return <span className="tree-icon tree-icon-mind">M</span>

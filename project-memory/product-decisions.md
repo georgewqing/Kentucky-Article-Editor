@@ -18,18 +18,19 @@
 | 导图批注 | 每节点一段纯文本「黑下巴」；右键添加后立刻展开可打字；展开态写入 `.kmind`；下巴绝对定位在节点下沿，不计入 height/连线；**节点原描边保留**，下巴另延长同风格描边；中间分割线保留圆角；批注区黑底、随字增高、无滚动条；可选批注超链（文字后小图标）；不做多条/时间戳/MD/全局展开/搜索 |
 | 编辑器 | **`.md`**：TipTap 所见即所得 + Monaco 源码切换；**其它文本**：软化 Monaco |
 | 字数 | **不计空白的字符数**（中英数字标点均按码点计 1，见 `wordCount.ts`）；UI「N 字」 |
-| 资源管理器 | 右键「在文件资源管理器中显示」：文件→定位并选中；**文件夹/工作区→打开该目录本身**（`openPath`，勿用 `showItemInFolder` 以免进上一级） |
+| 资源管理器 | 右键「在文件资源管理器中显示」：文件→定位并选中；**文件夹/工作区→打开该目录本身**（`openPath`，勿用 `showItemInFolder` 以免进上一级）；台词 `*.dialogue.meta.json` 在树里**视觉挂在**对应 csv 下（默认折叠；磁盘同级） |
 | 语言 | 中文 + 英文 UI |
 | Markdown 预览 | **不设分屏预览**；WYSIWYG 即阅读/写作态；源码模式看原始 Markdown |
 | 多窗口 | Blender 式：**新建主窗口**=完整工作台+同工作区+空标签；**新建窗口**=精简单文件窗（无顶栏菜单，含 `.kmind`）；同路径正文经 DocumentHub **实时共享**；欢迎页无活动文件时「新建窗口」灰显；关最后主窗退出；无主窗持有该工作区时关掉其精简窗 |
 | 未保存确认 | 关窗 / 关脏标签 / 关工作区用应用内对话框（保存 / 不保存 / 取消），风格跟工作台一致；不用系统 `confirm` / `beforeunload` |
-| 分发 | Windows：`electron-builder` **portable** 单文件 exe（下载双击即开，用户无需解压）；非真正「几 MB 单体」，自带 Chromium |
+| 分发 | Windows：`electron-builder` **portable** 单文件 exe（下载双击即开，用户无需解压）；非真正「几 MB 单体」，自带 Chromium；应用图标 `build/icon.png`（灰白 K，圆角） |
 | 拼写检查 | 正文关闭浏览器拼写检查（无红波浪线） |
 | 帮助链接 | 「了解 KENTUCKY」→ https://github.com/CCFOX12/Kentucky-Article-Editor |
-| 台词对话 | **独立功能**（非 Markdown 混写）；磁盘真相 = `*.dialogue.csv`（11 列）+ 工作区根固定 `characters.csv`；UI 类聊天；`speaker` 存角色 **id**；稳定 id `{scene\|stem}_{charId}_{###}`；改字/演出字段默认不改 id；仅「复制为新台词」生成新 id（并复制演出三字段）；工作区级 id 冲突顺延并 toast |
+| 台词对话 | **独立功能**（非 Markdown 混写）；磁盘真相 = `*.dialogue.csv`（11 列）+ 工作区根固定 `characters.csv`；UI 类聊天；`speaker` 存角色 **id**；稳定 id `{scene\|stem}_{charId}_{###}`；改字/演出字段默认不改 id；仅「复制为新台词」生成新 id（并复制演出三字段）；工作区级 id 冲突顺延并 toast；列 `emotion` UI 称「配音」 |
 | 台词角色 | 须先创建再 `@`；可删（警告）；孤儿台词显示「未知角色」；列：`id,name,color,note,model_node`（无 `display_name`；创建时 `model_node` 必填） |
 | 台词导出 | 完整管线 CSV（可选 emotion/condition/audio/focus_node/font_size/text_color）+ 本地化 `keys,<lang>`（仅 id+text）；范围=当前文件或勾选句子；不做全工作区一键导出 |
 | Godot 热编辑 | **同路径磁盘联动**（非进程内 API）：打开工程内 `dialogue/` 当工作区；`Ctrl+S` 写盘。协议 **v1.1**：台词含可选演出声明 `focus_node`/`font_size`/`text_color`（写回始终 11 列；旧 8 列可读）。新建台词写 `*.dialogue.meta.json`（`godot_scene`/`dialogue_id`），文件名自动 `场景_对话.dialogue.csv`，改名走资源管理器重命名（同步 meta）。Kentucky=声明器，插件=执行器；契约见 `extras/godot-kentucky-dialogue/README.md`。不做双向实时协议 |
+| 活动栏 | 视窗键=起始页（`home`，不关工作区、隐藏侧栏）；文件夹键=当前项目资源管理器/编辑区；齿轮=设置 |
 | 未来 | 大屏安卓平板（不做手机专用布局）；渲染层可移植 |
 
 ## MVP 页面范围

@@ -10,6 +10,7 @@ export function useKeyboardShortcuts() {
   const openWorkspace = useAppStore((s) => s.openWorkspace)
   const setActiveView = useAppStore((s) => s.setActiveView)
   const activeView = useAppStore((s) => s.activeView)
+  const workspacePath = useAppStore((s) => s.workspacePath)
   const windowRole = useAppStore((s) => s.windowRole)
 
   useEffect(() => {
@@ -21,7 +22,7 @@ export function useKeyboardShortcuts() {
 
       if (key === ',' && windowRole !== 'float') {
         e.preventDefault()
-        setActiveView(activeView === 'settings' ? 'explorer' : 'settings')
+        setActiveView(activeView === 'settings' ? (workspacePath ? 'explorer' : 'home') : 'settings')
         return
       }
 
@@ -62,6 +63,7 @@ export function useKeyboardShortcuts() {
     openWorkspace,
     setActiveView,
     activeView,
+    workspacePath,
     windowRole
   ])
 }

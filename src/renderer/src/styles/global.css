@@ -239,6 +239,7 @@ input[type='color'] {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 4px;
   padding: 10px 0;
   gap: 2px;
   flex-shrink: 0;
@@ -494,6 +495,28 @@ input[type='color'] {
 .tree-icon-dialogue {
   color: var(--accent);
   font-size: 11px;
+}
+
+.tree-icon-meta {
+  color: var(--fg-muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.tree-file-hit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .tree-icon-file {

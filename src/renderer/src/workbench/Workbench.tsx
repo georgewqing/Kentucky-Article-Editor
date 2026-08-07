@@ -58,7 +58,9 @@ export function Workbench() {
   }
 
   const showSettings = activeView === 'settings'
-  const showSidebar = Boolean(workspacePath) && sidebarVisible && !showSettings
+  const showHome = activeView === 'home' || !workspacePath
+  // Welcome / settings: no explorer sidebar. Project stays open in memory.
+  const showSidebar = Boolean(workspacePath) && sidebarVisible && !showSettings && !showHome
 
   return (
     <div className="app-root">
@@ -69,10 +71,10 @@ export function Workbench() {
         <div className="main-pane">
           {showSettings ? (
             <SettingsPage />
-          ) : workspacePath ? (
-            <EditorArea />
-          ) : (
+          ) : showHome ? (
             <WelcomePage />
+          ) : (
+            <EditorArea />
           )}
         </div>
       </div>

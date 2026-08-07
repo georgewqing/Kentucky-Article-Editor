@@ -1,5 +1,7 @@
 /** Dialogue line + characters.csv helpers for Kentucky dialogue editor. */
 
+import type { FileEntry } from '@/platform'
+
 export interface DialogueLine {
   id: string
   speaker: string
@@ -78,6 +80,54 @@ export function dialogueMetaPathFor(dialogueCsvPath: string): string {
     return dialogueCsvPath.slice(0, idx) + DIALOGUE_META_EXT
   }
   return dialogueCsvPath + DIALOGUE_META_EXT
+}
+
+function normPathKey(path: string): string {
+  return path.replace(/\\/g, '/').toLowerCase()
+}
+
+/**
+ * Display-only: nest sibling `*.dialogue.meta.json` under matching `*.dialogue.csv`
+ * (disk layout unchanged). Orphan meta files stay as siblings.
+ */
+export function nestDialogueMetaInTree(entries: FileEntry[]): FileEntry[] {
+  const walk = (list: FileEntry[]): FileEntry[] => {
+    const normalized = list.map((e) =>
+      e.isDirectory && e.children ? { ...e, children: walk(e.children) } : e
+    )
+
+    const metaByKey = new Map<string, FileEntry>()
+    for (const e of normalized) {
+      if (!e.isDirectory && isDialogueMetaPath(e.path)) {
+        metaByKey.set(normPathKey(e.path), e)
+      }
+    }
+
+    const claimed = new Set<string>()
+    for (const e of normalized) {
+      if (e.isDirectory || !isDialoguePath(e.path)) continue
+      const key = normPathKey(dialogueMetaPathFor(e.path))
+      if (metaByKey.has(key)) claimed.add(key)
+    }
+
+    const out: FileEntry[] = []
+    for (const e of normalized) {
+      if (!e.isDirectory && isDialogueMetaPath(e.path) && claimed.has(normPathKey(e.path))) {
+        continue
+      }
+      if (!e.isDirectory && isDialoguePath(e.path)) {
+        const key = normPathKey(dialogueMetaPathFor(e.path))
+        const meta = metaByKey.get(key)
+        if (meta) {
+          out.push({ ...e, children: [meta] })
+          continue
+        }
+      }
+      out.push(e)
+    }
+    return out
+  }
+  return walk(entries)
 }
 
 export function parseDialogueFileMeta(text: string): DialogueFileMeta | null {

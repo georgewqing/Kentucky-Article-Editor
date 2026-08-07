@@ -168,7 +168,7 @@
     "speaker": "Speaker",
     "scene": "Scene",
     "note": "Note",
-    "emotion": "Emotion",
+    "emotion": "Voice",
     "condition": "Condition",
     "audio": "Audio"
   },
@@ -205,6 +205,7 @@
   },
   "activity": {
     "explorer": "Explorer",
+    "home": "Welcome",
     "settings": "Settings"
   },
   "settings": {

@@ -193,6 +193,32 @@
 - 管线导出可选带三列；locale 仍仅 id+text
 - extras / product-decisions / architecture 对齐声明器·执行器与角色 5 列（含 `model_node`）
 
+## 23. 台词 UI 文案
+
+- 详情列 `emotion` 界面称呼改为「配音」/ Voice（磁盘列名仍为 `emotion`，协议不变）
+
+## 24. 资源管理器：meta 挂在台词下
+
+- 显示层 `nestDialogueMetaInTree`：同 stem 的 `*.dialogue.meta.json` 视觉挂在 `*.dialogue.csv` 下，可折叠、**默认收起**
+- 磁盘仍同级；孤立 meta 仍平铺显示
+
+## 25. 启动闪屏主题色修复
+
+- 根因：query 带 `#` 被当成 URL hash；dev 下 `out/renderer/boot-theme.js` 过期
+- 修复：accent 不带 `#` 传递；dev splash 走 Vite URL；主进程 `dom-ready`/`did-finish-load` 注入 `--boot-accent*`
+
+## 26. 活动栏：起始页 ↔ 项目
+
+- `ActiveView` 增加 `home`
+- 视窗四格键（上）：回起始页；**不关工作区**；起始页时**不显示**资源管理器侧栏
+- 文件夹键（下，仅已开项目）：回编辑区并显示资源管理器
+- 打开文件 / `openWorkspace` 仍切回 `explorer`
+
+## 27. 应用图标
+
+- `build/icon.png`：灰白 K，安卓式圆角（透明角）；`package.json` / 主窗口 / 闪屏引用
+- 不保留 SVG 底稿
+
 ## 其它小修
 
 - 选项卡悬停用 `cursor: pointer`

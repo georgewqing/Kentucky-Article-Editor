@@ -55,3 +55,25 @@ export function writeSplashTheme(partial: Partial<SplashThemeSettings>): SplashT
 export function splashBackgroundColor(theme: SplashThemeSettings): string {
   return theme.themeMode === 'light' ? '#f3f3f3' : '#141414'
 }
+
+/** Hex accent → CSS vars for the splash window (injected from main; no reliance on stale boot-theme.js). */
+export function splashThemeCssVars(theme: SplashThemeSettings): Record<string, string> {
+  const accent = normalizeAccent(theme.accent)
+  const dark = theme.themeMode !== 'light'
+  const h = accent.replace('#', '')
+  const full =
+    h.length === 3 ? h[0] + h[0] + h[1] + h[1] + h[2] + h[2] : h.padStart(6, '0').slice(0, 6)
+  const n = parseInt(full, 16)
+  const r = (n >> 16) & 255
+  const g = (n >> 8) & 255
+  const b = n & 255
+  return {
+    bootTheme: dark ? 'dark' : 'light',
+    '--boot-bg': dark ? '#141414' : '#f3f3f3',
+    '--boot-elev': dark ? '#242424' : '#eeeeee',
+    '--boot-fg': dark ? '#f0f0f0' : '#111111',
+    '--boot-accent': accent,
+    '--boot-accent-soft': `rgba(${r}, ${g}, ${b}, 0.22)`,
+    '--boot-bar-track': dark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)'
+  }
+}

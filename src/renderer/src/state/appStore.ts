@@ -7,7 +7,7 @@ import i18n from '@/i18n'
 import { askUnsavedConfirm } from '@/state/unsavedDialogStore'
 
 export type EditorKind = 'text' | 'mindmap' | 'dialogue'
-export type ActiveView = 'explorer' | 'settings'
+export type ActiveView = 'explorer' | 'settings' | 'home'
 
 export interface LinePickSession {
   mindmapTabId: string

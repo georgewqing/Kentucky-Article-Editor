@@ -13,6 +13,7 @@
     var qa = params.get('accent')
     if (qa) {
       qa = qa.trim()
+      if (qa.charAt(0) !== '#') qa = '#' + qa
       if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(qa)) {
         accent = qa
         accentFromQuery = true
@@ -62,7 +63,7 @@
   root.style.setProperty('--boot-accent', accent)
   root.style.setProperty(
     '--boot-accent-soft',
-    'rgba(' + rgb[0] + ', ' + rgb[1] + ', ' + rgb[2] + ', 0.15)'
+    'rgba(' + rgb[0] + ', ' + rgb[1] + ', ' + rgb[2] + ', 0.22)'
   )
   root.style.setProperty(
     '--boot-bar-track',

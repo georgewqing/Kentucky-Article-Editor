@@ -145,7 +145,7 @@ id,speaker,text,note,emotion,scene,condition,audio,focus_node,font_size,text_col
 | `speaker` | 是 | **character `id`**，不是 `name` |
 | `text` | 是 | 台词正文（可含逗号/换行，见 CSV 转义） |
 | `note` | 否 | 作者备注 |
-| `emotion` | 否 | 情绪（配音向，自由文本） |
+| `emotion` | 否 | 配音向自由文本（UI 称「配音」；列名仍为 `emotion`） |
 | `scene` | 否 | 场景标签；新建默认 = meta 的 `dialogue_id`（无 meta 则用文件 stem） |
 | `condition` | 否 | 简单条件/标记，自由文本，**非**表达式引擎 |
 | `audio` | 否 | 音频文件名（仅字段，Kentucky 不播放） |

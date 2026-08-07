@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { FileEntry } from '@/platform'
 import { getPlatform } from '@/platform'
 import { useAppStore } from '@/state/appStore'
-import { isDialoguePath } from '@/editors/dialogueCsv'
+import { isDialogueMetaPath, isDialoguePath, nestDialogueMetaInTree } from '@/editors/dialogueCsv'
 
 type MenuState = {
   x: number
@@ -16,6 +16,7 @@ type MenuState = {
 function FileIcon({ entry }: { entry: FileEntry }) {
   if (entry.isDirectory) return <span className="tree-icon tree-icon-folder">▸</span>
   if (isDialoguePath(entry.path)) return <span className="tree-icon tree-icon-dialogue">D</span>
+  if (isDialogueMetaPath(entry.path)) return <span className="tree-icon tree-icon-meta">m</span>
   const ext = getPlatform().extname(entry.path)
   if (ext === '.kmind') return <span className="tree-icon tree-icon-mind">M</span>
   if (ext === '.md') return <span className="tree-icon tree-icon-md">MD</span>
@@ -31,10 +32,12 @@ function TreeNode({
   depth: number
   onContext: (e: MouseEvent, entry: FileEntry) => void
 }) {
-  const [open, setOpen] = useState(depth < 1)
+  const [open, setOpen] = useState(entry.isDirectory ? depth < 1 : false)
   const activeTabId = useAppStore((s) => s.activeTabId)
   const openFile = useAppStore((s) => s.openFile)
   const active = activeTabId === entry.path
+  const nestedKids = !entry.isDirectory ? entry.children : undefined
+  const hasNested = Boolean(nestedKids && nestedKids.length > 0)
 
   if (entry.isDirectory) {
     return (
@@ -56,6 +59,43 @@ function TreeNode({
             ))}
           </ul>
         )}
+      </li>
+    )
+  }
+
+  if (hasNested) {
+    return (
+      <li>
+        <div
+          className={`tree-item ${active ? 'active' : ''}`}
+          style={{ paddingLeft: 8 + depth * 12 }}
+          onContextMenu={(e) => onContext(e, entry)}
+        >
+          <span
+            className="tree-chevron"
+            onClick={(e) => {
+              e.stopPropagation()
+              setOpen((v) => !v)
+            }}
+          >
+            {open ? '▾' : '▸'}
+          </span>
+          <button
+            type="button"
+            className="tree-file-hit"
+            onClick={() => void openFile(entry.path)}
+          >
+            <FileIcon entry={entry} />
+            <span className="tree-name">{entry.name}</span>
+          </button>
+        </div>
+        {open && nestedKids ? (
+          <ul>
+            {nestedKids.map((child) => (
+              <TreeNode key={child.path} entry={child} depth={depth + 1} onContext={onContext} />
+            ))}
+          </ul>
+        ) : null}
       </li>
     )
   }
@@ -91,6 +131,7 @@ export function FileTree({
   const [renameTarget, setRenameTarget] = useState<FileEntry | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const renameRef = useRef<HTMLInputElement>(null)
+  const displayEntries = useMemo(() => nestDialogueMetaInTree(entries), [entries])
 
   useEffect(() => {
     const close = () => setMenu(null)
@@ -141,7 +182,7 @@ export function FileTree({
       }}
     >
       <ul className="file-tree">
-        {entries.map((e) => (
+        {displayEntries.map((e) => (
           <TreeNode key={e.path} entry={e} depth={0} onContext={openMenu} />
         ))}
       </ul>

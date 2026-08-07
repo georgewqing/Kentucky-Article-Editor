@@ -97,8 +97,12 @@ Renderer (React)
 - Windows/Linux 顶栏 `AppMenuBar`（点击展开）；macOS 用系统菜单
 - 无工作区 → `WelcomePage`（品牌 + 打开文件夹 + 最多 6 张工作区卡片）
 - 有工作区 → `Sidebar` + `EditorArea`
+- `activeView`: `'explorer' | 'settings' | 'home'`
 - `activeView === 'settings'` → `SettingsPage`（可无工作区打开）
+- `activeView === 'home'`（或无工作区）→ `WelcomePage`；已开项目时侧栏隐藏，工作区与标签保留
+- `activeView === 'explorer'` + 有工作区 → `EditorArea` + 可选侧栏
 - 「窗口」菜单：新建窗口 / 新建主窗口 / 最小化 / 关闭
+- 应用图标：`build/icon.png`（主进程 `windowIcon()` + electron-builder）
 
 ## 编辑器路由
 

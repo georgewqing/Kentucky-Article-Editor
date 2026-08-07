@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain, dialog, protocol, net, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, protocol, net, shell, nativeImage } from 'electron'
 import { join } from 'path'
+import { existsSync } from 'fs'
 import { pathToFileURL } from 'url'
 import { readFile, writeFile, readdir, mkdir, rename, rm, stat, copyFile } from 'fs/promises'
 import type { Dirent } from 'fs'
@@ -28,6 +29,7 @@ import {
 import {
   readSplashTheme,
   splashBackgroundColor,
+  splashThemeCssVars,
   writeSplashTheme
 } from './themeSettings'
 
@@ -43,6 +45,23 @@ protocol.registerSchemesAsPrivileged([
     }
   }
 ])
+
+function appIconPath(): string | undefined {
+  const candidates = [
+    join(app.getAppPath(), 'build', 'icon.png'),
+    join(__dirname, '../../build/icon.png'),
+    join(__dirname, '../../resources/icon.png'),
+    join(process.resourcesPath, 'icon.png')
+  ]
+  return candidates.find((p) => existsSync(p))
+}
+
+function windowIcon(): Electron.NativeImage | undefined {
+  const path = appIconPath()
+  if (!path) return undefined
+  const img = nativeImage.createFromPath(path)
+  return img.isEmpty() ? undefined : img
+}
 
 export interface CreateWindowOpts {
   role?: WindowRole
@@ -62,6 +81,7 @@ function loadRenderer(win: BrowserWindow): void {
 
 function createSplashWindow(): BrowserWindow {
   const theme = readSplashTheme()
+  const icon = windowIcon()
   const splash = new BrowserWindow({
     width: 440,
     height: 300,
@@ -76,6 +96,7 @@ function createSplashWindow(): BrowserWindow {
     show: false,
     backgroundColor: splashBackgroundColor(theme),
     autoHideMenuBar: true,
+    ...(icon ? { icon } : {}),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -84,13 +105,47 @@ function createSplashWindow(): BrowserWindow {
     }
   })
 
-  void splash.loadFile(join(__dirname, '../renderer/splash.html'), {
-    query: {
-      accent: theme.accent,
-      mode: theme.themeMode
-    }
-  })
+  // Never put '#' in the query string — it becomes a URL hash and drops accent/mode.
+  const accentHex = theme.accent.replace(/^#/, '')
+
+  const injectTheme = (): void => {
+    if (splash.isDestroyed()) return
+    const vars = splashThemeCssVars(theme)
+    const js = `(() => {
+      const root = document.documentElement;
+      root.dataset.bootTheme = ${JSON.stringify(vars.bootTheme)};
+      root.style.setProperty('--boot-bg', ${JSON.stringify(vars['--boot-bg'])});
+      root.style.setProperty('--boot-elev', ${JSON.stringify(vars['--boot-elev'])});
+      root.style.setProperty('--boot-fg', ${JSON.stringify(vars['--boot-fg'])});
+      root.style.setProperty('--boot-accent', ${JSON.stringify(vars['--boot-accent'])});
+      root.style.setProperty('--boot-accent-soft', ${JSON.stringify(vars['--boot-accent-soft'])});
+      root.style.setProperty('--boot-bar-track', ${JSON.stringify(vars['--boot-bar-track'])});
+    })();`
+    void splash.webContents.executeJavaScript(js, true).catch(() => undefined)
+  }
+
+  splash.webContents.on('dom-ready', injectTheme)
+  splash.webContents.on('did-finish-load', injectTheme)
+
+  const rendererUrl = process.env.ELECTRON_RENDERER_URL
+  if (rendererUrl) {
+    // Dev: serve latest public/splash.html + boot-theme.js from Vite (out/renderer can be stale).
+    const base = rendererUrl.endsWith('/') ? rendererUrl : `${rendererUrl}/`
+    const u = new URL('splash.html', base)
+    u.searchParams.set('accent', accentHex)
+    u.searchParams.set('mode', theme.themeMode)
+    void splash.loadURL(u.href)
+  } else {
+    void splash.loadFile(join(__dirname, '../renderer/splash.html'), {
+      query: {
+        accent: accentHex,
+        mode: theme.themeMode
+      }
+    })
+  }
+
   splash.once('ready-to-show', () => {
+    injectTheme()
     if (!splash.isDestroyed()) splash.show()
   })
   return splash
@@ -102,6 +157,7 @@ function createWindow(opts: CreateWindowOpts = {}): BrowserWindow {
   const role: WindowRole = opts.role ?? 'main'
   const isFloat = role === 'float'
   const splash = opts.showSplash && !isFloat ? createSplashWindow() : null
+  const icon = windowIcon()
 
   const win = new BrowserWindow({
     width: isFloat ? 960 : 1280,
@@ -112,6 +168,7 @@ function createWindow(opts: CreateWindowOpts = {}): BrowserWindow {
     backgroundColor: '#141414',
     show: false,
     autoHideMenuBar: process.platform !== 'darwin',
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

@@ -71,7 +71,7 @@
 - 写作与思维导图 **不自动同步**。
 - 欢迎卡片最多展示 6 个，不做真实文件夹截图。
 - 渲染层只依赖 `getPlatform()`，为以后安卓平板留口。
-- 台词：仅 `*.dialogue.csv` 走 DialogueEditor；普通 `.csv`（含 `characters.csv`）仍 Monaco。`characters.csv` 路径固定工作区根，勿做成可配置。
+- 台词：仅 `*.dialogue.csv` 走 DialogueEditor；basename `characters.csv` 走 CharactersEditor；其它 `.csv` 仍 Monaco。`characters.csv` 路径约定工作区根，勿做成可配置。
 - 台词 id 唯一性要扫工作区全部 `.dialogue.csv`（不只当前文件）；改 text/meta 默认不改 id。
 - Godot 热编辑：打开工程内 `dialogue/` 当工作区即可同文件联动；监视/重载插件在 **Godot 工程自研**，契约见 `extras/godot-kentucky-dialogue/README.md`（**v1.1**）。勿把「导出 CSV」当热编辑主路径。
 - 启动闪屏主题：读 `userData/kentucky-theme.json`；dev 下 splash 走 Vite URL（避免 `out/renderer/boot-theme.js` 过期）；query 里 accent **不带 `#`**；主进程在 `dom-ready`/`did-finish-load` **注入** `--boot-accent*`，不单靠页面脚本。
@@ -79,7 +79,9 @@
 - 台词 meta：`foo.dialogue.csv` 对应 `foo.dialogue.meta.json`（非 `.dialogue.csv.meta.json`）；删台词 / 重命名台词文件时同步处理 meta。资源管理器里 meta **视觉上**挂在 csv 下可折叠且默认收起（磁盘仍同级）。
 - 活动栏：视窗键=`home`（起始页、藏侧栏、不关项目）；文件夹键=`explorer`；勿把视窗键做成 `closeWorkspace`。
 - 新建台词文件名由场景 stem + 对话标识自动生成；信息卡不提供改名，改名用资源管理器右键。
-- 台词列表滚动：`.editor-area` / `.editor-pane` 须 `min-height: 0` + `overflow: hidden`，否则 `.dialogue-list` 的 `overflow-y: auto` 不生效。
+- 应用图标只维护 `build/icon.png`（无 SVG 底稿）。
+- 台词/角色列表滚动：`.editor-area` / `.editor-pane` 须 `min-height: 0` + `overflow: hidden`，否则列表 `overflow-y: auto` 不生效。
+- 叠加滚动条：只在 `scroll` 时加 `is-scrolling`（约 1s 后移除）；**不要**用 `:hover` 显示滑块。
 
 ## Windows 启动
 

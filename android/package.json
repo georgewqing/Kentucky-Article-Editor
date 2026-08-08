@@ -1,0 +1,50 @@
+{
+  "name": "kentucky-android",
+  "version": "0.1.0",
+  "description": "KENTUCKY for Android tablets (Capacitor) — large screen, keyboard-first",
+  "author": "leyang chen",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "cap:sync": "npm run build && npx cap sync android",
+    "cap:open": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.2",
+    "@capacitor/app": "^7.0.2",
+    "@capacitor/core": "^7.4.2",
+    "@capacitor/filesystem": "^7.1.4",
+    "@capacitor/preferences": "^7.0.2",
+    "@monaco-editor/react": "^4.7.0",
+    "@tiptap/extension-link": "^3.29.2",
+    "@tiptap/extension-placeholder": "^3.29.2",
+    "@tiptap/extension-task-item": "^3.29.2",
+    "@tiptap/extension-task-list": "^3.29.2",
+    "@tiptap/extension-underline": "^3.29.2",
+    "@tiptap/pm": "^3.29.2",
+    "@tiptap/react": "^3.29.2",
+    "@tiptap/starter-kit": "^3.29.2",
+    "@xyflow/react": "^12.11.2",
+    "i18next": "^25.3.2",
+    "lucide-react": "^1.28.0",
+    "monaco-editor": "^0.56.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-i18next": "^15.6.0",
+    "tiptap-markdown": "^0.9.0",
+    "zustand": "^5.0.6"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.2",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}

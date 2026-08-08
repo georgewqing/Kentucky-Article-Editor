@@ -1,0 +1,73 @@
+{
+  "name": "kentucky",
+  "version": "0.1.0",
+  "description": "KENTUCKY — local Markdown writing + freeform mind maps",
+  "main": "./out/main/index.js",
+  "author": "leyang chen",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
+    "dist": "npm run build && electron-builder --win dir && node scripts/rename-unpacked.js",
+    "dist:dir": "npm run build && electron-builder --win dir && node scripts/rename-unpacked.js",
+    "dist:portable": "npm run build && electron-builder --win portable"
+  },
+  "build": {
+    "appId": "com.ccfox12.kentucky",
+    "productName": "KENTUCKY",
+    "copyright": "Copyright © leyang chen",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "icon": "build/icon.png",
+    "files": [
+      "out/**/*"
+    ],
+    "asar": true,
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "dir",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    }
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "@tiptap/extension-link": "^3.29.2",
+    "@tiptap/extension-placeholder": "^3.29.2",
+    "@tiptap/extension-task-item": "^3.29.2",
+    "@tiptap/extension-task-list": "^3.29.2",
+    "@tiptap/extension-underline": "^3.29.2",
+    "@tiptap/pm": "^3.29.2",
+    "@tiptap/react": "^3.29.2",
+    "@tiptap/starter-kit": "^3.29.2",
+    "@xyflow/react": "^12.11.2",
+    "i18next": "^25.3.2",
+    "lucide-react": "^1.28.0",
+    "monaco-editor": "^0.56.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-i18next": "^15.6.0",
+    "tiptap-markdown": "^0.9.0",
+    "zustand": "^5.0.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^3.1.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}

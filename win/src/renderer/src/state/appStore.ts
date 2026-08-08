@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import type { DocSnapshot, FileEntry, WindowRole } from '@/platform'
 import { getPlatform } from '@/platform'
-import { createEmptyKMind, serializeKMind, type KMindNodeLink } from '@/editors/kmind'
+import { createEmptyKMind, serializeKMind, assetsDirForKmind, type KMindNodeLink } from '@/editors/kmind'
+import { contentIsDirty } from '../../../common/kmindDirty'
+import { flushActiveMindmapViewport } from '@/editors/mindmapViewportFlush'
 import { emptyDialogueCsv, isDialoguePath, isCharactersPath, dialogueMetaPathFor, serializeDialogueFileMeta, dialogueFileNameFromMeta } from '@/editors/dialogueCsv'
 import i18n from '@/i18n'
 import { askUnsavedConfirm } from '@/state/unsavedDialogStore'
@@ -39,6 +41,8 @@ export interface OpenTab {
   content: string
   originalContent: string
   dirty: boolean
+  /** New/unsaved creation (Cursor-like blue tab mark). Cleared on save. */
+  isNew?: boolean
   /** Last applied DocumentHub revision (echo prevention). */
   docRev: number
 }
@@ -46,6 +50,20 @@ export interface OpenTab {
 export interface RecentWorkspace {
   path: string
   lastOpened: number
+}
+
+/** Parked / open project folder in this window (activity-bar multi-root). */
+export interface WorkspaceSession {
+  id: string
+  path: string
+  fileTree: FileEntry[]
+  tabs: OpenTab[]
+  activeTabId: string | null
+  splitTabId: string | null
+  splitEnabled: boolean
+  lineFlash: LineFlashRequest | null
+  linePickSession: LinePickSession | null
+  linePickResult: LinePickResult | null
 }
 
 export type Toast = { id: number; message: string; type: 'error' | 'info' } | null
@@ -69,6 +87,9 @@ interface AppState {
   lineFlash: LineFlashRequest | null
   linePickSession: LinePickSession | null
   linePickResult: LinePickResult | null
+  /** All open project folders in this window. */
+  openWorkspaces: WorkspaceSession[]
+  activeWorkspaceId: string | null
 
   setWindowRole: (role: WindowRole) => void
   setSidebarVisible: (v: boolean) => void
@@ -83,8 +104,11 @@ interface AppState {
   removeRecent: (path: string) => void
 
   openWorkspace: (path: string) => Promise<void>
+  switchWorkspace: (id: string) => Promise<void>
+  addWorkspaceViaDialog: () => Promise<void>
   refreshTree: () => Promise<void>
   closeWorkspace: () => Promise<void>
+  closeWorkspaceById: (id: string) => Promise<void>
 
   openFile: (path: string, opts?: { line?: number }) => Promise<void>
   applyDocSnapshot: (snap: DocSnapshot) => void
@@ -101,6 +125,14 @@ interface AppState {
   clearLinePickResult: () => void
   setActiveTab: (id: string) => void
   updateTabContent: (id: string, content: string) => void
+  /** Apply AI edit without switching the active tab (no focus flash). */
+  applyAiFileEdit: (opts: {
+    absPath: string
+    content: string
+    before: string
+    writeDisk: boolean
+    isNew?: boolean
+  }) => Promise<void>
   saveTab: (id?: string) => Promise<boolean>
   discardTab: (id: string) => Promise<void>
   closeTab: (id: string, force?: boolean) => Promise<boolean>
@@ -117,6 +149,8 @@ interface AppState {
     parentDir?: string
   ) => Promise<void>
   renameEntry: (targetPath: string, newName: string) => Promise<void>
+  /** Move a file/folder into destDir (same basename). */
+  moveEntry: (sourcePath: string, destDir: string) => Promise<void>
   deleteEntry: (targetPath: string) => Promise<void>
 
   spawnNewWindow: () => Promise<void>
@@ -157,6 +191,90 @@ function pathsEqual(a: string, b: string): boolean {
   return a.replace(/\//g, '\\').toLowerCase() === b.replace(/\//g, '\\').toLowerCase()
 }
 
+function newWorkspaceId(): string {
+  return crypto.randomUUID()
+}
+
+function emptySessionFields(path: string, fileTree: FileEntry[] = []): Omit<WorkspaceSession, 'id'> {
+  return {
+    path,
+    fileTree,
+    tabs: [],
+    activeTabId: null,
+    splitTabId: null,
+    splitEnabled: false,
+    lineFlash: null,
+    linePickSession: null,
+    linePickResult: null
+  }
+}
+
+function snapshotActiveSession(s: {
+  activeWorkspaceId: string | null
+  workspacePath: string | null
+  fileTree: FileEntry[]
+  tabs: OpenTab[]
+  activeTabId: string | null
+  splitTabId: string | null
+  splitEnabled: boolean
+  lineFlash: LineFlashRequest | null
+  linePickSession: LinePickSession | null
+  linePickResult: LinePickResult | null
+  openWorkspaces: WorkspaceSession[]
+}): WorkspaceSession[] {
+  const id = s.activeWorkspaceId
+  const path = s.workspacePath
+  if (!id || !path) return s.openWorkspaces
+  const snap: WorkspaceSession = {
+    id,
+    path,
+    fileTree: s.fileTree,
+    tabs: s.tabs,
+    activeTabId: s.activeTabId,
+    splitTabId: s.splitTabId,
+    splitEnabled: s.splitEnabled,
+    lineFlash: s.lineFlash,
+    linePickSession: s.linePickSession,
+    linePickResult: s.linePickResult
+  }
+  const idx = s.openWorkspaces.findIndex((w) => w.id === id)
+  if (idx < 0) return [...s.openWorkspaces, snap]
+  const next = s.openWorkspaces.slice()
+  next[idx] = snap
+  return next
+}
+
+function mirrorsFromSession(session: WorkspaceSession): {
+  workspacePath: string
+  fileTree: FileEntry[]
+  tabs: OpenTab[]
+  activeTabId: string | null
+  splitTabId: string | null
+  splitEnabled: boolean
+  lineFlash: LineFlashRequest | null
+  linePickSession: LinePickSession | null
+  linePickResult: LinePickResult | null
+  activeWorkspaceId: string
+} {
+  return {
+    workspacePath: session.path,
+    fileTree: session.fileTree,
+    tabs: session.tabs,
+    activeTabId: session.activeTabId,
+    splitTabId: session.splitTabId,
+    splitEnabled: session.splitEnabled,
+    lineFlash: session.lineFlash,
+    linePickSession: session.linePickSession,
+    linePickResult: session.linePickResult,
+    activeWorkspaceId: session.id
+  }
+}
+
+async function notifyWorkspaceChanged(path: string | null): Promise<void> {
+  const { useAiStore } = await import('@/state/aiStore')
+  await useAiStore.getState().onWorkspaceChanged(path)
+}
+
 /** Guard against stacked close-request while dialog is open. */
 let windowCloseBusy = false
 
@@ -176,6 +294,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   lineFlash: null,
   linePickSession: null,
   linePickResult: null,
+  openWorkspaces: [],
+  activeWorkspaceId: null,
 
   setWindowRole: (role) => set({ windowRole: role }),
   setSidebarVisible: (v) => set({ sidebarVisible: v }),
@@ -220,25 +340,57 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   openWorkspace: async (path) => {
     const platform = getPlatform()
+    const existing = get().openWorkspaces.find((w) => pathsEqual(w.path, path))
+    if (existing) {
+      await get().switchWorkspace(existing.id)
+      get().addRecent(path)
+      return
+    }
     try {
       const tree = await platform.readDir(path)
       get().addRecent(path)
+      const id = newWorkspaceId()
+      const session: WorkspaceSession = { id, ...emptySessionFields(path, tree) }
+      const parked = snapshotActiveSession(get())
       set({
-        workspacePath: path,
-        fileTree: tree,
-        tabs: [],
-        activeTabId: null,
-        splitTabId: null,
-        splitEnabled: false,
+        openWorkspaces: [...parked, session],
+        ...mirrorsFromSession(session),
         activeView: 'explorer',
         sidebarVisible: true
       })
       if (get().windowRole === 'main') {
         void platform.reportWorkspace(path)
       }
+      void notifyWorkspaceChanged(path)
     } catch {
       get().showToast(i18n.t('errors.loadTreeFailed'))
     }
+  },
+
+  switchWorkspace: async (id) => {
+    const state = get()
+    if (state.activeWorkspaceId === id) {
+      set({ activeView: 'explorer', sidebarVisible: true })
+      return
+    }
+    const parked = snapshotActiveSession(state)
+    const target = parked.find((w) => w.id === id)
+    if (!target) return
+    set({
+      openWorkspaces: parked,
+      ...mirrorsFromSession(target),
+      activeView: 'explorer',
+      sidebarVisible: true
+    })
+    if (get().windowRole === 'main') {
+      void getPlatform().reportWorkspace(target.path)
+    }
+    void notifyWorkspaceChanged(target.path)
+  },
+
+  addWorkspaceViaDialog: async () => {
+    const path = await getPlatform().openFolder()
+    if (path) await get().openWorkspace(path)
   },
 
   refreshTree: async () => {
@@ -253,6 +405,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   closeWorkspace: async () => {
+    const id = get().activeWorkspaceId
+    if (!id) return
+    await get().closeWorkspaceById(id)
+  },
+
+  closeWorkspaceById: async (id) => {
+    if (get().activeWorkspaceId !== id) {
+      await get().switchWorkspace(id)
+      if (get().activeWorkspaceId !== id) return
+    }
+
     const dirtyTabs = get().tabs.filter((t) => t.dirty)
     if (dirtyTabs.length > 0) {
       const name = dirtyTabs.length === 1 ? dirtyTabs[0].title : undefined
@@ -272,21 +435,45 @@ export const useAppStore = create<AppState>((set, get) => ({
     for (const tab of get().tabs) {
       void getPlatform().docUnsubscribe(tab.path)
     }
+
+    const list = get().openWorkspaces
+    const idx = list.findIndex((w) => w.id === id)
+    const remaining = list.filter((w) => w.id !== id)
+
+    if (remaining.length === 0) {
+      set({
+        openWorkspaces: [],
+        activeWorkspaceId: null,
+        workspacePath: null,
+        fileTree: [],
+        tabs: [],
+        activeTabId: null,
+        splitTabId: null,
+        splitEnabled: false,
+        activeView: 'home',
+        lineFlash: null,
+        linePickSession: null,
+        linePickResult: null
+      })
+      if (get().windowRole === 'main') {
+        void getPlatform().reportWorkspace(null)
+      }
+      void notifyWorkspaceChanged(null)
+      return
+    }
+
+    const nextIdx = idx < 0 ? remaining.length - 1 : Math.min(idx, remaining.length - 1)
+    const next = remaining[nextIdx]
     set({
-      workspacePath: null,
-      fileTree: [],
-      tabs: [],
-      activeTabId: null,
-      splitTabId: null,
-      splitEnabled: false,
+      openWorkspaces: remaining,
+      ...mirrorsFromSession(next),
       activeView: 'explorer',
-      lineFlash: null,
-      linePickSession: null,
-      linePickResult: null
+      sidebarVisible: true
     })
     if (get().windowRole === 'main') {
-      void getPlatform().reportWorkspace(null)
+      void getPlatform().reportWorkspace(next.path)
     }
+    void notifyWorkspaceChanged(next.path)
   },
 
   openFile: async (path, opts) => {
@@ -345,15 +532,16 @@ export const useAppStore = create<AppState>((set, get) => ({
         const idx = s.tabs.findIndex((t) => pathsEqual(t.path, snap.path))
         if (idx < 0) return s
         const tab = s.tabs[idx]
-        if (snap.rev <= tab.docRev && tab.content === snap.content && tab.dirty === snap.dirty) {
+        if (snap.rev <= tab.docRev && tab.content === snap.content && tab.dirty === snap.dirty && !tab.isNew) {
           return s
         }
         const next = [...s.tabs]
         next[idx] = {
           ...tab,
           content: snap.content,
-          originalContent: snap.originalContent,
-          dirty: snap.dirty,
+          originalContent: tab.isNew || tab.dirty ? tab.originalContent : snap.originalContent,
+          dirty: tab.isNew ? true : tab.dirty ? true : snap.dirty,
+          isNew: Boolean(tab.isNew),
           docRev: snap.rev
         }
         return { tabs: next }
@@ -421,22 +609,104 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateTabContent: (id, content) => {
     const tab = get().tabs.find((t) => t.id === id)
+    if (!tab) return
+    const dirty = contentIsDirty(tab.path, content, tab.originalContent)
     set((s) => ({
       tabs: s.tabs.map((t) =>
-        t.id === id ? { ...t, content, dirty: content !== t.originalContent } : t
+        t.id === id
+          ? {
+              ...t,
+              content,
+              dirty,
+              isNew: t.isNew && content !== t.originalContent ? t.isNew : t.isNew
+            }
+          : t
       )
     }))
-    if (!applyingFromHub && tab) {
+    if (!applyingFromHub) {
       void getPlatform()
         .docPatch(tab.path, content)
         .then((snap) => {
           if (!snap) return
+          // Recompute dirty locally — do not trust hub snap.dirty alone (viewport-only
+          // must stay clean; stale main bundles used to overwrite with true).
           set((s) => ({
-            tabs: s.tabs.map((t) =>
-              pathsEqual(t.path, snap.path) ? { ...t, docRev: snap.rev, dirty: snap.dirty } : t
-            )
+            tabs: s.tabs.map((t) => {
+              if (!pathsEqual(t.path, snap.path)) return t
+              return {
+                ...t,
+                docRev: snap.rev,
+                dirty: contentIsDirty(t.path, t.content, t.originalContent),
+                isNew: contentIsDirty(t.path, t.content, t.originalContent) ? t.isNew : false
+              }
+            })
           }))
         })
+    }
+  },
+
+  applyAiFileEdit: async ({ absPath, content, before, writeDisk: _writeDisk, isNew }) => {
+    const platform = getPlatform()
+    const existing = get().tabs.find((t) => pathsEqual(t.path, absPath))
+    const isNewFile = Boolean(isNew ?? !before)
+    // Always Cursor-like marks until the user saves (Ctrl+S), even if already persisted.
+    const dirty = true
+    const originalContent = before
+
+    const patchTab = (t: OpenTab): OpenTab => ({
+      ...t,
+      content,
+      originalContent,
+      dirty,
+      isNew: isNewFile ? true : t.isNew
+    })
+
+    if (existing) {
+      set((s) => ({
+        tabs: s.tabs.map((t) => (t.id === existing.id ? patchTab(t) : t))
+      }))
+    } else {
+      const tab: OpenTab = {
+        id: tabIdFor(absPath),
+        path: absPath,
+        title: platform.basename(absPath),
+        kind: detectKind(absPath),
+        content,
+        originalContent,
+        dirty,
+        isNew: isNewFile,
+        docRev: 0
+      }
+      // Background tab — do not steal focus / flash.
+      set((s) => ({ tabs: [...s.tabs, tab] }))
+    }
+
+    applyingFromHub = true
+    try {
+      try {
+        await platform.docOpen(absPath)
+      } catch {
+        /* buffer-only */
+      }
+      const snap = await platform.docPatch(absPath, content)
+      if (snap) {
+        set((s) => ({
+          tabs: s.tabs.map((t) =>
+            pathsEqual(t.path, absPath)
+              ? {
+                  ...t,
+                  content,
+                  originalContent,
+                  dirty: true,
+                  isNew: isNewFile,
+                  docRev: snap.rev
+                }
+              : t
+          )
+        }))
+      }
+    } finally {
+      applyingFromHub = false
     }
   },
 
@@ -445,13 +715,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!tabId) return false
     const tab = get().tabs.find((t) => t.id === tabId)
     if (!tab) return false
+    // Mind map: fold current pan/zoom into buffer before writing disk.
+    if (tab.kind === 'mindmap') flushActiveMindmapViewport()
+    const latest = get().tabs.find((t) => t.id === tabId)
+    if (!latest) return false
     try {
-      const snap = await getPlatform().docSave(tab.path)
+      // Ensure DocumentHub has the latest renderer buffer (viewport flush is sync in
+      // zustand but its docPatch was historically fire-and-forget).
+      await getPlatform().docPatch(latest.path, latest.content)
+      const snap = await getPlatform().docSave(latest.path)
       if (!snap) {
-        await getPlatform().writeFile(tab.path, tab.content)
+        await getPlatform().writeFile(latest.path, latest.content)
         set((s) => ({
           tabs: s.tabs.map((t) =>
-            t.id === tabId ? { ...t, originalContent: t.content, dirty: false } : t
+            t.id === tabId
+              ? { ...t, originalContent: t.content, dirty: false, isNew: false }
+              : t
           )
         }))
         return true
@@ -466,6 +745,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                   content: snap.content,
                   originalContent: snap.originalContent,
                   dirty: false,
+                  isNew: false,
                   docRev: snap.rev
                 }
               : t
@@ -551,19 +831,30 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (windowCloseBusy) return
     windowCloseBusy = true
     try {
-      const dirtyTabs = get().tabs.filter((t) => t.dirty)
-      if (dirtyTabs.length > 0) {
-        const name = dirtyTabs.length === 1 ? dirtyTabs[0].title : undefined
+      const parked = snapshotActiveSession(get())
+      set({ openWorkspaces: parked })
+      const dirtyAcross = parked.flatMap((w) => w.tabs.filter((t) => t.dirty))
+      if (dirtyAcross.length > 0) {
+        const name = dirtyAcross.length === 1 ? dirtyAcross[0].title : undefined
         const choice = await askUnsavedConfirm({ fileName: name })
         if (choice === 'cancel') return
-        if (choice === 'save') {
-          for (const tab of dirtyTabs) {
-            const ok = await get().saveTab(tab.id)
-            if (!ok) return
+        for (const ws of parked) {
+          const dirtyIds = new Set(
+            (ws.id === get().activeWorkspaceId ? get().tabs : ws.tabs)
+              .filter((t) => t.dirty)
+              .map((t) => t.id)
+          )
+          if (dirtyIds.size === 0) continue
+          if (ws.id !== get().activeWorkspaceId) {
+            await get().switchWorkspace(ws.id)
           }
-        } else {
-          for (const tab of dirtyTabs) {
-            await get().discardTab(tab.id)
+          for (const tabId of Array.from(dirtyIds)) {
+            if (choice === 'save') {
+              const ok = await get().saveTab(tabId)
+              if (!ok) return
+            } else {
+              await get().discardTab(tabId)
+            }
           }
         }
       }
@@ -733,6 +1024,109 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch {
       get().showToast(i18n.t('errors.renameFailed'))
       if (openTab) await get().openFile(targetPath)
+    }
+  },
+
+  moveEntry: async (sourcePath, destDir) => {
+    const platform = getPlatform()
+    const workspacePath = get().workspacePath
+    if (!workspacePath) return
+
+    const destNorm = destDir.replace(/\\/g, '/').replace(/\/+$/, '')
+    const srcNorm = sourcePath.replace(/\\/g, '/').replace(/\/+$/, '')
+    const wsNorm = workspacePath.replace(/\\/g, '/').replace(/\/+$/, '')
+    const srcLower = srcNorm.toLowerCase()
+    const destLower = destNorm.toLowerCase()
+    const wsLower = wsNorm.toLowerCase()
+
+    if (!destLower.startsWith(wsLower)) {
+      get().showToast(i18n.t('errors.moveFailed'))
+      return
+    }
+    if (destLower === srcLower || destLower.startsWith(srcLower + '/')) {
+      get().showToast(i18n.t('errors.moveInvalid'))
+      return
+    }
+
+    const base = platform.basename(sourcePath)
+    const newPath = platform.joinPath(destDir, base)
+    if (pathsEqual(sourcePath, newPath)) return
+    if (pathsEqual(platform.dirname(sourcePath), destDir)) return
+
+    const affectedTabs = get().tabs.filter((t) => {
+      const p = t.path.replace(/\\/g, '/').toLowerCase()
+      return p === srcLower || p.startsWith(srcLower + '/')
+    })
+
+    for (const tab of affectedTabs) {
+      if (tab.dirty) {
+        const choice = await askUnsavedConfirm({ fileName: tab.title })
+        if (choice === 'cancel') return
+        if (choice === 'save') {
+          const ok = await get().saveTab(tab.id)
+          if (!ok) return
+        } else {
+          await get().discardTab(tab.id)
+        }
+      }
+    }
+
+    const reopenPath =
+      affectedTabs.length === 1 && pathsEqual(affectedTabs[0].path, sourcePath)
+        ? newPath
+        : null
+    const wasActive =
+      reopenPath && affectedTabs[0] && get().activeTabId === affectedTabs[0].id
+
+    for (const tab of affectedTabs) {
+      const closed = await get().closeTab(tab.id, true)
+      if (!closed) return
+    }
+
+    try {
+      if (await platform.exists(newPath)) {
+        get().showToast(i18n.t('errors.moveExists'))
+        if (reopenPath) await get().openFile(sourcePath)
+        return
+      }
+      await platform.rename(sourcePath, newPath)
+
+      if (isDialoguePath(sourcePath) && isDialoguePath(newPath)) {
+        const oldMeta = dialogueMetaPathFor(sourcePath)
+        try {
+          if (await platform.exists(oldMeta)) {
+            const newMeta = dialogueMetaPathFor(newPath)
+            if (!(await platform.exists(newMeta))) {
+              await platform.rename(oldMeta, newMeta)
+            } else {
+              await platform.delete(oldMeta)
+            }
+          }
+        } catch {
+          /* meta best-effort */
+        }
+      }
+
+      if (platform.extname(sourcePath).toLowerCase() === '.kmind') {
+        const oldAssets = assetsDirForKmind(sourcePath)
+        const newAssets = assetsDirForKmind(newPath)
+        try {
+          if (await platform.exists(oldAssets) && !(await platform.exists(newAssets))) {
+            await platform.rename(oldAssets, newAssets)
+          }
+        } catch {
+          /* assets best-effort */
+        }
+      }
+
+      await get().refreshTree()
+      if (reopenPath) {
+        await get().openFile(reopenPath)
+        void wasActive
+      }
+    } catch {
+      get().showToast(i18n.t('errors.moveFailed'))
+      if (reopenPath) await get().openFile(sourcePath)
     }
   },
 

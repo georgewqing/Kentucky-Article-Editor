@@ -31,6 +31,7 @@
 - 正文不要开浏览器拼写检查：TipTap `spellcheck: false`，且 `BrowserWindow` `webPreferences.spellcheck: false`。
 - 「了解 KENTUCKY」链接写在 `menu.ts` 与 `menu:runAction` 的 `learnMore` 两处，须保持同一仓库 URL。
 - 多窗口：正文走 DocumentHub；`updateTabContent` 经 `doc:patch`，远端 `doc:apply` 时用 `applyingFromHub` / `docRev` 防回环；导图需监听 `tab.content` 外同步（勿只在 `tabId` 时 load）。
+- `.kmind` 脏标记：平移/缩放只改内存中的 viewport，**不**在 `onMoveEnd` 里 persist；保存前再 flush。脏判定忽略 viewport（`src/common/kmindDirty.ts`）。`doc:patch` 回写后渲染层须**本地重算** dirty，勿盲信 `snap.dirty`（旧主进程包会把平移标脏）。打开时推断的连线手柄只用于显示（`persistHandles`）。
 - 关最后 **主窗** 才 `app.quit()`；精简窗不保活。主窗 `reportWorkspace(null)` 且无其它主窗仍开该工作区 → destroy 对应 float。
 - 精简窗**不要**挂 `beforeunload` 拦关窗；关窗走主进程 `close` → `window:close-request` → 应用内「保存 / 不保存 / 取消」对话框，再 `window:confirmClose`。
 - 启动：主窗 `show: false`，先弹轻量 `splash.html`（与 boot-splash 同款），`ready-to-show` / `did-finish-load` 后再显示主窗并关闪屏；便携 exe 解压阶段仍可能短暂系统转圈（Electron 尚未起来）。
@@ -82,6 +83,19 @@
 - 应用图标只维护 `build/icon.png`（无 SVG 底稿）。
 - 台词/角色列表滚动：`.editor-area` / `.editor-pane` 须 `min-height: 0` + `overflow: hidden`，否则列表 `overflow-y: auto` 不生效。
 - 叠加滚动条：只在 `scroll` 时加 `is-scrolling`（约 1s 后移除）；**不要**用 `:hover` 显示滑块。
+
+## AI / 标签脏标记
+
+- AI 改文件走 `applyAiFileEdit`，**勿**切换 `activeTabId`，否则多文件会来回闪页。
+- DocumentHub `doc:apply` / `applyDocSnapshot` 必须**保留**本地 `dirty` 与 `isNew`，否则黄/蓝圆点会被冲掉。
+- 新建文件即使已落盘，UI 仍标 `isNew` 直至用户 Ctrl+S；AI 编辑一律先 `dirty: true`。
+- 系统提示与工具返回禁止写「请点 Apply」——已无确认栏。
+- DeepSeek `fetch failed` 是网络层（代理/防火墙），不是模型名错误（错模型多为 HTTP 4xx）。
+- AI 导图：勿让模型手填密网格坐标；用 `autoLayout` / `layout_kmind`。乱成网时先砍交叉边再建树，单靠布局救不了完全二分图。
+
+## package.json / F5
+
+- `win/package.json` 必须合法 UTF-8。Latin-1 的 `©` 等会触发 Node `Invalid package config`，electron-vite / F5 起不来。
 
 ## Windows 启动
 

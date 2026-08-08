@@ -50,6 +50,21 @@ export function useKeyboardShortcuts() {
           const path = await getPlatform().openFolder()
           if (path) await openWorkspace(path)
         })()
+        return
+      }
+
+      if (key === 'l' && windowRole !== 'float') {
+        e.preventDefault()
+        if (!workspacePath) return
+        void import('@/state/aiStore').then(({ useAiStore }) => {
+          if (activeView === 'home') {
+            setActiveView('explorer')
+            useAppStore.getState().setSidebarVisible(true)
+            useAiStore.getState().setPanelVisible(true)
+            return
+          }
+          useAiStore.getState().togglePanel()
+        })
       }
     }
 

@@ -25,6 +25,8 @@ const api = {
   openDirectory: (): Promise<string | null> => ipcRenderer.invoke('dialog:openDirectory'),
   openImage: (): Promise<string | null> => ipcRenderer.invoke('dialog:openImage'),
   openImages: (): Promise<string[]> => ipcRenderer.invoke('dialog:openImages'),
+  openContextFiles: (workspacePath?: string | null): Promise<string[]> =>
+    ipcRenderer.invoke('dialog:openContextFiles', workspacePath),
   readDir: (dirPath: string): Promise<FileEntry[]> => ipcRenderer.invoke('fs:readDir', dirPath),
   readFile: (filePath: string): Promise<string> => ipcRenderer.invoke('fs:readFile', filePath),
   writeFile: (filePath: string, content: string): Promise<boolean> =>
@@ -101,6 +103,73 @@ const api = {
     const handler = (_e: Electron.IpcRendererEvent, snap: DocSnapshot): void => cb(snap)
     ipcRenderer.on('doc:apply', handler)
     return () => ipcRenderer.removeListener('doc:apply', handler)
+  },
+
+  // —— AI ——
+  aiGetSettings: (): Promise<Record<string, unknown>> => ipcRenderer.invoke('ai:getSettings'),
+  aiSaveSettings: (partial: Record<string, unknown>): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke('ai:saveSettings', partial),
+  aiSetKey: (key: string): Promise<{ hasApiKey: boolean }> => ipcRenderer.invoke('ai:setKey', key),
+  aiClearKey: (): Promise<{ hasApiKey: boolean }> => ipcRenderer.invoke('ai:clearKey'),
+  aiListProfiles: (): Promise<unknown[]> => ipcRenderer.invoke('ai:listProfiles'),
+  aiUpsertProfile: (partial: Record<string, unknown>): Promise<unknown> =>
+    ipcRenderer.invoke('ai:upsertProfile', partial),
+  aiDeleteProfile: (id: string): Promise<boolean> => ipcRenderer.invoke('ai:deleteProfile', id),
+  aiSetActiveProfile: (
+    id: string
+  ): Promise<{ profile: unknown; settings: Record<string, unknown> }> =>
+    ipcRenderer.invoke('ai:setActiveProfile', id),
+  aiSetProfileKey: (
+    id: string,
+    key: string
+  ): Promise<{ hasKey: boolean; activeHasKey: boolean }> =>
+    ipcRenderer.invoke('ai:setProfileKey', id, key),
+  aiClearProfileKey: (id: string): Promise<{ hasKey: boolean; activeHasKey: boolean }> =>
+    ipcRenderer.invoke('ai:clearProfileKey', id),
+  aiGetActiveProfile: (): Promise<unknown> => ipcRenderer.invoke('ai:getActiveProfile'),
+  aiListSessions: (workspacePath?: string | null): Promise<unknown[]> =>
+    ipcRenderer.invoke('ai:listSessions', workspacePath),
+  aiCreateSession: (workspacePath: string | null): Promise<unknown> =>
+    ipcRenderer.invoke('ai:createSession', workspacePath),
+  aiGetWorkspacePrefs: (
+    workspacePath: string | null
+  ): Promise<{ panelVisible: boolean }> =>
+    ipcRenderer.invoke('ai:getWorkspacePrefs', workspacePath),
+  aiSetWorkspacePrefs: (
+    workspacePath: string,
+    partial: { panelVisible?: boolean }
+  ): Promise<{ panelVisible: boolean }> =>
+    ipcRenderer.invoke('ai:setWorkspacePrefs', workspacePath, partial),
+  aiLoadSession: (id: string): Promise<unknown> => ipcRenderer.invoke('ai:loadSession', id),
+  aiDeleteSession: (id: string): Promise<boolean> => ipcRenderer.invoke('ai:deleteSession', id),
+  aiContextUsage: (sessionId: string): Promise<{ used: number; limit: number }> =>
+    ipcRenderer.invoke('ai:contextUsage', sessionId),
+  aiSend: (payload: {
+    sessionId: string
+    text: string
+    mode?: string
+    editor: {
+      workspacePath: string | null
+      activeFilePath: string | null
+      selection: string | null
+      mentionedPaths: string[]
+    }
+  }): Promise<{ ok: boolean }> => ipcRenderer.invoke('ai:send', payload),
+  aiAbort: (): Promise<boolean> => ipcRenderer.invoke('ai:abort'),
+  aiApplyProposal: (payload: {
+    sessionId: string
+    proposalId: string
+  }): Promise<unknown> => ipcRenderer.invoke('ai:applyProposal', payload),
+  aiRejectProposal: (payload: {
+    sessionId: string
+    proposalId: string
+  }): Promise<unknown> => ipcRenderer.invoke('ai:rejectProposal', payload),
+  aiApplyAllProposals: (sessionId: string): Promise<unknown[]> =>
+    ipcRenderer.invoke('ai:applyAllProposals', sessionId),
+  onAiEvent: (channel: string, cb: (payload: unknown) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, payload: unknown): void => cb(payload)
+    ipcRenderer.on(channel, handler)
+    return () => ipcRenderer.removeListener(channel, handler)
   }
 }
 

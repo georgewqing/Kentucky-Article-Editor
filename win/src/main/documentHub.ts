@@ -1,5 +1,6 @@
 import { BrowserWindow, webContents } from 'electron'
 import { readFile, writeFile } from 'fs/promises'
+import { contentIsDirty } from '../common/kmindDirty'
 
 export interface DocSnapshot {
   path: string
@@ -132,7 +133,7 @@ export function docPatch(
     }
   }
   entry.content = content
-  entry.dirty = content !== entry.originalContent
+  entry.dirty = contentIsDirty(entry.path, content, entry.originalContent)
   entry.rev += 1
   entry.subscribers.add(fromWcId)
   broadcast(entry, fromWcId)

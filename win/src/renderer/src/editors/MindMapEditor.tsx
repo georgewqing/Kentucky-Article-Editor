@@ -51,6 +51,7 @@ import {
   type KMindNodeLink,
   type KMindNodeImage
 } from './kmind'
+import { setMindmapViewportFlush } from './mindmapViewportFlush'
 import { useSettingsStore } from '@/state/settingsStore'
 import { getPlatform } from '@/platform'
 import type { FileEntry } from '@/platform'
@@ -231,7 +232,8 @@ function buildConnectEdge(
       source: fromNodeId,
       sourceHandle: fromHandleId ?? undefined,
       target: toNode.id,
-      targetHandle: nearHandle
+      targetHandle: nearHandle,
+      data: { persistHandles: true }
     }
   }
   return {
@@ -239,7 +241,8 @@ function buildConnectEdge(
     source: toNode.id,
     sourceHandle: nearHandle,
     target: fromNodeId,
-    targetHandle: fromHandleId ?? undefined
+    targetHandle: fromHandleId ?? undefined,
+    data: { persistHandles: true }
   }
 }
 
@@ -270,9 +273,11 @@ function docToFlow(doc: KMindDocument): { nodes: RFNode[]; edges: Edge[] } {
   const byId = new Map(nodes.map((n) => [n.id, n]))
 
   const edges: Edge[] = doc.edges.map((e) => {
+    const hadExplicitHandles = Boolean(e.sourceHandle || e.targetHandle)
     let sourceHandle = e.sourceHandle
     let targetHandle = e.targetHandle
     // Older files omitted handles → RF defaults every edge to the same side (merged smoothstep trunk).
+    // Infer for display only; do not write inferred handles back unless the file already had them.
     if (!sourceHandle || !targetHandle) {
       const s = byId.get(e.source)
       const t = byId.get(e.target)
@@ -310,7 +315,8 @@ function docToFlow(doc: KMindDocument): { nodes: RFNode[]; edges: Edge[] } {
       source: e.source,
       target: e.target,
       sourceHandle,
-      targetHandle
+      targetHandle,
+      data: { persistHandles: hadExplicitHandles }
     }
   })
 
@@ -343,13 +349,22 @@ function flowToDoc(
           }
         : {})
     })),
-    edges: edges.map((e) => ({
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      ...(e.sourceHandle ? { sourceHandle: String(e.sourceHandle) } : {}),
-      ...(e.targetHandle ? { targetHandle: String(e.targetHandle) } : {})
-    })),
+    edges: edges.map((e) => {
+      const persistHandles = Boolean(
+        (e.data as { persistHandles?: boolean } | undefined)?.persistHandles
+      )
+      return {
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        ...(persistHandles && e.sourceHandle
+          ? { sourceHandle: String(e.sourceHandle) }
+          : {}),
+        ...(persistHandles && e.targetHandle
+          ? { targetHandle: String(e.targetHandle) }
+          : {})
+      }
+    }),
     viewport
   }
 }
@@ -815,18 +830,37 @@ function MindMapCanvas({ tabId }: { tabId: string }) {
 
   const onConnect = useCallback(
     (connection: Connection) => {
-      setEdges((eds) => addEdge({ ...connection, id: newEdgeId() }, eds))
+      setEdges((eds) =>
+        addEdge({ ...connection, id: newEdgeId(), data: { persistHandles: true } }, eds)
+      )
     },
     [setEdges]
   )
 
-  const onMoveEnd: OnMoveEnd = useCallback(
-    (_e, viewport) => {
-      viewportRef.current = viewport
-      persist(nodes, edges)
-    },
-    [nodes, edges, persist]
-  )
+  const onMoveEnd: OnMoveEnd = useCallback((_e, viewport) => {
+    // Pan/zoom is view chrome only — keep it in memory. Persisting here used to
+    // mark the tab dirty via DocumentHub. Viewport is flushed on real edits + save.
+    viewportRef.current = viewport
+  }, [])
+
+  const flushViewportToStore = useCallback(() => {
+    if (skipSerializeRef.current) return
+    const doc = flowToDoc(nodes, edges, viewportRef.current)
+    const json = serializeKMind(doc)
+    if (json === lastJsonRef.current) return
+    lastJsonRef.current = json
+    updateTabContent(tabId, json)
+  }, [tabId, nodes, edges, updateTabContent])
+
+  useEffect(() => {
+    setMindmapViewportFlush(flushViewportToStore)
+    return () => setMindmapViewportFlush(null)
+  }, [flushViewportToStore])
+
+  const flushViewportAndSave = useCallback(async () => {
+    flushViewportToStore()
+    await saveTab(tabId)
+  }, [flushViewportToStore, saveTab, tabId])
 
   const addNodeAt = useCallback(
     (x: number, y: number): string => {
@@ -1382,7 +1416,7 @@ function MindMapCanvas({ tabId }: { tabId: string }) {
         <button type="button" onClick={() => fitView({ padding: 0.2 })}>
           {t('mindmap.fitView')}
         </button>
-        <button type="button" onClick={() => void saveTab(tabId)}>
+        <button type="button" onClick={() => void flushViewportAndSave()}>
           {t('editor.save')}
         </button>
       </div>

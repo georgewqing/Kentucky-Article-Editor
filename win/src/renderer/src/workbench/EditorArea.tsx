@@ -69,7 +69,15 @@ export function EditorArea() {
             }}
           >
             <span className="tab-title">
-              {tab.dirty ? <span className="tab-dirty">● </span> : null}
+              {tab.isNew ? (
+                <span className="tab-new" title={t('editor.tabNew')}>
+                  ●{' '}
+                </span>
+              ) : tab.dirty ? (
+                <span className="tab-dirty" title={t('editor.tabDirty')}>
+                  ●{' '}
+                </span>
+              ) : null}
               {tab.title}
             </span>
             <button

@@ -30,14 +30,46 @@
 | 台词角色 | 须先创建再 `@`；可删（警告）；孤儿台词显示「未知角色」；列：`id,name,color,note,model_node`（无 `display_name`；创建时 `model_node` 必填）；打开 `characters.csv` 用 **CharactersEditor 卡片 UI**（非 Monaco） |
 | 台词导出 | 完整管线 CSV（可选 emotion/condition/audio/focus_node/font_size/text_color）+ 本地化 `keys,<lang>`（仅 id+text）；范围=当前文件或勾选句子；不做全工作区一键导出 |
 | Godot 热编辑 | **同路径磁盘联动**（非进程内 API）：打开工程内 `dialogue/` 当工作区；`Ctrl+S` 写盘。协议 **v1.1**：台词含可选演出声明 `focus_node`/`font_size`/`text_color`（写回始终 11 列；旧 8 列可读）。新建台词写 `*.dialogue.meta.json`（`godot_scene`/`dialogue_id`），文件名自动 `场景_对话.dialogue.csv`，改名走资源管理器重命名（同步 meta）。Kentucky=声明器；执行器参考实现见 [ai_river_godot](https://github.com/CCFOX12/ai_river_godot)（Kentucky 本仓不附带插件）。契约见 `extras/godot-kentucky-dialogue/README.md`。不做双向实时协议 |
-| 活动栏 | 视窗键=起始页（`home`，不关工作区、隐藏侧栏）；文件夹键=当前项目资源管理器/编辑区；齿轮=设置 |
+| 活动栏 | 视窗键=起始页（`home`，不关工作区、隐藏侧栏）；**工程徽章列表**（可多开）+ 末尾「+」开文件夹；**AI 对话键**=右侧 Agent 栏（`Ctrl+L`）；齿轮=设置 |
+| 多工程 | 同窗口多文件夹；切换保留各工程标签/树；聊天与面板记忆按路径隔离 |
 | 工作区布局 | Cursor 工作区容器含两个软件根：`win/`（本 Electron 应用）与 `android/`（独立 Capacitor）；互不共享源码树 |
 | 开发优先级 | **先完成 Win 正式版**；安卓仅保留雏形。Win 功能稳定后再按需移植到 `android/`，中途不并行大改安卓 |
 | 安卓 | 独立软件根 `../android/`；大屏平板 + 优先外接键盘；不做手机布局；不移植 Electron |
+| **版本** | **v0.2.0**：内置文学向 AI 代理人（OpenAI 兼容 API） |
+
+## AI 代理人（v0.2.0）
+
+| 项 | 决定 |
+|----|------|
+| 协议 | OpenAI 兼容；**多配置档**（label/baseUrl/model/contextWindow + 每档加密 Key），输入栏切换 |
+| UI | 编辑区右侧面板；**Cursor 风格 composer**（模式 / 配置档 / 参考文件芯片 / 上传 / 发送）；主题色变量 |
+| 模式 | **Ask** 无工具；**Plan** 只读+计划；**Outline** 结构/导图；**Agent** 全工具+G3 可审 |
+| 写文件 | **G3 按类型可审**：已有内容的正文 md/txt、导图内容编辑、多文件同轮 → Accept/Reject；**新建文件 / 往空文件写入**、角色单条 upsert、台词 ≤5 行、纯 `layout_kmind` → 自动。Accept 后按设置写盘或标黄（**R1**：Accept 前不改打开中的 tab） |
+| 脏/新建色 | 改过未保存 = **黄 ●**；新建 = **蓝 ●**（标签栏 + 资源管理器同步）；保存后清除 |
+| 焦点 | AI 改多文件时**不切换**当前标签（不闪页）；后台挂标签并刷新树 |
+| 数据 | 软件本体 `data/`（打包后与 exe 同目录；开发态 `win/dev-data/data/`）；**不**进项目、**不**用 `%APPDATA%` |
+| 密钥 | 每配置档 `safeStorage` 加密 blob：`data/ai-keys/<id>.bin`（旧单 Key 会迁入默认档） |
+| 会话 | 多会话 JSON：`data/ai-chats/`；**按工作区路径严格隔离**（列表/打开均过滤，互不互通） |
+| 面板开关 | **绑定工作区**：启动默认关闭；`data/ai-workspace-prefs.json` 记住各工作区是否打开；无工作区时不可开 AI |
+| 上下文 | **L5**：当前文件/选区/`@` + 自动角色表摘要；上下文占用进度条；接近满时禁止静默丢弃历史 |
+| 工具 | 只读 list/read；**L1** continuity_check；**L2** 角色驱动；**L3** scene↔kmind；**L4** 台词追加/演出/cast_check；`.kmind` + dagre；无 Shell/Git/联网 |
+| 导图可读性 | AI 须建树/分层 DAG（非角色↔场景全连接网）；缺省 Sugiyama/LR；乱图可 `layout_kmind` |
+| 加载态 | 思考中 / 调工具时必须有可见指示，禁止长时间空白像卡死 |
+| 文案 | pending 提案引导用户在卡片上接受/拒绝；自动类标明已写入 |
+| 费用 | **不做**账单累计 |
+| 失败 | 明确报错 + 手动「重试」 |
+| 范围 | 仅 `win/`；安卓冻结至 Win 正式版后再移植 |
+
+## 资源管理器（相关）
+
+| 项 | 决定 |
+|----|------|
+| 显示名 | 默认隐藏已知后缀；类型靠彩色字母图标（C/M/D/MD/T…） |
+| 新建/重命名 | 只编辑主名，后缀芯片固定或自动保留，降低误删后缀风险 |
 
 ## MVP 页面范围
 
-欢迎页 + 资源管理器/多标签编辑 + 可拖拽分栏 + 思维导图编辑 + 台词对话编辑。
+欢迎页 + 资源管理器/多标签编辑 + 可拖拽分栏 + 思维导图编辑 + 台词对话编辑 + **右侧 AI 代理人栏**。
 
 ## 主题与设置
 
@@ -66,3 +98,4 @@
 - 多窗口：精简窗内换文件、跨窗同步光标/选区、主窗标签列表镜像
 - 台词：分支/条件可视化、表达式编辑器、Godot **双向实时协议**、多语言对照编辑、音频播放/资源库、Markdown 内嵌台词、`characters.csv` 路径可配置、全工作区台词一键导出、Kentucky 内预览对焦/校验节点、在本仓附带/打包 Godot 插件  
   （执行器参考：[ai_river_godot](https://github.com/CCFOX12/ai_river_godot)；同目录磁盘联动 ≠ Kentucky 内嵌引擎；协议 v1.1 见 extras）
+- AI：命令面板式入口、扩展市场、Shell/Git 工具、网页检索、费用账单、云同步 Key、正文↔导图自动双向同步、Composer 整页多文件编辑器、Cursor Tab 补全

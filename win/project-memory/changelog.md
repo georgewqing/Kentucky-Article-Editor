@@ -248,6 +248,78 @@
 - 本目录为完整软件根（含 README、LICENSE、project-memory、extras）；父级不留共享产品文件
 - **优先级：先做完 Win 正式版，再移植安卓**；安卓现阶段只保留雏形，不并行大改
 
+## 33. v0.2.0 文学向 AI 代理人
+
+- OpenAI 兼容 API（设置：Base URL / Key / Model / contextWindow / 代理人开关 / 写入方式 / 文风备忘）
+- 右侧 Cursor 式 `AiPanel`：上下文进度条、多会话、流式回复、计划步骤、快捷指令、停止生成、思考中加载指示、`Ctrl+L`
+- 主进程 tool loop：只读探索；写类工具**自动落盘/进缓冲**（无手动 Apply）；台词/角色/`.kmind` 结构化编辑；无联网/Shell
+- 数据落软件本体 `data/`（开发：`dev-data/data/`）；密钥 `safeStorage` 加密；不进项目、不用 AppData
+- 版本号 `package.json` → **0.2.0**；发版目录 `KENTUCKY-0.2.0/`
+
+## 34. F5 调试与 package.json 编码
+
+- 工作区根 `.vscode/launch.json`：`Debug All` = `npm run dev -- --sourcemap`（cwd=`win/`）+ 附加渲染进程 `9222`
+- `win/package.json` 必须是合法 UTF-8；Latin-1 的 `©` 等会导致 Node `Invalid package config`，electron-vite / F5 起不来
+
+## 35. 资源管理器：隐藏后缀 + 可编辑新建名
+
+- 树与重命名默认**隐藏**已知后缀（`.md` / `.kmind` / `.csv` / `.dialogue.csv` 等）；类型靠彩色字母图标
+- 新建文件/导图：输入框只填主名，右侧固定后缀芯片；修复焦点/可编辑问题
+- 重命名只改主名，后缀自动保留
+
+## 36. AI 自动写入（取消手动确认）
+
+- 弃用「提案 → Apply / Reject」确认栏与全局/迷你确认条（易出 bug）
+- Agent 产出变更即自动写入；系统提示与工具返回禁止再说「请点 Apply」
+- 对话内仅展示「已写入 / 新建」摘要卡片（嵌在对应助手消息下）
+
+## 37. AI 改文件 UX（对齐 Cursor 脏/新建色）
+
+- **不抢焦点**：`applyAiFileEdit` 后台更新/挂标签，不切换 `activeTabId`（避免多文件来回闪）
+- 标签与资源管理器：**黄 ●** = 已修改未保存（`dirty`）；**蓝 ●** = 新建（`isNew`，保存后清除）
+- DocumentHub `doc:apply` 不得冲掉本地 `dirty`/`isNew`；新建文件仍落盘以便树可见
+- 设置「AI 写入方式」：改完直接写盘 / 改完标黄待保存（默认偏后者）
+- 正文 / AI 消息列表使用与台词相同的 `kentucky-overlay-scroll` 叠加滚动条
+- Agent 思考中 / 调工具时显示加载指示（避免误以为卡死）
+
+## 38. AI 思维导图可读性（dagre / Sugiyama）
+
+- 根因：网格乱摆坐标 + 角色↔场景全连接网 + 固定 bottom→top 手柄 → 线网缠死
+- 采用业界分层布局（Sugiyama；React Flow 官方示例同款）：主进程 `@dagrejs/dagre`，默认 **LR**
+- `propose_kmind_edit` 默认 `autoLayout: true`；新增 `layout_kmind` 专治乱图
+- 系统提示强制：树/分层、人物/情节分 hub、禁止角色×场景密集连线；细节进 `note`
+- 去重边 / 自环；布局后按方向设手柄（LR=`sr`→`tl`）
+
+## 39. 导图误标脏（打开 / 平移）
+
+- 打开 `.kmind` 不再因推断连线手柄写回而变黄；手柄仅显示用（`persistHandles`）
+- **平移/滚轮缩放不再 persist**（只更新内存 viewport；保存前 flush）
+- 脏判定忽略 viewport（`src/common/kmindDirty.ts`）；`doc:patch` 回写后渲染层本地重算 dirty，避免旧主进程 `snap.dirty` 覆盖
+- 真正改节点/边仍正常标脏
+
+## 40. AI 面板与聊天按工作区绑定
+
+- 启动默认不打开代理人；`ai-workspace-prefs.json` 按工作区路径记 `panelVisible`
+- 打开/切换/关闭工作区时重绑面板状态与会话列表
+- `ai:listSessions` 按 `workspacePath` 过滤，聊天互不互通；无工作区时 AI 按钮不可用
+
+## 41. 活动栏多工程切换
+
+- 同窗口 `openWorkspaces[]`；活动栏工程徽章 + 末尾固定「+」；右键关闭
+- 切换 park/restore 标签与文件树；AI / `reportWorkspace` 跟活动工程走
+
+## 42. 文学 Agent：G3 可审 + L1–L5
+
+- 写入按类型分流（正文/导图内容/多文件可审；角色单条、≤5 行台词、layout 可自动）；R1 Accept 前不改 tab
+- L5 角色摘要上下文；L1 continuity_check；L2 lookup_character；L3 scene↔kmind；L4 追加/演出/cast_check
+- 设置「强制全部可审」；系统提示改为 pending/Accept 语义
+
+## 43. Cursor 风格 Agent 输入栏
+
+- Composer：Ask / Plan / Outline / Agent 模式；多配置档切换；参考文件芯片 + 上传；主题色 CSS 变量
+- `ai-profiles.json` + `ai-keys/<id>.bin`；旧单 Key 迁移；设置页 CRUD
+- 按模式过滤工具与系统提示前缀；附件并入 `mentionedPaths`
+
 ## 其它小修
 
 - 选项卡悬停用 `cursor: pointer`

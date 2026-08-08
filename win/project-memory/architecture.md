@@ -10,9 +10,10 @@
 |----|------|
 | 壳 | Electron 37 + electron-vite |
 | UI | React 19 + TypeScript |
-| 状态 | Zustand（`appStore` + `settingsStore`） |
+| 状态 | Zustand（`appStore` + `settingsStore` + `aiStore`） |
 | 文本编辑 | `.md`：TipTap WYSIWYG + Monaco 源码；其它：软化 Monaco（`monacoSetup.ts` 本地打包） |
 | 思维导图 | @xyflow/react 自由白板；自有 `.kmind` v2（nodes + edges） |
+| AI | OpenAI 兼容流式 chat；主进程 `src/main/ai/`；会话/密钥落本体 `data/` |
 | i18n | i18next（`zh-CN` / `en`） |
 | 主题 | CSS 变量 + `applyTheme(mode, accent)` |
 
@@ -23,34 +24,33 @@ Kentucky/                  ← Cursor 工作区容器（非本软件根）
   win/                     ← 本软件根（Windows / Electron）
     project-memory/        ← 本记忆目录
     electron.vite.config.ts
-    package.json
+    package.json           ← version 0.2.0
+    dev-data/              ← 开发态本体数据（gitignore）
     src/
       main/                Electron 主进程
-        index.ts           IPC：对话框、fs、菜单、多窗口、DocumentHub
+        index.ts           IPC：对话框、fs、菜单、多窗口、DocumentHub、AI
+        ai/                OpenAI 兼容客户端、agent loop、tools、kmindLayout（dagre）、本体 data 路径
         menu.ts            原生菜单（中/英）
         documentHub.ts     跨窗文件正文权威
         windowRegistry.ts  main/float 元数据
       preload/
-        index.ts           contextBridge → window.kentucky
+        index.ts           contextBridge → window.kentucky（含 ai:*）
       renderer/
         index.html
         src/               React 渲染层（业务都在这）
           App.tsx
           main.tsx         启动时 hydrate 主题
-          platform/        FS 抽象（禁止组件直接碰 Electron）
+          platform/        FS + AI IPC 抽象
           state/
-          appStore.ts      工作区、标签、文件树、recent、多窗
-          settingsStore.ts 主题 / 字号
-        theme/
-          applyTheme.ts    由 accent + mode 衍生 CSS 变量
-        i18n/
-        workbench/         活动栏、侧栏、欢迎页、设置、编辑区、FloatWorkbench
-        editors/           TipTap 文章、Monaco、MindMap、Dialogue、kmind/dialogueCsv
-        styles/global.css
-    state/
-      appStore.ts          仅 re-export（IDE 旧路径兼容）
-  .vscode/
-    launch.json            Cursor/VS Code：F5 调试 Electron（主进程+渲染）
+            appStore.ts
+            settingsStore.ts
+            aiStore.ts     会话、流式、自动写入同步、思考态
+          ai/              AiPanel、simpleMarkdown
+          theme/
+          i18n/
+          workbench/       含 explorerNames（隐藏后缀）、叠加滚动条
+          editors/
+          styles/global.css
 ```
 
 路径别名：`@/*` → `src/renderer/src/*`（见 `tsconfig.json` / `electron.vite.config.ts`）。
@@ -62,24 +62,44 @@ Renderer (React)
   → getPlatform() 
   → window.kentucky (preload)
   → ipcMain (main)
-  → Node fs / dialog / Menu / DocumentHub / BrowserWindow
+  → Node fs / dialog / Menu / DocumentHub / BrowserWindow / AI agent loop
 ```
 
 - UI **不得** `require('fs')` 或散落 `window.kentucky`（菜单监听等经 `Platform` 封装）。
 - 安卓平板为**独立软件根** `../android/`（Capacitor），不在本 Electron 树内换 Platform。
 - **多窗口：** `role: main | float`（`windowRegistry`）；文件正文权威在主进程 `documentHub`；各窗 Zustand 仅本地 UI。
 
-## 关键状态
+## AI 数据流（v0.2.0）
+
+```
+AiPanel / aiStore
+  → ai:send（含编辑器上下文）
+  → main agentLoop（OpenAI 兼容 SSE + tools）
+  → propose_* 工具 → 立即写盘（可选）+ ai:proposal
+  → aiStore.syncAppliedFile → appStore.applyAiFileEdit（不抢焦点；标 dirty/isNew）
+  → 标签栏 / 资源管理器黄蓝标记；Ctrl+S 清除
+```
+
+- 本体路径：`appBodyPaths.ts` → 开发 `win/dev-data/data/`，打包为 exe 旁 `data/`
+- 会话：`data/ai-chats/*.json`；设置：`data/ai-settings.json`；密钥：`data/ai-key.bin`
+- `.kmind`：`kmindLayout.ts`（dagre Sugiyama）；`propose_kmind_edit` / `layout_kmind`
+
+## 应用状态
 
 ### `appStore`
 
-- `windowRole`、`workspacePath`、`fileTree`、`tabs`（含 `docRev`）、`activeTabId`、分屏
-- `activeView`: `'explorer' | 'settings'`
+- `windowRole`、`workspacePath`、`fileTree`、`tabs`（含 `docRev`、`dirty`、`isNew`）、`activeTabId`、分屏
+- `activeView`: `'explorer' | 'settings' | 'home'`
 - `recentFolders`: `{ path, lastOpened }[]`（欢迎页最多展示 6；存储可更多）
-- 文件：`openFile` / `saveTab` / `discardTab` / `applyDocSnapshot` / `spawnNewWindow` / `spawnNewMainWindow` / `handleWindowCloseRequest` 等
+- 文件：`openFile` / `saveTab` / `discardTab` / `applyDocSnapshot` / **`applyAiFileEdit`**（AI 安静写回）/ `spawnNewWindow` 等
 - `unsavedDialogStore`：应用内未保存三按钮对话框
 - `lineFlash` + `clearLineFlash`：导图段落跳转后浅色高亮（编辑器内绝对定位遮罩）
 - `linePickSession` / `linePickResult`：分屏点行设链
+
+### `aiStore`
+
+- 会话列表 / 当前会话、流式缓冲、`agentPhase`（idle/thinking/streaming/tool）
+- `syncAppliedFile`：收到 `ai:proposal` 后更新标签与树，不切换当前页
 
 ### `settingsStore`（localStorage: `kentucky.settings`）
 
@@ -101,7 +121,7 @@ Renderer (React)
 - `activeView`: `'explorer' | 'settings' | 'home'`
 - `activeView === 'settings'` → `SettingsPage`（可无工作区打开）
 - `activeView === 'home'`（或无工作区）→ `WelcomePage`；已开项目时侧栏隐藏，工作区与标签保留
-- `activeView === 'explorer'` + 有工作区 → `EditorArea` + 可选侧栏
+- `activeView === 'explorer'` + 有工作区 → `EditorArea` + 可选侧栏 + 可选右侧 `AiPanel`
 - 「窗口」菜单：新建窗口 / 新建主窗口 / 最小化 / 关闭
 - 应用图标：`build/icon.png`（主进程 `windowIcon()` + electron-builder）
 
@@ -169,3 +189,5 @@ Renderer (React)
 
 - 文章字数：`countArticleWords` — 非空白码点计数（与 UI「字」一致）
 - 侧栏右键 reveal：文件 `shell.showItemInFolder`；目录/工作区根 `shell.openPath`（打开该夹，而非上一级）
+- 显示名：`explorerNames.ts` 隐藏已知后缀；新建/重命名只改主名
+- 脏/新建标记：标签 `.tab-dirty`（黄）/ `.tab-new`（蓝）；树 `.tree-name-dirty` / `.tree-name-new` 跟 `tabs[]` 同步

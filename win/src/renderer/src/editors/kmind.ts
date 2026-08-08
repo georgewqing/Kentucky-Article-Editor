@@ -223,6 +223,8 @@ export function serializeKMind(doc: KMindDocument): string {
   return JSON.stringify(doc, null, 2)
 }
 
+export { isKmindPath, kmindContentDirty } from '../../../common/kmindDirty'
+
 /** Assets dir sibling to the .kmind file: `ideas.kmind` → `ideas.assets`. */
 export function assetsDirForKmind(kmindPath: string): string {
   const normalized = kmindPath.replace(/\\/g, '/')

@@ -17,7 +17,11 @@ export function FloatWorkbench() {
     <div className="app-root float-root">
       <div className="float-titlebar">
         <span className="float-title">
-          {tab?.dirty ? <span className="tab-dirty">● </span> : null}
+          {tab?.isNew ? (
+            <span className="tab-new">● </span>
+          ) : tab?.dirty ? (
+            <span className="tab-dirty">● </span>
+          ) : null}
           {tab?.title ?? t('editor.noEditor')}
         </span>
       </div>

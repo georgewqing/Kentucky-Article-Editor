@@ -1,7 +1,7 @@
 {
   "name": "kentucky",
-  "version": "0.1.0",
-  "description": "KENTUCKY — local Markdown writing + freeform mind maps",
+  "version": "0.2.0",
+  "description": "KENTUCKY - local Markdown writing + freeform mind maps + AI writing agent",
   "main": "./out/main/index.js",
   "author": "leyang chen",
   "license": "MIT",
@@ -17,7 +17,7 @@
   "build": {
     "appId": "com.ccfox12.kentucky",
     "productName": "KENTUCKY",
-    "copyright": "Copyright © leyang chen",
+    "copyright": "Copyright (c) leyang chen",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -32,7 +32,9 @@
       "target": [
         {
           "target": "dir",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -41,6 +43,7 @@
     }
   },
   "dependencies": {
+    "@dagrejs/dagre": "^3.1.0",
     "@monaco-editor/react": "^4.7.0",
     "@tiptap/extension-link": "^3.29.2",
     "@tiptap/extension-placeholder": "^3.29.2",
@@ -61,6 +64,7 @@
     "zustand": "^5.0.6"
   },
   "devDependencies": {
+    "@types/dagre": "^0.7.54",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",

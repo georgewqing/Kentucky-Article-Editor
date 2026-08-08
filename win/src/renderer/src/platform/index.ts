@@ -26,6 +26,7 @@ export interface Platform {
   openFolder(): Promise<string | null>
   openImage(): Promise<string | null>
   openImages(): Promise<string[]>
+  openContextFiles(workspacePath?: string | null): Promise<string[]>
   readDir(dirPath: string): Promise<FileEntry[]>
   readFile(filePath: string): Promise<string>
   writeFile(filePath: string, content: string): Promise<void>
@@ -75,6 +76,45 @@ export interface Platform {
 
   confirmWindowClose(): Promise<void>
   onWindowCloseRequest(cb: () => void): () => void
+
+  // AI
+  aiGetSettings(): Promise<Record<string, unknown>>
+  aiSaveSettings(partial: Record<string, unknown>): Promise<Record<string, unknown>>
+  aiSetKey(key: string): Promise<{ hasApiKey: boolean }>
+  aiClearKey(): Promise<{ hasApiKey: boolean }>
+  aiListProfiles(): Promise<unknown[]>
+  aiUpsertProfile(partial: Record<string, unknown>): Promise<unknown>
+  aiDeleteProfile(id: string): Promise<boolean>
+  aiSetActiveProfile(id: string): Promise<{ profile: unknown; settings: Record<string, unknown> }>
+  aiSetProfileKey(id: string, key: string): Promise<{ hasKey: boolean; activeHasKey: boolean }>
+  aiClearProfileKey(id: string): Promise<{ hasKey: boolean; activeHasKey: boolean }>
+  aiGetActiveProfile(): Promise<unknown>
+  aiListSessions(workspacePath?: string | null): Promise<unknown[]>
+  aiCreateSession(workspacePath: string | null): Promise<unknown>
+  aiGetWorkspacePrefs(workspacePath: string | null): Promise<{ panelVisible: boolean }>
+  aiSetWorkspacePrefs(
+    workspacePath: string,
+    partial: { panelVisible?: boolean }
+  ): Promise<{ panelVisible: boolean }>
+  aiLoadSession(id: string): Promise<unknown>
+  aiDeleteSession(id: string): Promise<boolean>
+  aiContextUsage(sessionId: string): Promise<{ used: number; limit: number }>
+  aiSend(payload: {
+    sessionId: string
+    text: string
+    mode?: string
+    editor: {
+      workspacePath: string | null
+      activeFilePath: string | null
+      selection: string | null
+      mentionedPaths: string[]
+    }
+  }): Promise<{ ok: boolean }>
+  aiAbort(): Promise<boolean>
+  aiApplyProposal(payload: { sessionId: string; proposalId: string }): Promise<unknown>
+  aiRejectProposal(payload: { sessionId: string; proposalId: string }): Promise<unknown>
+  aiApplyAllProposals(sessionId: string): Promise<unknown[]>
+  onAiEvent(channel: string, cb: (payload: unknown) => void): () => void
 }
 
 function joinPath(...parts: string[]): string {
@@ -129,6 +169,7 @@ export function createElectronPlatform(): Platform {
     openFolder: () => api.openDirectory(),
     openImage: () => api.openImage(),
     openImages: () => api.openImages(),
+    openContextFiles: (workspacePath) => api.openContextFiles(workspacePath),
     readDir: (dirPath) => api.readDir(dirPath),
     readFile: (filePath) => api.readFile(filePath),
     writeFile: async (filePath, content) => {
@@ -195,7 +236,33 @@ export function createElectronPlatform(): Platform {
     confirmWindowClose: async () => {
       await api.confirmWindowClose()
     },
-    onWindowCloseRequest: (cb) => api.onWindowCloseRequest(cb)
+    onWindowCloseRequest: (cb) => api.onWindowCloseRequest(cb),
+
+    aiGetSettings: () => api.aiGetSettings(),
+    aiSaveSettings: (partial) => api.aiSaveSettings(partial),
+    aiSetKey: (key) => api.aiSetKey(key),
+    aiClearKey: () => api.aiClearKey(),
+    aiListProfiles: () => api.aiListProfiles(),
+    aiUpsertProfile: (partial) => api.aiUpsertProfile(partial),
+    aiDeleteProfile: (id) => api.aiDeleteProfile(id),
+    aiSetActiveProfile: (id) => api.aiSetActiveProfile(id),
+    aiSetProfileKey: (id, key) => api.aiSetProfileKey(id, key),
+    aiClearProfileKey: (id) => api.aiClearProfileKey(id),
+    aiGetActiveProfile: () => api.aiGetActiveProfile(),
+    aiListSessions: (workspacePath) => api.aiListSessions(workspacePath),
+    aiCreateSession: (workspacePath) => api.aiCreateSession(workspacePath),
+    aiGetWorkspacePrefs: (workspacePath) => api.aiGetWorkspacePrefs(workspacePath),
+    aiSetWorkspacePrefs: (workspacePath, partial) =>
+      api.aiSetWorkspacePrefs(workspacePath, partial),
+    aiLoadSession: (id) => api.aiLoadSession(id),
+    aiDeleteSession: (id) => api.aiDeleteSession(id),
+    aiContextUsage: (sessionId) => api.aiContextUsage(sessionId),
+    aiSend: (payload) => api.aiSend(payload),
+    aiAbort: () => api.aiAbort(),
+    aiApplyProposal: (payload) => api.aiApplyProposal(payload),
+    aiRejectProposal: (payload) => api.aiRejectProposal(payload),
+    aiApplyAllProposals: (sessionId) => api.aiApplyAllProposals(sessionId),
+    onAiEvent: (channel, cb) => api.onAiEvent(channel, cb)
   }
 }
 
@@ -206,6 +273,7 @@ export function createBrowserStubPlatform(): Platform {
     openFolder: async () => null,
     openImage: async () => null,
     openImages: async () => [],
+    openContextFiles: async () => [],
     readDir: async () => [],
     readFile: async () => '',
     writeFile: async () => undefined,
@@ -276,7 +344,37 @@ export function createBrowserStubPlatform(): Platform {
     },
     onDocApply: () => () => undefined,
     confirmWindowClose: async () => undefined,
-    onWindowCloseRequest: () => () => undefined
+    onWindowCloseRequest: () => () => undefined,
+    aiGetSettings: async () => ({
+      hasApiKey: false,
+      panelVisible: false,
+      panelWidth: 380,
+      forceReviewAllWrites: false,
+      applyWritesToDisk: false
+    }),
+    aiSaveSettings: async (p) => p,
+    aiSetKey: async () => ({ hasApiKey: false }),
+    aiClearKey: async () => ({ hasApiKey: false }),
+    aiListProfiles: async () => [],
+    aiUpsertProfile: async () => null,
+    aiDeleteProfile: async () => false,
+    aiSetActiveProfile: async () => ({ profile: null, settings: {} }),
+    aiSetProfileKey: async () => ({ hasKey: false, activeHasKey: false }),
+    aiClearProfileKey: async () => ({ hasKey: false, activeHasKey: false }),
+    aiGetActiveProfile: async () => null,
+    aiListSessions: async () => [],
+    aiCreateSession: async () => null,
+    aiGetWorkspacePrefs: async () => ({ panelVisible: false }),
+    aiSetWorkspacePrefs: async () => ({ panelVisible: false }),
+    aiLoadSession: async () => null,
+    aiDeleteSession: async () => true,
+    aiContextUsage: async () => ({ used: 0, limit: 128000 }),
+    aiSend: async () => ({ ok: false }),
+    aiAbort: async () => true,
+    aiApplyProposal: async () => null,
+    aiRejectProposal: async () => null,
+    aiApplyAllProposals: async () => [],
+    onAiEvent: () => () => undefined
   }
 }
 

@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '@/state/settingsStore'
+import { useAiStore, type AiProfileView } from '@/state/aiStore'
 import { ACCENT_PRESETS } from '@/theme/applyTheme'
 import i18n, { setStoredLocale, type AppLocale } from '@/i18n'
 
@@ -11,6 +13,36 @@ export function SettingsPage() {
   const setThemeMode = useSettingsStore((s) => s.setThemeMode)
   const setAccent = useSettingsStore((s) => s.setAccent)
   const setFontSize = useSettingsStore((s) => s.setFontSize)
+  const ai = useAiStore((s) => s.settings)
+  const profiles = useAiStore((s) => s.profiles)
+  const hydrateAi = useAiStore((s) => s.hydrate)
+  const saveSettings = useAiStore((s) => s.saveSettings)
+  const setActiveProfile = useAiStore((s) => s.setActiveProfile)
+  const upsertProfile = useAiStore((s) => s.upsertProfile)
+  const deleteProfile = useAiStore((s) => s.deleteProfile)
+  const setProfileKey = useAiStore((s) => s.setProfileKey)
+  const [keyDraft, setKeyDraft] = useState('')
+  const [editId, setEditId] = useState<string | null>(null)
+  const [aiSection] = useState(true)
+
+  const editing: AiProfileView | null =
+    profiles.find((p) => p.id === (editId || ai?.activeProfileId)) || profiles[0] || null
+
+  useEffect(() => {
+    if (!ai) void hydrateAi()
+  }, [ai, hydrateAi])
+
+  useEffect(() => {
+    if (editing) setEditId(editing.id)
+  }, [editing?.id])
+
+  useEffect(() => {
+    const onOpen = (): void => {
+      document.getElementById('settings-ai')?.scrollIntoView({ behavior: 'smooth' })
+    }
+    window.addEventListener('kentucky:open-ai-settings', onOpen)
+    return () => window.removeEventListener('kentucky:open-ai-settings', onOpen)
+  }, [])
 
   const setLang = (locale: AppLocale) => {
     setStoredLocale(locale)
@@ -102,6 +134,210 @@ export function SettingsPage() {
           </div>
         </div>
       </section>
+
+      {aiSection && ai ? (
+        <section className="settings-section" id="settings-ai">
+          <h2>{t('settings.ai')}</h2>
+          <p className="settings-desc">{t('settings.aiDesc')}</p>
+
+          <div className="settings-row" style={{ alignItems: 'flex-start' }}>
+            <label>{t('settings.profiles')}</label>
+            <div className="settings-key-block">
+              <div className="theme-toggle" style={{ flexWrap: 'wrap' }}>
+                {profiles.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={p.id === editing?.id ? 'active' : ''}
+                    onClick={() => {
+                      setEditId(p.id)
+                      void setActiveProfile(p.id)
+                      setKeyDraft('')
+                    }}
+                  >
+                    {p.label}
+                    {!p.hasKey ? '*' : ''}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    void upsertProfile({
+                      label: t('settings.newProfile'),
+                      baseUrl: 'https://api.openai.com/v1',
+                      model: 'gpt-4o-mini',
+                      contextWindow: 128000
+                    }).then((p) => {
+                      if (p) {
+                        setEditId(p.id)
+                        void setActiveProfile(p.id)
+                      }
+                    })
+                  }}
+                >
+                  + {t('settings.addProfile')}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {editing ? (
+            <>
+              <div className="settings-row">
+                <label>{t('settings.profileLabel')}</label>
+                <input
+                  className="settings-input"
+                  value={editing.label}
+                  onChange={(e) =>
+                    void upsertProfile({ id: editing.id, label: e.target.value })
+                  }
+                />
+              </div>
+              <div className="settings-row">
+                <label>{t('settings.aiBaseUrl')}</label>
+                <input
+                  className="settings-input"
+                  value={editing.baseUrl}
+                  onChange={(e) =>
+                    void upsertProfile({ id: editing.id, baseUrl: e.target.value })
+                  }
+                />
+              </div>
+              <div className="settings-row">
+                <label>{t('settings.aiModel')}</label>
+                <input
+                  className="settings-input"
+                  value={editing.model}
+                  onChange={(e) =>
+                    void upsertProfile({ id: editing.id, model: e.target.value })
+                  }
+                />
+              </div>
+              <div className="settings-row">
+                <label>{t('settings.aiContextWindow')}</label>
+                <input
+                  className="settings-input"
+                  type="number"
+                  value={editing.contextWindow}
+                  onChange={(e) =>
+                    void upsertProfile({
+                      id: editing.id,
+                      contextWindow: Number(e.target.value) || 128000
+                    })
+                  }
+                />
+              </div>
+              <div className="settings-row" style={{ alignItems: 'flex-start' }}>
+                <label>{t('settings.aiKey')}</label>
+                <div className="settings-key-block">
+                  <span className="settings-key-status">
+                    {editing.hasKey ? t('settings.aiKeySaved') : t('settings.aiKeyMissing')}
+                  </span>
+                  <input
+                    className="settings-input"
+                    type="password"
+                    placeholder={t('settings.aiKeyPlaceholder')}
+                    value={keyDraft}
+                    onChange={(e) => setKeyDraft(e.target.value)}
+                  />
+                  <div className="theme-toggle">
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() => {
+                        void setProfileKey(editing.id, keyDraft).then(() => setKeyDraft(''))
+                      }}
+                    >
+                      {t('settings.aiKeySave')}
+                    </button>
+                    <button type="button" onClick={() => void setProfileKey(editing.id, '')}>
+                      {t('settings.aiKeyClear')}
+                    </button>
+                    {profiles.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void deleteProfile(editing.id).then(() => setEditId(null))
+                        }}
+                      >
+                        {t('settings.deleteProfile')}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : null}
+
+          <div className="settings-row">
+            <label>{t('settings.aiAgent')}</label>
+            <div className="theme-toggle">
+              <button
+                type="button"
+                className={ai.agentEnabled ? 'active' : ''}
+                onClick={() => void saveSettings({ agentEnabled: true })}
+              >
+                {t('settings.on')}
+              </button>
+              <button
+                type="button"
+                className={!ai.agentEnabled ? 'active' : ''}
+                onClick={() => void saveSettings({ agentEnabled: false })}
+              >
+                {t('settings.off')}
+              </button>
+            </div>
+          </div>
+          <div className="settings-row">
+            <label>{t('settings.aiApplyMode')}</label>
+            <div className="theme-toggle">
+              <button
+                type="button"
+                className={ai.applyWritesToDisk ? 'active' : ''}
+                onClick={() => void saveSettings({ applyWritesToDisk: true })}
+              >
+                {t('settings.aiApplyDisk')}
+              </button>
+              <button
+                type="button"
+                className={!ai.applyWritesToDisk ? 'active' : ''}
+                onClick={() => void saveSettings({ applyWritesToDisk: false })}
+              >
+                {t('settings.aiApplyDirty')}
+              </button>
+            </div>
+          </div>
+          <div className="settings-row">
+            <label>{t('settings.aiForceReview')}</label>
+            <div className="theme-toggle">
+              <button
+                type="button"
+                className={ai.forceReviewAllWrites ? 'active' : ''}
+                onClick={() => void saveSettings({ forceReviewAllWrites: true })}
+              >
+                {t('settings.on')}
+              </button>
+              <button
+                type="button"
+                className={!ai.forceReviewAllWrites ? 'active' : ''}
+                onClick={() => void saveSettings({ forceReviewAllWrites: false })}
+              >
+                {t('settings.off')}
+              </button>
+            </div>
+          </div>
+          <p className="settings-hint">{t('settings.aiReviewHint')}</p>
+          <div className="settings-row" style={{ alignItems: 'flex-start' }}>
+            <label>{t('settings.aiStyleMemo')}</label>
+            <textarea
+              className="settings-input settings-textarea"
+              rows={3}
+              value={ai.styleMemo}
+              onChange={(e) => void saveSettings({ styleMemo: e.target.value })}
+            />
+          </div>
+        </section>
+      ) : null}
     </div>
   )
 }

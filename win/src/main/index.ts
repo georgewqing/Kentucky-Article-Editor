@@ -32,6 +32,7 @@ import {
   splashThemeCssVars,
   writeSplashTheme
 } from './themeSettings'
+import { registerAiIpc } from './ai/registerAiIpc'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -261,6 +262,7 @@ app.whenReady().then(() => {
   })
 
   applyAppMenu('zh-CN')
+  registerAiIpc()
   createWindow({ role: 'main', showSplash: true })
 
   app.on('activate', () => {
@@ -506,6 +508,18 @@ ipcMain.handle('dialog:openImages', async () => {
   if (result.canceled || result.filePaths.length === 0) return []
   return result.filePaths
 })
+
+ipcMain.handle(
+  'dialog:openContextFiles',
+  async (_e, workspacePath?: string | null): Promise<string[]> => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile', 'multiSelections'],
+      defaultPath: workspacePath || undefined
+    })
+    if (result.canceled || result.filePaths.length === 0) return []
+    return result.filePaths
+  }
+)
 
 ipcMain.handle('fs:copyFile', async (_e, src: string, dest: string) => {
   await copyFile(src, dest)

@@ -26,14 +26,16 @@ cmd /c npm run dev
 3. 顶部下拉选 **Debug All**
 4. 按 **F5**（或点绿色三角）
 
-会在 **`win/`** 下启动 `electron-vite`（带 sourcemap），并同时附加：
+会在 **`win/`** 下执行 `npm run dev -- --sourcemap`，并同时附加：
 
-- **主进程**（Node 调试）
+- **主进程**（Node 调试，`autoAttachChildProcesses`）
 - **渲染进程**（Chrome 远程调试端口 `9222`）
 
-在 `win/src/main/**` 或 `win/src/renderer/src/**` 打断点即可命中。只需主进程时选 **Debug Main Process**。
+在 `win/src/main/**` 或 `win/src/renderer/src/**` 打断点即可命中。只需主进程时选 **Win: Debug Main Process**；只想跑起来不调试选 **Win: Run Dev**。
 
-配置文件：`win/.vscode/launch.json`（`cwd` 指向 `win/`）。
+配置文件：工作区根 [`.vscode/launch.json`](../../.vscode/launch.json)（`cwd` = `win/`）。
+
+若 F5 立刻失败且终端出现 `Invalid package config .../win/package.json`：多半是 `package.json` 含非 UTF-8 字节（例如错误编码的 `©`）。用纯 UTF-8 重存即可。
 
 ## 构建 / 检查
 
@@ -71,6 +73,17 @@ npm run dist
 | Ctrl+B | 切换侧栏（实现上活动栏点击会强制打开侧栏） |
 | Ctrl+O | 打开文件夹 |
 | Ctrl+, | 打开设置 |
+| Ctrl+L | 打开/关闭右侧 AI 对话栏 |
+
+## AI 代理人（v0.2.0）
+
+1. 设置 → **AI**：填写 OpenAI 兼容 Base URL、模型、API Key（加密存软件本体 `data/`，开发态为 `win/dev-data/data/`）。
+2. 活动栏 AI 图标或 `Ctrl+L` 打开右侧栏。
+3. 打开工作区后可启用代理人工具；文件变更**自动写入**（无需点 Apply）。可选「改完直接写盘」或「改完标黄待 Ctrl+S」。
+4. 改过的文件标签/侧栏为**黄 ●**，新建为**蓝 ●**；保存后圆点消失。AI 改多文件时**不切换**当前编辑页。
+5. 等待回复时有「思考中 / 正在调用工具」指示；上下文占用见顶栏进度条；接近满时请新建对话。
+6. 浮窗（精简窗）不带 AI 栏。
+7. DeepSeek 等：Base URL 可用 `https://api.deepseek.com`（或带 `/v1`）；`fetch failed` 多为网络/代理连不上，不是模型名写错（错模型一般是 HTTP 4xx）。
 
 ## 建议自测路径
 
@@ -81,6 +94,7 @@ npm run dist
 5. 新建台词 `.dialogue.csv`：先「创建角色」，再选说话人写台词；改字后 id 不变；导出管线/本地化 CSV
 6. 设置：深/浅色、改主体色、刷新仍保留
 7. 语言中英切换 → 顶栏原生菜单语言同步
+8. AI：配 Key → 润色当前 md → 确认不闪页、标签/侧栏有黄或蓝点 → Ctrl+S 圆点消失
 
 ## Godot 台词热编辑（同路径联动）
 

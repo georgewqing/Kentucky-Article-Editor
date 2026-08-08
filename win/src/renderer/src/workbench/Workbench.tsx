@@ -8,6 +8,8 @@ import { WelcomePage } from './WelcomePage'
 import { SettingsPage } from './SettingsPage'
 import { AppMenuBar } from './AppMenuBar'
 import { FloatWorkbench } from './FloatWorkbench'
+import { AiPanel } from '@/ai/AiPanel'
+import { useAiStore } from '@/state/aiStore'
 
 export function Workbench() {
   const windowRole = useAppStore((s) => s.windowRole)
@@ -15,8 +17,12 @@ export function Workbench() {
   const sidebarVisible = useAppStore((s) => s.sidebarVisible)
   const activeView = useAppStore((s) => s.activeView)
   const toast = useAppStore((s) => s.toast)
+  const aiVisible = useAiStore((s) => s.panelVisible)
+  const aiWidth = useAiStore((s) => s.panelWidth)
+  const setAiWidth = useAiStore((s) => s.setPanelWidth)
   const [customMenu, setCustomMenu] = useState(false)
   const [bootReady, setBootReady] = useState(false)
+  const [aiDragging, setAiDragging] = useState(false)
 
   useEffect(() => {
     void getPlatform()
@@ -42,12 +48,35 @@ export function Workbench() {
       } else if (boot.role === 'main' && boot.workspacePath) {
         await useAppStore.getState().openWorkspace(boot.workspacePath)
       }
-      if (!cancelled) setBootReady(true)
+      if (!cancelled) {
+        await useAiStore.getState().hydrate()
+        setBootReady(true)
+      }
     })()
     return () => {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (windowRole === 'float') return
+    return useAiStore.getState().bindEvents()
+  }, [windowRole])
+
+  useEffect(() => {
+    if (!aiDragging) return
+    const onMove = (e: MouseEvent): void => {
+      const fromRight = window.innerWidth - e.clientX
+      setAiWidth(fromRight)
+    }
+    const onUp = (): void => setAiDragging(false)
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [aiDragging, setAiWidth])
 
   if (!bootReady) {
     return <div className="app-root" />
@@ -59,7 +88,6 @@ export function Workbench() {
 
   const showSettings = activeView === 'settings'
   const showHome = activeView === 'home' || !workspacePath
-  // Welcome / settings: no explorer sidebar. Project stays open in memory.
   const showSidebar = Boolean(workspacePath) && sidebarVisible && !showSettings && !showHome
 
   return (
@@ -77,6 +105,20 @@ export function Workbench() {
             <EditorArea />
           )}
         </div>
+        {aiVisible && !showHome ? (
+          <>
+            <div
+              className="sash ai-sash"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                setAiDragging(true)
+              }}
+            />
+            <div className="ai-pane" style={{ width: aiWidth }}>
+              <AiPanel />
+            </div>
+          </>
+        ) : null}
       </div>
       {toast ? <div className={`toast ${toast.type}`}>{toast.message}</div> : null}
     </div>

@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { useAppStore } from '@/state/appStore'
 import { useSettingsStore } from '@/state/settingsStore'
+import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 import { MarkdownToolbar } from './MarkdownToolbar'
 import { countArticleWords } from './wordCount'
 import { SOFT_MONACO_OPTIONS, defineKentuckyMonacoThemes } from './softMonaco'
@@ -54,6 +55,7 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
   const applyingRef = useRef(false)
   const monacoRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
+  useOverlayScroll(scrollerRef)
   const [monacoTick, setMonacoTick] = useState(0)
   const appliedFlashNonce = useRef<number | null>(null)
 
@@ -354,7 +356,7 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
 
       <div className="article-body">
         {mode === 'wysiwyg' ? (
-          <div className="article-editor" ref={scrollerRef} style={{ fontSize }}>
+          <div className="article-editor kentucky-overlay-scroll" ref={scrollerRef} style={{ fontSize }}>
             {flashOverlay ? (
               <div
                 className="article-line-flash-overlay"

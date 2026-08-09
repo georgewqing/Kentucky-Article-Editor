@@ -1,5 +1,13 @@
 import { join, normalize, relative, sep, dirname } from 'path'
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'fs'
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+  mkdirSync,
+  unlinkSync
+} from 'fs'
 import {
   parseDialogueCsv,
   serializeDialogueCsv,
@@ -7,9 +15,18 @@ import {
   serializeCharactersCsv,
   parseKMind,
   serializeKMind,
+  parseDialogueChoices,
+  serializeDialogueChoices,
+  serializeDialogueLayout,
+  layoutDialogueGraph,
+  summarizeDialogueGraph,
+  emptyDialogueLine,
+  emptyDialogueChoices,
+  dialogueStemPaths,
   newNodeId,
   newEdgeId,
   type DialogueLine,
+  type DialogueChoicesFile,
   type Character,
   type KMindGraphNode
 } from './formats'
@@ -18,6 +35,13 @@ import type { FileProposal } from './chatSessions'
 import { randomUUID } from 'crypto'
 import type { ToolDef } from './openaiCompatClient'
 import { proposalToolNote } from './proposalGate'
+import { listEnabledSkills, loadSkill } from './skills'
+import {
+  runWebSearch,
+  runWebResearch,
+  fetchPageExcerpt,
+  type WebSearchProvider
+} from './webSearch'
 
 export function getWritingTools(): ToolDef[] {
   return [
@@ -90,7 +114,8 @@ export function getWritingTools(): ToolDef[] {
       type: 'function',
       function: {
         name: 'read_dialogue',
-        description: 'Parse and summarize a *.dialogue.csv file.',
+        description:
+          'Parse a *.dialogue.csv as a Godot v1.2 dialogue graph: lines, choices sidecar, sequence chains, layout presence, warnings. Prefer this before editing branching.',
         parameters: {
           type: 'object',
           properties: { path: { type: 'string' } },
@@ -103,7 +128,7 @@ export function getWritingTools(): ToolDef[] {
       function: {
         name: 'propose_update_dialogue_lines',
         description:
-          'Update dialogue lines by id (partial fields). ≤5 lines may auto-apply; more require Accept. Prefer propose_dialogue_performance for focus/font/color/emotion batches.',
+          'Update dialogue lines by id (partial fields). ≤5 lines may auto-apply; more require Accept. Prefer propose_dialogue_performance for focus/font/color/emotion batches. Does not edit choices.json.',
         parameters: {
           type: 'object',
           properties: {
@@ -139,11 +164,15 @@ export function getWritingTools(): ToolDef[] {
       function: {
         name: 'propose_append_dialogue_lines',
         description:
-          'Append new dialogue lines (speaker = character id). ≤5 lines may auto-apply; more require Accept. Generates stable ids.',
+          'Insert new dialogue lines (speaker = character id). Default append at end; pass afterId to insert after that line (sequence). ≤5 may auto-apply. Generates stable ids. Does not edit choices.',
         parameters: {
           type: 'object',
           properties: {
             path: { type: 'string' },
+            afterId: {
+              type: 'string',
+              description: 'Insert after this line id; omit to append at end'
+            },
             lines: {
               type: 'array',
               items: {
@@ -191,6 +220,133 @@ export function getWritingTools(): ToolDef[] {
             summary: { type: 'string' }
           },
           required: ['path', 'updates']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'propose_reorder_dialogue_lines',
+        description:
+          'Reorder *.dialogue.csv rows by id list (linear play order when no choices). Requires Accept if large / multi-file.',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string' },
+            order: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Id order; unspecified ids keep relative order at end'
+            },
+            summary: { type: 'string' }
+          },
+          required: ['path', 'order']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'propose_set_dialogue_choices',
+        description:
+          'Write sibling *.dialogue.choices.json (Godot branching). options: { text, goto } or { text, end: true }. Empty nodes deletes the file. Prefer propose_dialogue_graph for full scripts.',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Path to *.dialogue.csv (not the choices file)' },
+            mode: { type: 'string', enum: ['replace', 'merge'] },
+            nodes: {
+              type: 'object',
+              description:
+                'Map after_line_id → { options: [{ text, goto?, end? }] }. merge updates keys; replace overwrites all.'
+            },
+            summary: { type: 'string' }
+          },
+          required: ['path', 'nodes']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'layout_dialogue',
+        description:
+          'Auto-layout Kentucky *.dialogue.layout.json from CSV + choices (branch-aware). Godot ignores layout. Usually auto-writes. Call after graph edits so the canvas looks tidy.',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Path to *.dialogue.csv' },
+            summary: { type: 'string' }
+          },
+          required: ['path']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'propose_dialogue_graph',
+        description:
+          'Build/replace a full Godot v1.2 dialogue graph: CSV lines + choices.json + layout.json. Prefer for new branching scripts. speaker = character id. A line with choices pauses CSV row-order advance.',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: '*.dialogue.csv path (created if missing)' },
+            mode: {
+              type: 'string',
+              enum: ['replace', 'append'],
+              description: 'replace = rewrite lines+choices; append = add lines then merge choices'
+            },
+            lines: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', description: 'Optional stable id; auto-generated if omitted' },
+                  speaker: { type: 'string' },
+                  text: { type: 'string' },
+                  note: { type: 'string' },
+                  emotion: { type: 'string' },
+                  scene: { type: 'string' },
+                  condition: { type: 'string' },
+                  audio: { type: 'string' },
+                  focus_node: { type: 'string' },
+                  font_size: { type: 'string' },
+                  text_color: { type: 'string' }
+                },
+                required: ['speaker', 'text']
+              }
+            },
+            choices: {
+              type: 'array',
+              description: 'Branching after a line id',
+              items: {
+                type: 'object',
+                properties: {
+                  after: { type: 'string', description: 'Line id after which options appear' },
+                  options: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        text: { type: 'string' },
+                        goto: { type: 'string' },
+                        end: { type: 'boolean' }
+                      },
+                      required: ['text']
+                    }
+                  }
+                },
+                required: ['after', 'options']
+              }
+            },
+            autoLayout: {
+              type: 'boolean',
+              description: 'Write branch-aware layout.json (default true)'
+            },
+            summary: { type: 'string' }
+          },
+          required: ['path', 'lines']
         }
       }
     },
@@ -429,6 +585,88 @@ export function getWritingTools(): ToolDef[] {
     {
       type: 'function',
       function: {
+        name: 'list_skills',
+        description: 'List enabled agent skills (id, name, description). Call read_skill before following a skill.',
+        parameters: { type: 'object', properties: {} }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'read_skill',
+        description:
+          'Load full SKILL.md instructions for an enabled skill. Optionally include reference.md / examples.md.',
+        parameters: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            files: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Optional extra files: reference.md, examples.md'
+            }
+          },
+          required: ['id']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'web_search',
+        description:
+          'Single web search query (requires Settings → web search on). Returns titles, URLs, snippets, and page excerpts for top hits. Cite sources; do not invent URLs.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string' },
+            maxResults: { type: 'number' }
+          },
+          required: ['query']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'web_research',
+        description:
+          'Multi-query research: auto-split a question (or use queries[]), search each query in sequence, merge/dedupe, report overlap and shallow conflicts. Prefer for factual multi-angle questions. Includes page excerpts on top merged hits.',
+        parameters: {
+          type: 'object',
+          properties: {
+            question: { type: 'string' },
+            queries: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Optional explicit queries; if omitted, auto-split from question'
+            },
+            maxQueries: { type: 'number' },
+            maxResults: { type: 'number' }
+          },
+          required: ['question']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'web_fetch',
+        description:
+          'Fetch a single http(s) page and return readable text excerpt (requires web search enabled). Use when search snippets/excerpts lack the needed facts.',
+        parameters: {
+          type: 'object',
+          properties: {
+            url: { type: 'string' },
+            maxChars: { type: 'number' }
+          },
+          required: ['url']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
         name: 'create_plan',
         description: 'Replace the session task plan with new steps.',
         parameters: {
@@ -515,6 +753,9 @@ export interface ToolContext {
   ) => void
   onOpenFile: (relPath: string, line?: number) => void
   getPlan: () => Array<{ id: string; text: string; status: string }>
+  webSearchEnabled: boolean
+  webSearchProvider: WebSearchProvider
+  webSearchMaxResults: number
 }
 
 function emitProposal(ctx: ToolContext, proposal: FileProposal): Record<string, unknown> {
@@ -527,6 +768,88 @@ function emitProposal(ctx: ToolContext, proposal: FileProposal): Record<string, 
     changeId: proposal.id,
     note: proposalToolNote(autoApplied)
   }
+}
+
+function normalizeChoiceOptions(
+  options: unknown
+): Array<{ text: string; goto: string; end?: boolean }> {
+  if (!Array.isArray(options)) return []
+  const out: Array<{ text: string; goto: string; end?: boolean }> = []
+  for (const raw of options) {
+    if (!raw || typeof raw !== 'object') continue
+    const o = raw as Record<string, unknown>
+    const text = String(o.text || '').trim()
+    if (!text) continue
+    if (o.end === true) {
+      out.push({ text, goto: '', end: true })
+    } else {
+      out.push({ text, goto: String(o.goto || '').trim() })
+    }
+  }
+  return out
+}
+
+function choicesFromNodesArg(nodesArg: unknown): DialogueChoicesFile {
+  const file = emptyDialogueChoices()
+  if (!nodesArg || typeof nodesArg !== 'object') return file
+  for (const [after, node] of Object.entries(nodesArg as Record<string, unknown>)) {
+    const id = String(after || '').trim()
+    if (!id || !node || typeof node !== 'object') continue
+    const options = normalizeChoiceOptions((node as { options?: unknown }).options)
+    if (options.length) file.nodes[id] = { options }
+  }
+  return file
+}
+
+function allocateLineIds(
+  path: string,
+  existing: DialogueLine[],
+  incoming: Array<Record<string, unknown>>
+): DialogueLine[] {
+  const used = new Set(existing.map((l) => l.id).filter(Boolean))
+  const stem =
+    path
+      .replace(/\\/g, '/')
+      .split('/')
+      .pop()
+      ?.replace(/\.dialogue\.csv$/i, '') || 'line'
+  let seq = existing.length + 1
+  const added: DialogueLine[] = []
+  for (const row of incoming) {
+    const speaker = String(row.speaker || '').trim()
+    const text = String(row.text || '')
+    if (!speaker || !text) continue
+    let id = String(row.id || '').trim()
+    if (!id || used.has(id)) {
+      do {
+        id = `${stem}_${speaker}_${String(seq).padStart(3, '0')}`
+        seq += 1
+      } while (used.has(id))
+    }
+    used.add(id)
+    added.push(
+      emptyDialogueLine({
+        id,
+        speaker,
+        text,
+        emotion: String(row.emotion || ''),
+        note: String(row.note || ''),
+        scene: String(row.scene || ''),
+        condition: String(row.condition || ''),
+        audio: String(row.audio || ''),
+        focus_node: String(row.focus_node || ''),
+        font_size: String(row.font_size || ''),
+        text_color: String(row.text_color || '')
+      })
+    )
+  }
+  return added
+}
+
+function loadChoicesBeside(absCsv: string): DialogueChoicesFile {
+  const { choices } = dialogueStemPaths(absCsv)
+  if (!existsSync(choices)) return emptyDialogueChoices()
+  return parseDialogueChoices(readFileSync(choices, 'utf-8'))
 }
 
 export async function runTool(
@@ -607,15 +930,30 @@ export async function runTool(
       case 'read_dialogue': {
         const path = String(args.path || '')
         const abs = resolveWorkspacePath(ctx.workspaceRoot, path)
+        if (!existsSync(abs)) return JSON.stringify({ error: 'File not found' })
         const parsed = parseDialogueCsv(readFileSync(abs, 'utf-8'))
+        const stems = dialogueStemPaths(abs)
+        const choices = existsSync(stems.choices)
+          ? parseDialogueChoices(readFileSync(stems.choices, 'utf-8'))
+          : emptyDialogueChoices()
+        const hasLayout = existsSync(stems.layout)
+        const graph = summarizeDialogueGraph(parsed.lines, choices)
         return JSON.stringify({
           path,
+          protocol: 'v1.2',
           count: parsed.lines.length,
+          openingId: graph.openingId,
           lines: parsed.lines.map((l) => ({
             id: l.id,
             speaker: l.speaker,
             text: l.text.slice(0, 200)
-          }))
+          })),
+          choices: graph.choiceNodes,
+          sequenceChains: graph.sequenceChains,
+          hasLayout,
+          warnings: graph.warnings,
+          note:
+            'Disk truth = CSV + optional choices.json. layout.json is Kentucky-only. A line with choices pauses CSV row-order advance; goto jumps by id.'
         })
       }
       case 'propose_update_dialogue_lines': {
@@ -677,57 +1015,34 @@ export async function runTool(
         if (!existsSync(abs)) return JSON.stringify({ error: 'File not found' })
         const before = readFileSync(abs, 'utf-8')
         const parsed = parseDialogueCsv(before)
-        const incoming = (args.lines as Array<Record<string, string>>) || []
-        const used = new Set(parsed.lines.map((l) => l.id))
-        const empty = (): DialogueLine => ({
-          id: '',
-          speaker: '',
-          text: '',
-          note: '',
-          emotion: '',
-          scene: '',
-          condition: '',
-          audio: '',
-          focus_node: '',
-          font_size: '',
-          text_color: ''
-        })
-        const stem =
-          path
-            .replace(/\\/g, '/')
-            .split('/')
-            .pop()
-            ?.replace(/\.dialogue\.csv$/i, '') || 'line'
-        let seq = parsed.lines.length + 1
-        const added: DialogueLine[] = []
-        for (const row of incoming) {
-          const speaker = String(row.speaker || '').trim()
-          const text = String(row.text || '')
-          if (!speaker || !text) continue
-          let id = ''
-          do {
-            id = `${stem}_${speaker}_${String(seq).padStart(3, '0')}`
-            seq += 1
-          } while (used.has(id))
-          used.add(id)
-          added.push({
-            ...empty(),
-            id,
-            speaker,
-            text,
-            emotion: String(row.emotion || ''),
-            note: String(row.note || ''),
-            scene: String(row.scene || '')
-          })
+        const incoming = (args.lines as Array<Record<string, unknown>>) || []
+        const added = allocateLineIds(path, parsed.lines, incoming)
+        const afterId = typeof args.afterId === 'string' ? args.afterId.trim() : ''
+        let lines: DialogueLine[]
+        if (afterId) {
+          const idx = parsed.lines.findIndex((l) => l.id === afterId)
+          if (idx < 0) return JSON.stringify({ error: `afterId not found: ${afterId}` })
+          lines = [
+            ...parsed.lines.slice(0, idx + 1),
+            ...added,
+            ...parsed.lines.slice(idx + 1)
+          ]
+        } else {
+          lines = [...parsed.lines, ...added]
         }
-        const after = serializeDialogueCsv([...parsed.lines, ...added])
+        const after = serializeDialogueCsv(lines)
         const proposal: FileProposal = {
           id: randomUUID(),
           path: toRel(ctx.workspaceRoot, abs),
           absPath: abs,
           before,
           after,
-          summary: String(args.summary || `Append ${added.length} dialogue lines`),
+          summary: String(
+            args.summary ||
+              (afterId
+                ? `Insert ${added.length} dialogue lines after ${afterId}`
+                : `Append ${added.length} dialogue lines`)
+          ),
           status: 'pending',
           kind: 'dialogue',
           changeCount: added.length
@@ -763,6 +1078,213 @@ export async function runTool(
           changeCount: updates.length
         }
         return JSON.stringify(emitProposal(ctx, proposal))
+      }
+      case 'propose_reorder_dialogue_lines': {
+        const path = String(args.path || '')
+        const abs = resolveWorkspacePath(ctx.workspaceRoot, path)
+        if (!existsSync(abs)) return JSON.stringify({ error: 'File not found' })
+        const before = readFileSync(abs, 'utf-8')
+        const parsed = parseDialogueCsv(before)
+        const order = (args.order as string[]) || []
+        const byId = new Map(parsed.lines.map((l) => [l.id, l]))
+        const seen = new Set<string>()
+        const ordered: DialogueLine[] = []
+        for (const id of order) {
+          const line = byId.get(id)
+          if (!line || seen.has(id)) continue
+          ordered.push(line)
+          seen.add(id)
+        }
+        for (const line of parsed.lines) {
+          if (!seen.has(line.id)) ordered.push(line)
+        }
+        const proposal: FileProposal = {
+          id: randomUUID(),
+          path: toRel(ctx.workspaceRoot, abs),
+          absPath: abs,
+          before,
+          after: serializeDialogueCsv(ordered),
+          summary: String(args.summary || `Reorder dialogue ${path}`),
+          status: 'pending',
+          kind: 'dialogue',
+          changeCount: ordered.length
+        }
+        return JSON.stringify(emitProposal(ctx, proposal))
+      }
+      case 'propose_set_dialogue_choices': {
+        const path = String(args.path || '')
+        const abs = resolveWorkspacePath(ctx.workspaceRoot, path)
+        if (!existsSync(abs)) return JSON.stringify({ error: 'Dialogue CSV not found' })
+        const stems = dialogueStemPaths(abs)
+        const mode = String(args.mode || 'replace') === 'merge' ? 'merge' : 'replace'
+        const incoming = choicesFromNodesArg(args.nodes)
+        let next = incoming
+        if (mode === 'merge') {
+          const cur = loadChoicesBeside(abs)
+          next = { version: 1, nodes: { ...cur.nodes, ...incoming.nodes } }
+          // Explicit empty options array on a key clears that node in merge
+          if (args.nodes && typeof args.nodes === 'object') {
+            for (const [k, v] of Object.entries(args.nodes as Record<string, unknown>)) {
+              if (
+                v &&
+                typeof v === 'object' &&
+                Array.isArray((v as { options?: unknown }).options) &&
+                (v as { options: unknown[] }).options.length === 0
+              ) {
+                delete next.nodes[k]
+              }
+            }
+          }
+        }
+        const after = serializeDialogueChoices(next)
+        const before = existsSync(stems.choices) ? readFileSync(stems.choices, 'utf-8') : ''
+        if (before === after) {
+          return JSON.stringify({ ok: true, written: false, pending: false, note: 'No choices change' })
+        }
+        const proposal: FileProposal = {
+          id: randomUUID(),
+          path: toRel(ctx.workspaceRoot, stems.choices),
+          absPath: stems.choices,
+          before,
+          after,
+          summary: String(args.summary || `Set dialogue choices for ${path}`),
+          status: 'pending',
+          kind: 'dialogue_choices',
+          changeCount: Object.keys(next.nodes).length
+        }
+        return JSON.stringify({
+          ...emitProposal(ctx, proposal),
+          choiceNodeCount: Object.keys(next.nodes).length,
+          deletedFile: after === '' && before !== ''
+        })
+      }
+      case 'layout_dialogue': {
+        const path = String(args.path || '')
+        const abs = resolveWorkspacePath(ctx.workspaceRoot, path)
+        if (!existsSync(abs)) return JSON.stringify({ error: 'Dialogue CSV not found' })
+        const stems = dialogueStemPaths(abs)
+        const parsed = parseDialogueCsv(readFileSync(abs, 'utf-8'))
+        const choices = loadChoicesBeside(abs)
+        const layout = layoutDialogueGraph(
+          parsed.lines.map((l) => l.id).filter(Boolean),
+          choices
+        )
+        const after = serializeDialogueLayout(layout)
+        const before = existsSync(stems.layout) ? readFileSync(stems.layout, 'utf-8') : ''
+        const proposal: FileProposal = {
+          id: randomUUID(),
+          path: toRel(ctx.workspaceRoot, stems.layout),
+          absPath: stems.layout,
+          before,
+          after,
+          summary: String(args.summary || `Layout dialogue canvas ${path}`),
+          status: 'pending',
+          kind: 'dialogue_layout'
+        }
+        return JSON.stringify({
+          ...emitProposal(ctx, proposal),
+          nodeCount: Object.keys(layout.nodes).length
+        })
+      }
+      case 'propose_dialogue_graph': {
+        const path = String(args.path || '')
+        const abs = resolveWorkspacePath(ctx.workspaceRoot, path)
+        const mode = String(args.mode || 'replace') === 'append' ? 'append' : 'replace'
+        const autoLayout = args.autoLayout !== false
+        const stems = dialogueStemPaths(abs)
+        const beforeCsv = existsSync(abs) ? readFileSync(abs, 'utf-8') : ''
+        const existing = beforeCsv ? parseDialogueCsv(beforeCsv).lines : []
+        const incoming = (args.lines as Array<Record<string, unknown>>) || []
+        const added = allocateLineIds(path, mode === 'append' ? existing : [], incoming)
+        const lines = mode === 'append' ? [...existing, ...added] : added
+        if (!lines.length) return JSON.stringify({ error: 'No valid lines (need speaker + text)' })
+
+        const choiceList = (args.choices as Array<Record<string, unknown>>) || []
+        const choiceFile = emptyDialogueChoices()
+        if (mode === 'append') {
+          const cur = loadChoicesBeside(abs)
+          choiceFile.nodes = { ...cur.nodes }
+        }
+        for (const ch of choiceList) {
+          const after = String(ch.after || '').trim()
+          const options = normalizeChoiceOptions(ch.options)
+          if (!after || !options.length) continue
+          choiceFile.nodes[after] = { options }
+        }
+
+        const results: Record<string, unknown>[] = []
+        const csvProposal: FileProposal = {
+          id: randomUUID(),
+          path: toRel(ctx.workspaceRoot, abs),
+          absPath: abs,
+          before: beforeCsv,
+          after: serializeDialogueCsv(lines),
+          summary: String(
+            args.summary ||
+              (mode === 'append'
+                ? `Append ${added.length} lines to dialogue graph`
+                : `Replace dialogue graph (${lines.length} lines)`)
+          ),
+          status: 'pending',
+          kind: 'dialogue',
+          changeCount: mode === 'append' ? added.length : lines.length
+        }
+        results.push({ file: 'csv', ...emitProposal(ctx, csvProposal) })
+
+        const choicesAfter = serializeDialogueChoices(choiceFile)
+        const choicesBefore = existsSync(stems.choices)
+          ? readFileSync(stems.choices, 'utf-8')
+          : ''
+        if (choicesAfter !== choicesBefore) {
+          const chProposal: FileProposal = {
+            id: randomUUID(),
+            path: toRel(ctx.workspaceRoot, stems.choices),
+            absPath: stems.choices,
+            before: choicesBefore,
+            after: choicesAfter,
+            summary: `Choices for ${path}`,
+            status: 'pending',
+            kind: 'dialogue_choices',
+            changeCount: Object.keys(choiceFile.nodes).length
+          }
+          results.push({ file: 'choices', ...emitProposal(ctx, chProposal) })
+        }
+
+        if (autoLayout) {
+          const layout = layoutDialogueGraph(
+            lines.map((l) => l.id).filter(Boolean),
+            choiceFile
+          )
+          const layoutAfter = serializeDialogueLayout(layout)
+          const layoutBefore = existsSync(stems.layout)
+            ? readFileSync(stems.layout, 'utf-8')
+            : ''
+          const layProposal: FileProposal = {
+            id: randomUUID(),
+            path: toRel(ctx.workspaceRoot, stems.layout),
+            absPath: stems.layout,
+            before: layoutBefore,
+            after: layoutAfter,
+            summary: `Layout for ${path}`,
+            status: 'pending',
+            kind: 'dialogue_layout'
+          }
+          results.push({ file: 'layout', ...emitProposal(ctx, layProposal) })
+        }
+
+        const graph = summarizeDialogueGraph(lines, choiceFile)
+        return JSON.stringify({
+          ok: true,
+          path,
+          mode,
+          lineCount: lines.length,
+          choiceNodeCount: Object.keys(choiceFile.nodes).length,
+          openingId: graph.openingId,
+          sequenceChains: graph.sequenceChains,
+          warnings: graph.warnings,
+          writes: results,
+          note: 'Open the *.dialogue.csv tab to see the node canvas. Accept any pending csv card; choices/layout usually auto-write with it.'
+        })
       }
       case 'dialogue_cast_check': {
         const path = String(args.path || '')
@@ -1136,6 +1658,62 @@ export async function runTool(
         ctx.onOpenFile(path, typeof args.line === 'number' ? args.line : undefined)
         return JSON.stringify({ ok: true })
       }
+      case 'list_skills': {
+        return JSON.stringify({
+          skills: listEnabledSkills().map((s) => ({
+            id: s.id,
+            name: s.name,
+            description: s.description
+          }))
+        })
+      }
+      case 'read_skill': {
+        const id = String(args.id || '')
+        const files = Array.isArray(args.files) ? args.files.map(String) : undefined
+        const loaded = loadSkill(id, files)
+        return JSON.stringify(loaded)
+      }
+      case 'web_search': {
+        if (!ctx.webSearchEnabled) {
+          return JSON.stringify({
+            error: 'Web search is disabled. Enable it in Settings → AI → Web search.'
+          })
+        }
+        const query = String(args.query || '')
+        const maxResults =
+          typeof args.maxResults === 'number' ? args.maxResults : ctx.webSearchMaxResults
+        const result = await runWebSearch(ctx.webSearchProvider, query, maxResults)
+        return JSON.stringify(result)
+      }
+      case 'web_research': {
+        if (!ctx.webSearchEnabled) {
+          return JSON.stringify({
+            error: 'Web search is disabled. Enable it in Settings → AI → Web search.'
+          })
+        }
+        const question = String(args.question || '')
+        const queries = Array.isArray(args.queries) ? args.queries.map(String) : undefined
+        const research = await runWebResearch({
+          provider: ctx.webSearchProvider,
+          question,
+          queries,
+          maxQueries: typeof args.maxQueries === 'number' ? args.maxQueries : 3,
+          maxResults:
+            typeof args.maxResults === 'number' ? args.maxResults : ctx.webSearchMaxResults
+        })
+        return JSON.stringify(research)
+      }
+      case 'web_fetch': {
+        if (!ctx.webSearchEnabled) {
+          return JSON.stringify({
+            error: 'Web search is disabled. Enable it in Settings → AI → Web search.'
+          })
+        }
+        const url = String(args.url || '')
+        const maxChars = typeof args.maxChars === 'number' ? args.maxChars : 4000
+        const page = await fetchPageExcerpt(url, Math.min(12_000, Math.max(500, maxChars)))
+        return JSON.stringify(page)
+      }
       default:
         return JSON.stringify({ error: `Unknown tool: ${name}` })
     }
@@ -1148,6 +1726,14 @@ export async function runTool(
 export function applyProposalToDisk(proposal: FileProposal): void {
   const dir = dirname(proposal.absPath)
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  // Empty choices sidecar → delete file (protocol: missing file = linear)
+  if (
+    proposal.after === '' &&
+    proposal.absPath.replace(/\\/g, '/').toLowerCase().endsWith('.dialogue.choices.json')
+  ) {
+    if (existsSync(proposal.absPath)) unlinkSync(proposal.absPath)
+    return
+  }
   writeFileSync(proposal.absPath, proposal.after, 'utf-8')
 }
 
@@ -1164,6 +1750,11 @@ const PLAN_TOOLS = new Set([
   'update_plan_step',
   'continuity_check',
   'dialogue_cast_check',
+  'list_skills',
+  'read_skill',
+  'web_search',
+  'web_research',
+  'web_fetch',
   'open_in_editor'
 ])
 
@@ -1177,13 +1768,36 @@ const OUTLINE_TOOLS = new Set([
   'scene_to_kmind',
   'kmind_to_scene_outline',
   'layout_kmind',
+  'layout_dialogue',
+  'propose_dialogue_graph',
+  'propose_set_dialogue_choices',
+  'propose_reorder_dialogue_lines',
+  'propose_append_dialogue_lines',
   'continuity_check',
+  'dialogue_cast_check',
+  'list_skills',
+  'read_skill',
   'open_in_editor'
 ])
 
-export function getWritingToolsForMode(mode: AgentToolMode): ToolDef[] | undefined {
+export type WritingToolsOpts = {
+  webSearchEnabled?: boolean
+}
+
+export function getWritingToolsForMode(
+  mode: AgentToolMode,
+  opts: WritingToolsOpts = {}
+): ToolDef[] | undefined {
   if (mode === 'ask') return undefined
-  const all = getWritingTools()
+  let all = getWritingTools()
+  if (!opts.webSearchEnabled) {
+    all = all.filter(
+      (t) =>
+        t.function.name !== 'web_search' &&
+        t.function.name !== 'web_research' &&
+        t.function.name !== 'web_fetch'
+    )
+  }
   if (mode === 'agent') return all
   const allow = mode === 'plan' ? PLAN_TOOLS : OUTLINE_TOOLS
   return all.filter((t) => allow.has(t.function.name))
@@ -1202,7 +1816,8 @@ export function modeSystemPrefix(mode: AgentToolMode): string {
       ].join('\n')
     case 'outline':
       return [
-        'MODE: Outline — structure only. Prefer scene_to_kmind and kmind_to_scene_outline.',
+        'MODE: Outline — structure only. Prefer scene_to_kmind and kmind_to_scene_outline for prose maps.',
+        'For Godot dialogue graphs prefer propose_dialogue_graph / layout_dialogue (structure + branching), not long prose rewrites.',
         'Do not rewrite existing long prose. Outline targets should be new/empty markdown. Keep mind maps as trees.'
       ].join('\n')
     default:
@@ -1210,18 +1825,31 @@ export function modeSystemPrefix(mode: AgentToolMode): string {
   }
 }
 
-export function LITERARY_SYSTEM_PROMPT(styleMemo: string, mode: AgentToolMode = 'agent'): string {
+export function LITERARY_SYSTEM_PROMPT(
+  styleMemo: string,
+  mode: AgentToolMode = 'agent',
+  extras?: { skillsCatalog?: string; webSearchEnabled?: boolean }
+): string {
+  const webOn = Boolean(extras?.webSearchEnabled)
   return [
     modeSystemPrefix(mode),
     '',
     'You are KENTUCKY Writing Agent — a literary assistant inside a local writing app.',
     'Help with fiction, scripts, dialogue CSV, outlines, and mind maps.',
     'Prefer Chinese or English to match the user. Be concise and craft-focused.',
-    'Never run shell commands or search the web. Stay inside the opened workspace.',
+    'Never run shell commands. Stay inside the opened workspace for file edits.',
+    webOn
+      ? 'Web search tools are ENABLED. Prefer web_research / web_search; results include snippet + excerpt (fetched page text). If facts are still missing, call web_fetch on the best URL. Cite title+URL from tool results only — never invent sources.'
+      : 'Web search is DISABLED in settings. Do not claim you searched the web; answer from context/knowledge and suggest enabling Web search in Settings if needed.',
+    '',
+    'Skills:',
+    '- When a listed skill matches the task, call read_skill(id) and follow it before improvising.',
+    '- Skills are instruction markdown only — never expect to run skill scripts.',
+    extras?.skillsCatalog?.trim() ? extras.skillsCatalog.trim() : '',
     '',
     'Writes & review (CRITICAL):',
     '- Prose (.md/.txt) and kmind content edits to existing non-empty files, multi-file turns, and dialogue performance batches need user Accept on the change card.',
-    '- New files, writing into empty files, single character upsert, layout_kmind, and small dialogue edits (≤5 lines) may auto-write; tool results say written vs pending.',
+    '- New files, writing into empty files, single character upsert, layout_kmind, layout_dialogue, and small dialogue edits (≤5 lines) may auto-write; tool results say written vs pending.',
     '- If pending: tell the user to Accept/Reject on the card. If written: say it was written. Never invent an Apply step outside the card.',
     '- Do not mass-delete prose unless the user explicitly asks.',
     '',
@@ -1229,7 +1857,16 @@ export function LITERARY_SYSTEM_PROMPT(styleMemo: string, mode: AgentToolMode = 
     '- Cast table is injected as context. Before renaming voices/appearance, call read_characters or lookup_character; explain conflicts before proposing prose edits.',
     '- Continuity / 人设 / contradiction checks → continuity_check (read-only report first). Only write after the user asks to apply fixes.',
     '- Prose → mind map: scene_to_kmind. Mind map → outline md: kmind_to_scene_outline. Prefer these over dumping raw kmind JSON.',
-    '- Dialogue: speaker must be character id. Use propose_append_dialogue_lines / propose_update_dialogue_lines / propose_dialogue_performance / dialogue_cast_check as appropriate.',
+    '',
+    'Dialogue graph (Godot protocol v1.2 — CRITICAL):',
+    '- Disk truth: *.dialogue.csv (11 cols) + optional sibling *.dialogue.choices.json + Kentucky-only *.dialogue.layout.json. speaker = character id.',
+    '- Always call read_dialogue before branching edits (returns sequenceChains, choices, warnings).',
+    '- New / full branching scripts → propose_dialogue_graph (writes csv + choices + layout). Pass stable line ids in choices.after / options.goto; use end:true for leave/end options (do not invent a separate leave field).',
+    '- Patch lines only → propose_update_dialogue_lines / propose_append_dialogue_lines (afterId inserts in sequence) / propose_reorder_dialogue_lines.',
+    '- Patch branches only → propose_set_dialogue_choices. Clear all branches with empty nodes (deletes choices file = linear play).',
+    '- After structural edits, call layout_dialogue if layout was not already written (canvas coordinates; Godot ignores).',
+    '- A line with choices pauses CSV row-order advance; goto jumps by line id. Never put both “next sequence” and choices on the same line in the author’s intent.',
+    '- Performance fields → propose_dialogue_performance. Cast orphans → dialogue_cast_check.',
     '',
     'When editing .kmind, prefer scene_to_kmind or propose_kmind_edit. To fix a tangled map, call layout_kmind.',
     '',

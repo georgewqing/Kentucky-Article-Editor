@@ -18,6 +18,17 @@ export interface AiSettingsView {
   agentMode: AgentMode
   activeProfileId: string
   hasApiKey: boolean
+  webSearchEnabled: boolean
+  webSearchProvider: 'duckduckgo' | 'bing' | 'brave' | 'tavily'
+  webSearchMaxResults: number
+  enabledSkillIds: string[] | null
+}
+
+export interface AiSkillView {
+  id: string
+  name: string
+  description: string
+  enabled: boolean
 }
 
 export interface AiProfileView {
@@ -111,6 +122,10 @@ interface AiState {
   saveSettings: (partial: Partial<AiSettingsView>) => Promise<void>
   setApiKey: (key: string) => Promise<void>
   clearApiKey: () => Promise<void>
+  listSkills: () => Promise<AiSkillView[]>
+  setSkillEnabled: (id: string, enabled: boolean) => Promise<AiSkillView[]>
+  revealSkillsDir: () => Promise<void>
+  importSkillFolder: () => Promise<{ ok: boolean; id?: string; error?: string }>
   send: (text?: string) => Promise<void>
   abort: () => Promise<void>
   retryLast: () => Promise<void>
@@ -407,6 +422,24 @@ export const useAiStore = create<AiState>((set, get) => ({
   clearApiKey: async () => {
     await getPlatform().aiClearKey()
     await get().hydrate()
+  },
+
+  listSkills: async () => {
+    const list = (await getPlatform().aiListSkills()) as AiSkillView[]
+    return list || []
+  },
+
+  setSkillEnabled: async (id, enabled) => {
+    const list = (await getPlatform().aiSetSkillEnabled(id, enabled)) as AiSkillView[]
+    return list || []
+  },
+
+  revealSkillsDir: async () => {
+    await getPlatform().aiRevealSkillsDir()
+  },
+
+  importSkillFolder: async () => {
+    return getPlatform().aiImportSkillFolder()
   },
 
   refreshContextUsage: async () => {

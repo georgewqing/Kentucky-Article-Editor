@@ -1,11 +1,14 @@
 import type { FileProposal } from './chatSessions'
 import type { AiPublicSettings } from './aiSettings'
+import { siblingDialogueCsvPath } from './formats'
 
 export type ProposalKind =
   | 'prose'
   | 'characters'
   | 'dialogue'
   | 'dialogue_performance'
+  | 'dialogue_choices'
+  | 'dialogue_layout'
   | 'kmind'
   | 'kmind_layout'
   | 'other'
@@ -26,11 +29,17 @@ function inferKind(p: FileProposalEx): ProposalKind {
   if (p.kind) return p.kind
   const rel = p.path.replace(/\\/g, '/').toLowerCase()
   if (rel === 'characters.csv' || rel.endsWith('/characters.csv')) return 'characters'
+  if (rel.endsWith('.dialogue.choices.json')) return 'dialogue_choices'
+  if (rel.endsWith('.dialogue.layout.json')) return 'dialogue_layout'
   if (rel.endsWith('.dialogue.csv')) return 'dialogue'
   if (rel.endsWith('.kmind')) return 'kmind'
   const ext = extOf(rel)
   if (ext === '.md' || ext === '.txt') return 'prose'
   return 'other'
+}
+
+function pathKey(abs: string): string {
+  return abs.replace(/\//g, '\\').toLowerCase()
 }
 
 /**
@@ -45,18 +54,28 @@ export function shouldAutoApply(
   if (settings.forceReviewAllWrites) return false
   // New file or writing into an empty file: no review (even in multi-file turns).
   if (!proposal.before.trim()) return true
-  if (turnPaths.size >= 2) return false
 
   const kind = inferKind(proposal)
+  // Pure layout always auto (coords only; same spirit as kmind_layout).
+  if (kind === 'kmind_layout' || kind === 'dialogue_layout') return true
+
+  // Choices sidecar auto when the sibling dialogue.csv was already touched this turn
+  // (graph build writes csv → choices → layout together).
+  if (kind === 'dialogue_choices') {
+    const csv = siblingDialogueCsvPath(proposal.absPath)
+    if (csv && turnPaths.has(pathKey(csv))) return true
+  }
+
+  if (turnPaths.size >= 2) return false
+
   switch (kind) {
     case 'prose':
     case 'kmind':
     case 'dialogue_performance':
+    case 'dialogue_choices':
     case 'other':
       return false
     case 'characters':
-      return true
-    case 'kmind_layout':
       return true
     case 'dialogue': {
       const n = typeof proposal.changeCount === 'number' ? proposal.changeCount : 99

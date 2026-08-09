@@ -166,6 +166,12 @@ const api = {
   }): Promise<unknown> => ipcRenderer.invoke('ai:rejectProposal', payload),
   aiApplyAllProposals: (sessionId: string): Promise<unknown[]> =>
     ipcRenderer.invoke('ai:applyAllProposals', sessionId),
+  aiListSkills: (): Promise<unknown[]> => ipcRenderer.invoke('ai:listSkills'),
+  aiSetSkillEnabled: (id: string, enabled: boolean): Promise<unknown[]> =>
+    ipcRenderer.invoke('ai:setSkillEnabled', id, enabled),
+  aiRevealSkillsDir: (): Promise<boolean> => ipcRenderer.invoke('ai:revealSkillsDir'),
+  aiImportSkillFolder: (): Promise<{ ok: boolean; id?: string; error?: string }> =>
+    ipcRenderer.invoke('ai:importSkillFolder'),
   onAiEvent: (channel: string, cb: (payload: unknown) => void): (() => void) => {
     const handler = (_e: Electron.IpcRendererEvent, payload: unknown): void => cb(payload)
     ipcRenderer.on(channel, handler)

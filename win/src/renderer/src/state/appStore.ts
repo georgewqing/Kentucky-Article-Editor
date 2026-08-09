@@ -4,7 +4,17 @@ import { getPlatform } from '@/platform'
 import { createEmptyKMind, serializeKMind, assetsDirForKmind, type KMindNodeLink } from '@/editors/kmind'
 import { contentIsDirty } from '../../../common/kmindDirty'
 import { flushActiveMindmapViewport } from '@/editors/mindmapViewportFlush'
-import { emptyDialogueCsv, isDialoguePath, isCharactersPath, dialogueMetaPathFor, serializeDialogueFileMeta, dialogueFileNameFromMeta } from '@/editors/dialogueCsv'
+import { flushActiveDialogueSidecars } from '@/editors/dialogueSidecarFlush'
+import {
+  emptyDialogueCsv,
+  isDialoguePath,
+  isCharactersPath,
+  dialogueMetaPathFor,
+  dialogueChoicesPathFor,
+  dialogueLayoutPathFor,
+  serializeDialogueFileMeta,
+  dialogueFileNameFromMeta
+} from '@/editors/dialogueCsv'
 import i18n from '@/i18n'
 import { askUnsavedConfirm } from '@/state/unsavedDialogStore'
 
@@ -189,6 +199,35 @@ function parseRecent(raw: string): RecentWorkspace[] {
 
 function pathsEqual(a: string, b: string): boolean {
   return a.replace(/\//g, '\\').toLowerCase() === b.replace(/\//g, '\\').toLowerCase()
+}
+
+/** Best-effort rename/delete of dialogue sidecar files (meta, choices, layout). */
+async function syncDialogueSidecars(
+  oldCsvPath: string,
+  newCsvPath: string | null
+): Promise<void> {
+  const platform = getPlatform()
+  const pairs = [
+    [dialogueMetaPathFor(oldCsvPath), newCsvPath ? dialogueMetaPathFor(newCsvPath) : null],
+    [dialogueChoicesPathFor(oldCsvPath), newCsvPath ? dialogueChoicesPathFor(newCsvPath) : null],
+    [dialogueLayoutPathFor(oldCsvPath), newCsvPath ? dialogueLayoutPathFor(newCsvPath) : null]
+  ] as const
+  for (const [oldPath, newPath] of pairs) {
+    try {
+      if (!(await platform.exists(oldPath))) continue
+      if (!newPath) {
+        await platform.delete(oldPath)
+        continue
+      }
+      if (await platform.exists(newPath)) {
+        await platform.delete(oldPath)
+      } else {
+        await platform.rename(oldPath, newPath)
+      }
+    } catch {
+      /* best-effort */
+    }
+  }
 }
 
 function newWorkspaceId(): string {
@@ -717,6 +756,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!tab) return false
     // Mind map: fold current pan/zoom into buffer before writing disk.
     if (tab.kind === 'mindmap') flushActiveMindmapViewport()
+    if (tab.kind === 'dialogue') await flushActiveDialogueSidecars()
     const latest = get().tabs.find((t) => t.id === tabId)
     if (!latest) return false
     try {
@@ -995,22 +1035,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       await platform.rename(targetPath, newPath)
 
       if (isDialoguePath(targetPath)) {
-        const oldMeta = dialogueMetaPathFor(targetPath)
-        try {
-          if (await platform.exists(oldMeta)) {
-            if (isDialoguePath(newPath)) {
-              const newMeta = dialogueMetaPathFor(newPath)
-              if (!(await platform.exists(newMeta))) {
-                await platform.rename(oldMeta, newMeta)
-              } else {
-                await platform.delete(oldMeta)
-              }
-            } else {
-              await platform.delete(oldMeta)
-            }
-          }
-        } catch {
-          /* meta best-effort */
+        if (isDialoguePath(newPath)) {
+          await syncDialogueSidecars(targetPath, newPath)
+        } else {
+          await syncDialogueSidecars(targetPath, null)
         }
       }
 
@@ -1092,19 +1120,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       await platform.rename(sourcePath, newPath)
 
       if (isDialoguePath(sourcePath) && isDialoguePath(newPath)) {
-        const oldMeta = dialogueMetaPathFor(sourcePath)
-        try {
-          if (await platform.exists(oldMeta)) {
-            const newMeta = dialogueMetaPathFor(newPath)
-            if (!(await platform.exists(newMeta))) {
-              await platform.rename(oldMeta, newMeta)
-            } else {
-              await platform.delete(oldMeta)
-            }
-          }
-        } catch {
-          /* meta best-effort */
-        }
+        await syncDialogueSidecars(sourcePath, newPath)
       }
 
       if (platform.extname(sourcePath).toLowerCase() === '.kmind') {
@@ -1144,12 +1160,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const platform = getPlatform()
       await platform.delete(targetPath)
       if (isDialoguePath(targetPath)) {
-        const metaPath = dialogueMetaPathFor(targetPath)
-        try {
-          if (await platform.exists(metaPath)) await platform.delete(metaPath)
-        } catch {
-          /* ignore missing meta */
-        }
+        await syncDialogueSidecars(targetPath, null)
       }
       await get().refreshTree()
     } catch {

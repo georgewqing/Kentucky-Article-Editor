@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { BrowserWindow, ipcMain, dialog } from 'electron'
 import {
   clearApiKey,
   hasApiKey,
@@ -34,6 +34,13 @@ import {
   runAgentTurn,
   type EditorContextPayload
 } from './agentLoop'
+import {
+  listSkills,
+  setSkillEnabled,
+  revealSkillsDir,
+  importSkillFolder,
+  ensureSkillsDir
+} from './skills'
 
 function winFromEvent(e: Electron.IpcMainInvokeEvent): BrowserWindow | null {
   return BrowserWindow.fromWebContents(e.sender)
@@ -165,5 +172,34 @@ export function registerAiIpc(): void {
 
   ipcMain.handle('ai:applyAllProposals', (_e, sessionId: string) => {
     return applyAllPending(sessionId)
+  })
+
+  ipcMain.handle('ai:listSkills', () => {
+    ensureSkillsDir()
+    return listSkills()
+  })
+
+  ipcMain.handle('ai:setSkillEnabled', (_e, id: string, enabled: boolean) => {
+    return setSkillEnabled(id, enabled)
+  })
+
+  ipcMain.handle('ai:revealSkillsDir', () => {
+    revealSkillsDir()
+    return true
+  })
+
+  ipcMain.handle('ai:importSkillFolder', async (e) => {
+    const win = winFromEvent(e)
+    const res = win
+      ? await dialog.showOpenDialog(win, {
+          properties: ['openDirectory'],
+          title: 'Import skill folder (must contain SKILL.md)'
+        })
+      : await dialog.showOpenDialog({
+          properties: ['openDirectory'],
+          title: 'Import skill folder (must contain SKILL.md)'
+        })
+    if (res.canceled || !res.filePaths[0]) return { ok: false, error: 'Cancelled' }
+    return importSkillFolder(res.filePaths[0])
   })
 }

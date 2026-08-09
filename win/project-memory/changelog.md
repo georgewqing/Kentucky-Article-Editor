@@ -320,6 +320,60 @@
 - `ai-profiles.json` + `ai-keys/<id>.bin`；旧单 Key 迁移；设置页 CRUD
 - 按模式过滤工具与系统提示前缀；附件并入 `mentionedPaths`
 
+## 44. 节点式台词编辑器（Godot choices 协议 v1.2）
+
+### 协议与落盘
+
+- 协议升 **v1.2**：在 v1.1（11 列台词 + meta + 演出列）上增加可选分支旁路 `*.dialogue.choices.json`（`version: 1`，`nodes[after_line_id].options[{ text, goto, end? }]`）
+- Kentucky 专用 `*.dialogue.layout.json`（节点坐标 + End 位置）；**Godot 忽略**
+- 改名 / 删除 / 移动 `*.dialogue.csv` 时同步 **meta + choices + layout**
+- `Ctrl+S`：写 csv；有分支则写 choices，清空则删 choices 文件；写 layout
+- 权威说明书（含执行器接入）：[`extras/godot-kentucky-dialogue/README.md`](../extras/godot-kentucky-dialogue/README.md)
+
+### 编辑器（声明器 UI）
+
+- 去掉聊天气泡列表；整页 **React Flow** 画布（`DialogueEditor` / `DialogueLineNode` / `DialogueInspector` / `dialogueGraphMap`）
+- **顺序边**（下边 handle）→ 保存时重排 CSV 行序；**选项边**（右边 handle）→ choices；**End 汇点** → `end: true`
+- 多根允许：画布最左上根链 = 开场（CSV 第一行）；有选项则禁止同节点再出顺序边；顺序边禁环
+- 检视器改正文 / 说话人 / 演出字段；选项边双击改文案；顶栏：添加台词、适应画布、撤销、创建角色、导出、删除
+- 浅 undo 栈；删被 goto 指向的节点前确认并清理引用
+- 旧仅 csv：打开静默成纵向链；首次保存才写 layout
+
+### UI 抛光
+
+- 连线改为贝塞尔曲线（非直角 smoothstep）
+- 检视器可拖拽调宽（约 200–480px）
+- 小地图复刻思维导图自定义绘制（节点+边、主题色、无默认白框）
+- 选项边标签主题色底+可读字（修复 RF 默认白底白字）
+
+### 保存防清空
+
+- 画布未 hydrate 完成时 **禁止** flush 写空 CSV
+- 若图导出 0 行但缓冲区仍有台词且仍有 line 节点 → 阻止覆盖并提示
+- 打开文件只 hydrate 一次（不依赖每次 content 变更），避免竞态把空图写回磁盘
+
+### 文档与 AI
+
+- product-decisions / architecture / how-to-run / gotchas / win README / project-memory README 同步 v1.2
+- **Godot 插件说明书**整篇重写为 v1.2：choices API、layout 忽略、Keep File、播放伪代码、Kentucky 图映射、自测清单（`extras/godot-kentucky-dialogue/README.md`）
+- `read_dialogue` 附带同 stem choices 摘要；系统提示注明分支在 choices.json
+
+## 45. AI Agent 适配节点式台词图（v1.2）
+
+- `formats.ts`：choices / layout 解析序列化、`layoutDialogueGraph`（分支扇出排版）、`summarizeDialogueGraph`
+- 新工具：`propose_dialogue_graph`（整图 csv+choices+layout）、`propose_set_dialogue_choices`、`propose_reorder_dialogue_lines`、`layout_dialogue`
+- `propose_append_dialogue_lines` 支持 `afterId` 插入；`read_dialogue` 返回 sequenceChains / warnings / hasLayout
+- 审核门：`dialogue_layout` 始终可自动写；`dialogue_choices` 在同轮已写 sibling csv 时可自动写；空 choices → 删文件
+- Outline 模式可结构排版对话图；文学系统提示增加 Dialogue graph（Godot v1.2）专节
+
+## 46. Agent Skills + 多轮联网搜索
+
+- 全局 Skills：`data/ai-skills/<id>/SKILL.md`；设置页启用/导入/打开目录；示例 `literary-voice`
+- 工具：`list_skills` / `read_skill`；catalog 注入系统提示（Ask 也可读到摘要）
+- 联网搜索：设置默认关；`web_search` + `web_research`（自动拆题、串行连搜、合并/重叠/浅层冲突）
+- 提供方：DuckDuckGo（短超时）失败则**自动回退 Bing**；可直接选 Bing；Brave/Tavily 枚举预留；Electron `net.fetch`
+- 无 Shell、不执行 skill 脚本、无通用 web_fetch
+
 ## 其它小修
 
 - 选项卡悬停用 `cursor: pointer`

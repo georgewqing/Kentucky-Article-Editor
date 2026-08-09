@@ -16,9 +16,11 @@ import { getPlatform } from '@/platform'
 import { useAppStore } from '@/state/appStore'
 import {
   isCharactersPath,
+  isDialogueChoicesPath,
+  isDialogueLayoutPath,
   isDialogueMetaPath,
   isDialoguePath,
-  nestDialogueMetaInTree
+  nestDialogueSidecarsInTree
 } from '@/editors/dialogueCsv'
 import { applyStemKeepExt, displayEntryName, splitKnownExt } from './explorerNames'
 import { ChevronRight, Folder, FolderOpen } from 'lucide-react'
@@ -54,6 +56,8 @@ function FileIcon({ entry }: { entry: FileEntry }) {
   if (isDialoguePath(entry.path)) return <span className="tree-icon tree-icon-dialogue">D</span>
   if (isCharactersPath(entry.path)) return <span className="tree-icon tree-icon-chars">C</span>
   if (isDialogueMetaPath(entry.path)) return <span className="tree-icon tree-icon-meta">m</span>
+  if (isDialogueChoicesPath(entry.path)) return <span className="tree-icon tree-icon-meta">ch</span>
+  if (isDialogueLayoutPath(entry.path)) return <span className="tree-icon tree-icon-meta">ly</span>
   const ext = getPlatform().extname(entry.path)
   if (ext === '.kmind') return <span className="tree-icon tree-icon-mind">M</span>
   if (ext === '.md') return <span className="tree-icon tree-icon-md">MD</span>
@@ -297,7 +301,7 @@ export function FileTree({
   const [renameStem, setRenameStem] = useState('')
   const [renameExt, setRenameExt] = useState('')
   const renameRef = useRef<HTMLInputElement>(null)
-  const displayEntries = useMemo(() => nestDialogueMetaInTree(entries), [entries])
+  const displayEntries = useMemo(() => nestDialogueSidecarsInTree(entries), [entries])
   const [rootOpen, setRootOpen] = useState(true)
   const rootName = workspacePath ? getPlatform().basename(workspacePath) : ''
   const [dragPath, setDragPath] = useState<string | null>(null)

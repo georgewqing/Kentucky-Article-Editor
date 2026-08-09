@@ -6,7 +6,7 @@
 
 1. **写作** — `.md` TipTap WYSIWYG + Monaco 源码；软化非 md 文本编辑  
 2. **思维导图** — `.kmind` v2 自由白板（React Flow；链接 / 插图 / 参考图 / 批注）  
-3. **台词对话** — `.dialogue.csv`（11 列，含可选演出声明）+ `characters.csv` 角色卡片编辑器（含 `model_node`）+ `*.dialogue.meta.json`；稳定 id；Godot 同目录热编辑协议 **v1.1** 见 extras；执行器参考 [ai_river_godot](https://github.com/CCFOX12/ai_river_godot)  
+3. **台词对话** — 节点图画布编辑 `.dialogue.csv`（11 列）+ 可选 `*.dialogue.choices.json` + `characters.csv` + meta/layout；Godot 协议 **v1.2** 见 extras；执行器 [ai_river_godot](https://github.com/CCFOX12/ai_river_godot)
 4. **工作台** — 文件夹工作区、活动栏起始页/资源管理器切换、叠加主题色滚动条、多窗口（DocumentHub）、设置主题、灰白应用图标、中英 i18n  
 5. **AI 代理人（v0.2.0）** — OpenAI 兼容；右侧 Cursor 式侧栏；自动写入；黄/蓝脏新建标记；本体 `data/` 存会话与密钥  
 
@@ -17,7 +17,7 @@
 | [changelog.md](./changelog.md) | 按时间线的功能与修复记录（含台词编辑器文件清单） |
 | [gotchas.md](./gotchas.md) | 踩坑与约束（Electron prompt、TipTap、MiniMap、台词 CSV 等） |
 | [how-to-run.md](./how-to-run.md) | 本地运行 / Cursor F5 调试 / **Godot 台词热编辑** |
-| [extras/godot-kentucky-dialogue](../extras/godot-kentucky-dialogue/README.md) | **Godot 接入协议 v1.1**（声明器/执行器、11 列/`model_node`/meta；本仓不含插件代码） |
+| [extras/godot-kentucky-dialogue](../extras/godot-kentucky-dialogue/README.md) | **Godot 接入协议 v1.2**（choices 分支、节点声明器、11 列/meta；本仓不含插件） |
 | [ai_river_godot](https://github.com/CCFOX12/ai_river_godot) | Godot 执行器参考实现（AI River；独立仓库） |
 
 根目录另有简版 [README.md](../README.md)。详细以本目录为准。

@@ -160,6 +160,8 @@ export function AiPanel() {
   const setPanelVisible = useAiStore((s) => s.setPanelVisible)
   const listRef = useRef<HTMLDivElement>(null)
   const historyRef = useRef<HTMLDivElement>(null)
+  /** Plan blocks chat when long — start collapsed. */
+  const [planExpanded, setPlanExpanded] = useState(false)
   useOverlayScroll(listRef)
   useOverlayScroll(historyRef)
 
@@ -253,16 +255,33 @@ export function AiPanel() {
       ) : null}
 
       {session?.plan && session.plan.length > 0 ? (
-        <div className="ai-plan">
-          <div className="ai-plan-title">{t('ai.plan')}</div>
-          <ul>
-            {session.plan.map((step) => (
-              <li key={step.id} className={step.status}>
-                <span className="ai-plan-check">{step.status === 'done' ? '✓' : '○'}</span>
-                {step.text}
-              </li>
-            ))}
-          </ul>
+        <div className={`ai-plan${planExpanded ? ' is-expanded' : ' is-collapsed'}`}>
+          <button
+            type="button"
+            className="ai-plan-toggle"
+            onClick={() => setPlanExpanded((v) => !v)}
+            aria-expanded={planExpanded}
+          >
+            {planExpanded ? (
+              <ChevronDown size={14} aria-hidden />
+            ) : (
+              <ChevronRight size={14} aria-hidden />
+            )}
+            <span className="ai-plan-title">{t('ai.plan')}</span>
+            <span className="ai-plan-meta">
+              {session.plan.filter((s) => s.status === 'done').length}/{session.plan.length}
+            </span>
+          </button>
+          {planExpanded ? (
+            <ul className="ai-plan-list kentucky-overlay-scroll">
+              {session.plan.map((step) => (
+                <li key={step.id} className={step.status}>
+                  <span className="ai-plan-check">{step.status === 'done' ? '✓' : '○'}</span>
+                  {step.text}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
 

@@ -47,3 +47,17 @@ export function getAiKeysDir(): string {
 export function getAiWorkspacePrefsPath(): string {
   return join(getDataDir(), 'ai-workspace-prefs.json')
 }
+
+/** Global Cursor-style agent skills: data/ai-skills/<id>/SKILL.md */
+export function getAiSkillsDir(): string {
+  const dir = join(getDataDir(), 'ai-skills')
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+/** Reserved for Brave/Tavily API keys (not used by DuckDuckGo). */
+export function getAiSearchKeysDir(): string {
+  const dir = join(getDataDir(), 'ai-search-keys')
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  return dir
+}

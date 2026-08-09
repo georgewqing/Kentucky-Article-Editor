@@ -83,6 +83,10 @@ AiPanel / aiStore
 - 本体路径：`appBodyPaths.ts` → 开发 `win/dev-data/data/`，打包为 exe 旁 `data/`
 - 会话：`data/ai-chats/*.json`；设置：`data/ai-settings.json`；密钥：`data/ai-key.bin`
 - `.kmind`：`kmindLayout.ts`（dagre Sugiyama）；`propose_kmind_edit` / `layout_kmind`
+- `.dialogue.csv`：`formats.ts`（choices/layout 解析 + `layoutDialogueGraph`）；`propose_dialogue_graph` / `layout_dialogue` / `propose_set_dialogue_choices` 等
+- Skills：`skills.ts` → `data/ai-skills/`；catalog 注入系统提示；`list_skills` / `read_skill`
+- 联网：`webSearch.ts`（DuckDuckGo）；`web_search` / `web_research`；设置开关
+
 
 ## 应用状态
 
@@ -132,17 +136,19 @@ AiPanel / aiStore
 | `.md` | MarkdownArticleEditor（TipTap WYSIWYG + Monaco 源码） |
 | `.txt` 等文本 | MonacoTextEditor（软化） |
 | `.kmind` | MindMapEditor（React Flow 白板） |
-| `.dialogue.csv` | DialogueEditor（聊天式台词；普通 `.csv` 仍走 Monaco） |
+| `.dialogue.csv` | DialogueEditor（节点图画布；普通 `.csv` 仍走 Monaco） |
 | `characters.csv` | CharactersEditor（角色卡片；basename 匹配） |
 | 工作区根 `characters.csv` | 同上（角色表；台词编辑器也会读写） |
 
 ## 台词 CSV
 
-- **台词文件** `*.dialogue.csv`：列 `id,speaker,text,note,emotion,scene,condition,audio,focus_node,font_size,text_color`（写回始终 11 列；旧 8 列可读）；行序=播放序；`speaker`=角色 id
+- **台词文件** `*.dialogue.csv`：列 `id,speaker,text,note,emotion,scene,condition,audio,focus_node,font_size,text_color`（写回始终 11 列；旧 8 列可读）；行序=无选项时的播放序；`speaker`=角色 id
+- **分支** 可选 `*.dialogue.choices.json`；**布局** `*.dialogue.layout.json`（仅 Kentucky）
 - **角色表** 工作区根 `characters.csv`：`id,name,color,note,model_node`（路径固定不可配）
-- 解析/序列化：`src/renderer/src/editors/dialogueCsv.ts`
+- 解析/序列化：`dialogueCsv.ts` + `dialogueGraphMap.ts`；落盘 flush：`dialogueSidecarFlush.ts`（须 `graphReady`，防空覆盖）
+- UI：`DialogueEditor` 节点画布 + `DialogueLineNode` / `DialogueInspector` / `DialogueMiniMap`
 - 稳定 id：`allocateDialogueId` 在工作区所有 `.dialogue.csv` 内查重顺延
-- Godot 契约：`extras/godot-kentucky-dialogue/README.md`（协议 v1.1）；执行器参考实现：[ai_river_godot](https://github.com/CCFOX12/ai_river_godot)
+- Godot 契约：`extras/godot-kentucky-dialogue/README.md`（协议 **v1.2**）；执行器：[ai_river_godot](https://github.com/CCFOX12/ai_river_godot)
 
 ## `.kmind` 格式（v2）
 

@@ -2308,6 +2308,273 @@ input[type='color'] {
   color: var(--accent);
 }
 
+/* ── Dialogue graph editor (v1.2) ── */
+.dialogue-graph-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg);
+}
+.dialogue-graph-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.dialogue-graph-toolbar-left {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.dialogue-graph-toolbar button {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  color: var(--fg);
+  cursor: pointer;
+}
+.dialogue-graph-toolbar button:hover {
+  background: var(--bg-hover);
+}
+.dialogue-graph-toolbar button.danger {
+  color: var(--danger);
+}
+.dialogue-graph-meta {
+  font-size: 11px;
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 42%;
+}
+.dialogue-graph-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.dialogue-graph-canvas {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.dialogue-graph-canvas .react-flow {
+  background: var(--bg-editor);
+}
+.dialogue-graph-canvas .react-flow__controls {
+  background: var(--bg-elev-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.dialogue-graph-canvas .react-flow__controls-button {
+  background: var(--bg-elev-3);
+  border-bottom: 1px solid var(--border);
+  fill: var(--fg);
+}
+.dialogue-graph-canvas .react-flow__minimap,
+.dialogue-graph-canvas .kmind-minimap,
+.dialogue-graph-canvas .dialogue-minimap {
+  background: var(--bg-elev-3) !important;
+  border: none !important;
+  outline: none !important;
+  border-radius: 0;
+  overflow: hidden;
+  box-shadow: none !important;
+  padding: 0 !important;
+  opacity: 1;
+}
+.dialogue-graph-canvas .react-flow__minimap-svg {
+  display: block;
+}
+.dialogue-graph-canvas .kmind-minimap-node {
+  stroke: none;
+}
+.dialogue-inspector-sash {
+  width: 4px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  align-self: stretch;
+  background: transparent;
+}
+.dialogue-inspector-sash:hover,
+.dialogue-inspector-sash:active {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.dialogue-inspector-wrap {
+  flex-shrink: 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.dialogue-flow-node {
+  min-width: 180px;
+  max-width: 240px;
+  padding: 8px 10px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-3);
+  color: var(--fg);
+  font-size: 12px;
+  box-shadow: 0 2px 8px color-mix(in srgb, #000 25%, transparent);
+}
+.dialogue-flow-node.selected,
+.dialogue-flow-end.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.dialogue-flow-node.is-opening {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+.dialogue-flow-node-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+  padding-left: 6px;
+  border-left: 3px solid var(--accent);
+}
+.dialogue-flow-speaker {
+  font-weight: 600;
+  font-size: 11px;
+}
+.dialogue-flow-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg));
+  color: var(--fg-bright);
+}
+.dialogue-flow-badge.muted {
+  background: var(--bg-hover);
+  color: var(--fg-muted);
+}
+.dialogue-flow-node-body {
+  color: var(--fg);
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.dialogue-flow-end {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-4);
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.dialogue-handle {
+  width: 8px !important;
+  height: 8px !important;
+  background: var(--fg-muted) !important;
+  border: 1px solid var(--bg) !important;
+}
+.dialogue-handle-seq {
+  background: var(--accent) !important;
+}
+.dialogue-handle-choice {
+  background: color-mix(in srgb, var(--accent) 40%, #e2c08d) !important;
+}
+.dialogue-edge-sequence .react-flow__edge-path {
+  stroke: var(--fg-muted);
+  stroke-width: 1.5;
+}
+.dialogue-edge-choice .react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+/* Edge label: RF defaults to white rect + dark text — restyle for dark/light theme */
+.dialogue-graph-canvas .react-flow__edge-textbg {
+  fill: var(--bg-elev-3) !important;
+  stroke: var(--border) !important;
+}
+.dialogue-graph-canvas .react-flow__edge-text {
+  fill: var(--fg-bright) !important;
+  font-size: 10px;
+}
+.dialogue-graph-canvas .react-flow__edge-label {
+  background: var(--bg-elev-3) !important;
+  color: var(--fg-bright) !important;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 10px;
+}
+.dialogue-edge-choice .react-flow__edge-text {
+  fill: var(--fg-bright);
+  font-size: 10px;
+}
+.dialogue-inspector {
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  background: var(--bg-elev-1);
+  padding: 12px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+}
+.dialogue-inspector.is-empty {
+  color: var(--fg-muted);
+  font-size: 12px;
+  justify-content: center;
+}
+.dialogue-inspector h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-bright);
+}
+.dialogue-inspector-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+.dialogue-inspector-field input,
+.dialogue-inspector-field textarea,
+.dialogue-inspector-field select {
+  font: inherit;
+  font-size: 12px;
+  color: var(--fg);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.dialogue-inspector-field input.is-readonly {
+  opacity: 0.7;
+}
+.dialogue-inspector-staging {
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+.dialogue-inspector-staging summary {
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
 .dialogue-composer {
   flex-shrink: 0;
   border-top: 1px solid var(--border);
@@ -3137,29 +3404,64 @@ input[type='color'] {
 
 .ai-plan {
   margin: 0 10px 8px;
-  padding: 8px;
+  padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg);
   flex-shrink: 0;
+  max-height: min(36vh, 280px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.ai-plan.is-collapsed {
+  max-height: none;
+}
+.ai-plan-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  color: var(--fg-bright);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.ai-plan-toggle:hover {
+  color: var(--accent);
 }
 .ai-plan-title {
   font-weight: 600;
-  margin-bottom: 6px;
-}
-.ai-plan ul {
-  list-style: none;
+  flex: 1;
   margin: 0;
+}
+.ai-plan-meta {
+  font-size: 11px;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.ai-plan-list {
+  list-style: none;
+  margin: 6px 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
 }
 .ai-plan li {
   display: flex;
   gap: 6px;
   align-items: flex-start;
   color: var(--fg-muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 .ai-plan li.done {
   color: var(--fg);

@@ -114,6 +114,10 @@ export interface Platform {
   aiApplyProposal(payload: { sessionId: string; proposalId: string }): Promise<unknown>
   aiRejectProposal(payload: { sessionId: string; proposalId: string }): Promise<unknown>
   aiApplyAllProposals(sessionId: string): Promise<unknown[]>
+  aiListSkills(): Promise<unknown[]>
+  aiSetSkillEnabled(id: string, enabled: boolean): Promise<unknown[]>
+  aiRevealSkillsDir(): Promise<boolean>
+  aiImportSkillFolder(): Promise<{ ok: boolean; id?: string; error?: string }>
   onAiEvent(channel: string, cb: (payload: unknown) => void): () => void
 }
 
@@ -262,6 +266,10 @@ export function createElectronPlatform(): Platform {
     aiApplyProposal: (payload) => api.aiApplyProposal(payload),
     aiRejectProposal: (payload) => api.aiRejectProposal(payload),
     aiApplyAllProposals: (sessionId) => api.aiApplyAllProposals(sessionId),
+    aiListSkills: () => api.aiListSkills(),
+    aiSetSkillEnabled: (id, enabled) => api.aiSetSkillEnabled(id, enabled),
+    aiRevealSkillsDir: () => api.aiRevealSkillsDir(),
+    aiImportSkillFolder: () => api.aiImportSkillFolder(),
     onAiEvent: (channel, cb) => api.onAiEvent(channel, cb)
   }
 }
@@ -374,6 +382,10 @@ export function createBrowserStubPlatform(): Platform {
     aiApplyProposal: async () => null,
     aiRejectProposal: async () => null,
     aiApplyAllProposals: async () => [],
+    aiListSkills: async () => [],
+    aiSetSkillEnabled: async () => [],
+    aiRevealSkillsDir: async () => true,
+    aiImportSkillFolder: async () => ({ ok: false, error: 'Not available' }),
     onAiEvent: () => () => undefined
   }
 }

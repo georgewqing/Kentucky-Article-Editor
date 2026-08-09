@@ -108,18 +108,20 @@ YourGodotProject/
     characters.csv          ← 含 model_node
     tavern_intro.dialogue.csv
     tavern_intro.dialogue.meta.json
-  scripts/
-    dialogue_loader.gd      ← 运行时读 res://dialogue/...
+    tavern_intro.dialogue.choices.json   ← 可选，玩家分支
+    tavern_intro.dialogue.layout.json    ← 可选，仅 Kentucky 画布坐标
   addons/
-    (ai_river_godot 等)     ← 监视/重载；参考仓库见上
+    louisville_station/     ← 参考：ai_river_godot 执行器
 ```
 
 1. 在 Kentucky 打开 `dialogue/`（因 `characters.csv` 固定在工作区根）。
 2. **新建台词**信息卡：只填 Godot 场景 + 对话标识 → 自动生成文件名并写 `*.dialogue.meta.json`（卡上无改名入口）。
-3. **创建角色**须填模型节点名 `model_node`（写入 `characters.csv`）；也可直接打开 `characters.csv` 用卡片页管理；台词里可「编辑当前角色」。
-4. 需要改文件名：资源管理器 **右键 → 重命名**（台词会同步改 meta）。
-5. 编辑 `.dialogue.csv`（详情里可展开「Godot 演出」填对焦/字号/颜色），`Ctrl+S` → 磁盘立刻更新（写回 11 列）。
-6. 游戏直接读这些路径；**不要**再维护一份平行导出副本当热编辑主路径。
-7. **完整协议 v1.1**：[`extras/godot-kentucky-dialogue/README.md`](../extras/godot-kentucky-dialogue/README.md)。
+3. **创建角色**须填模型节点名 `model_node`（顶栏「创建角色」或打开 `characters.csv` 卡片页）。
+4. 需要改文件名：资源管理器 **右键 → 重命名**（同步 meta / choices / layout）。
+5. 在**节点画布**编辑：下边拉**顺序边**，右边拉**选项边**（可连 End）；右侧检视器改正文与 Godot 演出；`Ctrl+S` → csv + choices + layout。
+6. Godot（Louisville Station 等）读同一目录；检查器填 `dialogue_dir` + `dialogue_id`；**不要**把导出 CSV 当热编辑主路径。
+7. **完整协议 / 插件说明书 v1.2**：[`extras/godot-kentucky-dialogue/README.md`](../extras/godot-kentucky-dialogue/README.md)。
+
+保存注意：画布未加载完时不要依赖立刻 `Ctrl+S` 写盘；若提示图与缓冲区不一致，先确认画布已显示台词再保存（防空覆盖）。
 
 类比：Kentucky ≈ 外部 DCC；Godot 读盘——联动靠路径，不是进程间推送。

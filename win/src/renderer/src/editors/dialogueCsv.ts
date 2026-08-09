@@ -63,6 +63,28 @@ export const CHARACTERS_HEADER = 'id,name,color,note,model_node' as const
 
 export const DIALOGUE_EXT = '.dialogue.csv'
 export const DIALOGUE_META_EXT = '.dialogue.meta.json'
+export const DIALOGUE_CHOICES_EXT = '.dialogue.choices.json'
+export const DIALOGUE_LAYOUT_EXT = '.dialogue.layout.json'
+
+/** Virtual End sink id — never written to CSV. */
+export const DIALOGUE_END_NODE_ID = '__kentucky_end__'
+
+export interface DialogueChoiceOption {
+  text: string
+  goto: string
+  end?: boolean
+}
+
+export interface DialogueChoicesFile {
+  version: 1
+  nodes: Record<string, { options: DialogueChoiceOption[] }>
+}
+
+export interface DialogueLayoutFile {
+  version: 1
+  nodes: Record<string, { x: number; y: number }>
+  end?: { x: number; y: number }
+}
 
 export function isDialoguePath(path: string): boolean {
   return path.replace(/\\/g, '/').toLowerCase().endsWith(DIALOGUE_EXT)
@@ -72,60 +94,178 @@ export function isDialogueMetaPath(path: string): boolean {
   return path.replace(/\\/g, '/').toLowerCase().endsWith(DIALOGUE_META_EXT)
 }
 
+export function isDialogueChoicesPath(path: string): boolean {
+  return path.replace(/\\/g, '/').toLowerCase().endsWith(DIALOGUE_CHOICES_EXT)
+}
+
+export function isDialogueLayoutPath(path: string): boolean {
+  return path.replace(/\\/g, '/').toLowerCase().endsWith(DIALOGUE_LAYOUT_EXT)
+}
+
+export function isDialogueSidecarPath(path: string): boolean {
+  return isDialogueMetaPath(path) || isDialogueChoicesPath(path) || isDialogueLayoutPath(path)
+}
+
 /** Workspace role table: basename must be characters.csv (any folder). */
 export function isCharactersPath(path: string): boolean {
   const base = path.replace(/\\/g, '/').split('/').pop() || ''
   return base.toLowerCase() === 'characters.csv'
 }
 
-/** `foo.dialogue.csv` → `foo.dialogue.meta.json` */
-export function dialogueMetaPathFor(dialogueCsvPath: string): string {
+function replaceDialogueExt(dialogueCsvPath: string, nextExt: string): string {
   const lower = dialogueCsvPath.toLowerCase()
   const idx = lower.lastIndexOf(DIALOGUE_EXT)
   if (idx >= 0 && idx === lower.length - DIALOGUE_EXT.length) {
-    return dialogueCsvPath.slice(0, idx) + DIALOGUE_META_EXT
+    return dialogueCsvPath.slice(0, idx) + nextExt
   }
-  return dialogueCsvPath + DIALOGUE_META_EXT
+  return dialogueCsvPath + nextExt
+}
+
+/** `foo.dialogue.csv` → `foo.dialogue.meta.json` */
+export function dialogueMetaPathFor(dialogueCsvPath: string): string {
+  return replaceDialogueExt(dialogueCsvPath, DIALOGUE_META_EXT)
+}
+
+export function dialogueChoicesPathFor(dialogueCsvPath: string): string {
+  return replaceDialogueExt(dialogueCsvPath, DIALOGUE_CHOICES_EXT)
+}
+
+export function dialogueLayoutPathFor(dialogueCsvPath: string): string {
+  return replaceDialogueExt(dialogueCsvPath, DIALOGUE_LAYOUT_EXT)
 }
 
 function normPathKey(path: string): string {
   return path.replace(/\\/g, '/').toLowerCase()
 }
 
+function emptyDialogueChoices(): DialogueChoicesFile {
+  return { version: 1, nodes: {} }
+}
+
+export function parseDialogueChoices(text: string): DialogueChoicesFile {
+  try {
+    const raw = JSON.parse(text) as Partial<DialogueChoicesFile>
+    const nodes: DialogueChoicesFile['nodes'] = {}
+    if (raw && raw.nodes && typeof raw.nodes === 'object') {
+      for (const [lineId, node] of Object.entries(raw.nodes)) {
+        const id = String(lineId || '').trim()
+        if (!id || !node || !Array.isArray(node.options)) continue
+        const options: DialogueChoiceOption[] = []
+        for (const opt of node.options) {
+          if (!opt || typeof opt !== 'object') continue
+          const textVal = typeof opt.text === 'string' ? opt.text.trim() : ''
+          if (!textVal) continue
+          const end = Boolean(opt.end)
+          const goto = typeof opt.goto === 'string' ? opt.goto.trim() : ''
+          options.push(end ? { text: textVal, goto: '', end: true } : { text: textVal, goto })
+        }
+        if (options.length) nodes[id] = { options }
+      }
+    }
+    return { version: 1, nodes }
+  } catch {
+    return emptyDialogueChoices()
+  }
+}
+
+/** Empty nodes → empty string (caller should delete file). */
+export function serializeDialogueChoices(file: DialogueChoicesFile): string {
+  const nodes: DialogueChoicesFile['nodes'] = {}
+  for (const [id, node] of Object.entries(file.nodes || {})) {
+    const options = (node?.options || [])
+      .map((o) => {
+        const text = (o.text || '').trim()
+        if (!text) return null
+        if (o.end) return { text, goto: '', end: true as const }
+        return { text, goto: (o.goto || '').trim() }
+      })
+      .filter(Boolean) as DialogueChoiceOption[]
+    if (options.length) nodes[id] = { options }
+  }
+  if (!Object.keys(nodes).length) return ''
+  return JSON.stringify({ version: 1, nodes }, null, 2) + '\n'
+}
+
+export function parseDialogueLayout(text: string): DialogueLayoutFile {
+  try {
+    const raw = JSON.parse(text) as Partial<DialogueLayoutFile>
+    const nodes: DialogueLayoutFile['nodes'] = {}
+    if (raw?.nodes && typeof raw.nodes === 'object') {
+      for (const [id, pos] of Object.entries(raw.nodes)) {
+        if (!id || !pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') continue
+        nodes[id] = { x: pos.x, y: pos.y }
+      }
+    }
+    const end =
+      raw?.end && typeof raw.end.x === 'number' && typeof raw.end.y === 'number'
+        ? { x: raw.end.x, y: raw.end.y }
+        : undefined
+    return { version: 1, nodes, end }
+  } catch {
+    return { version: 1, nodes: {} }
+  }
+}
+
+export function serializeDialogueLayout(file: DialogueLayoutFile): string {
+  const nodes: DialogueLayoutFile['nodes'] = {}
+  for (const [id, pos] of Object.entries(file.nodes || {})) {
+    if (!id || id === DIALOGUE_END_NODE_ID) continue
+    if (typeof pos?.x !== 'number' || typeof pos?.y !== 'number') continue
+    nodes[id] = { x: pos.x, y: pos.y }
+  }
+  const out: DialogueLayoutFile = { version: 1, nodes }
+  if (file.end && typeof file.end.x === 'number' && typeof file.end.y === 'number') {
+    out.end = { x: file.end.x, y: file.end.y }
+  }
+  return JSON.stringify(out, null, 2) + '\n'
+}
+
 /**
- * Display-only: nest sibling `*.dialogue.meta.json` under matching `*.dialogue.csv`
- * (disk layout unchanged). Orphan meta files stay as siblings.
+ * Display-only: nest sibling meta / choices / layout under matching `*.dialogue.csv`.
+ * Orphan sidecars stay as siblings.
  */
-export function nestDialogueMetaInTree(entries: FileEntry[]): FileEntry[] {
+export function nestDialogueSidecarsInTree(entries: FileEntry[]): FileEntry[] {
   const walk = (list: FileEntry[]): FileEntry[] => {
     const normalized = list.map((e) =>
       e.isDirectory && e.children ? { ...e, children: walk(e.children) } : e
     )
 
-    const metaByKey = new Map<string, FileEntry>()
+    const byKey = new Map<string, FileEntry>()
     for (const e of normalized) {
-      if (!e.isDirectory && isDialogueMetaPath(e.path)) {
-        metaByKey.set(normPathKey(e.path), e)
-      }
+      if (e.isDirectory || !isDialogueSidecarPath(e.path)) continue
+      byKey.set(normPathKey(e.path), e)
     }
 
     const claimed = new Set<string>()
     for (const e of normalized) {
       if (e.isDirectory || !isDialoguePath(e.path)) continue
-      const key = normPathKey(dialogueMetaPathFor(e.path))
-      if (metaByKey.has(key)) claimed.add(key)
+      for (const p of [
+        dialogueMetaPathFor(e.path),
+        dialogueChoicesPathFor(e.path),
+        dialogueLayoutPathFor(e.path)
+      ]) {
+        const key = normPathKey(p)
+        if (byKey.has(key)) claimed.add(key)
+      }
     }
 
     const out: FileEntry[] = []
     for (const e of normalized) {
-      if (!e.isDirectory && isDialogueMetaPath(e.path) && claimed.has(normPathKey(e.path))) {
+      if (!e.isDirectory && isDialogueSidecarPath(e.path) && claimed.has(normPathKey(e.path))) {
         continue
       }
       if (!e.isDirectory && isDialoguePath(e.path)) {
-        const key = normPathKey(dialogueMetaPathFor(e.path))
-        const meta = metaByKey.get(key)
-        if (meta) {
-          out.push({ ...e, children: [meta] })
+        const children: FileEntry[] = []
+        for (const p of [
+          dialogueMetaPathFor(e.path),
+          dialogueChoicesPathFor(e.path),
+          dialogueLayoutPathFor(e.path)
+        ]) {
+          const side = byKey.get(normPathKey(p))
+          if (side) children.push(side)
+        }
+        if (children.length) {
+          out.push({ ...e, children })
           continue
         }
       }
@@ -134,6 +274,11 @@ export function nestDialogueMetaInTree(entries: FileEntry[]): FileEntry[] {
     return out
   }
   return walk(entries)
+}
+
+/** @deprecated Use nestDialogueSidecarsInTree */
+export function nestDialogueMetaInTree(entries: FileEntry[]): FileEntry[] {
+  return nestDialogueSidecarsInTree(entries)
 }
 
 export function parseDialogueFileMeta(text: string): DialogueFileMeta | null {

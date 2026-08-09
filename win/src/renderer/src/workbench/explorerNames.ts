@@ -1,5 +1,7 @@
 /** Known multi-part / single extensions stripped from explorer display & rename stem. */
 const STRIP_EXTS = [
+  '.dialogue.layout.json',
+  '.dialogue.choices.json',
   '.dialogue.meta.json',
   '.dialogue.csv',
   '.kmind',

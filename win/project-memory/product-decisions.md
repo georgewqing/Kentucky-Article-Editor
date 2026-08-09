@@ -18,7 +18,7 @@
 | 导图批注 | 每节点一段纯文本「黑下巴」；右键添加后立刻展开可打字；展开态写入 `.kmind`；下巴绝对定位在节点下沿，不计入 height/连线；**节点原描边保留**，下巴另延长同风格描边；中间分割线保留圆角；批注区黑底、随字增高、无滚动条；可选批注超链（文字后小图标）；不做多条/时间戳/MD/全局展开/搜索 |
 | 编辑器 | **`.md`**：TipTap 所见即所得 + Monaco 源码切换；**其它文本**：软化 Monaco |
 | 字数 | **不计空白的字符数**（中英数字标点均按码点计 1，见 `wordCount.ts`）；UI「N 字」 |
-| 资源管理器 | 右键「在文件资源管理器中显示」：文件→定位并选中；**文件夹/工作区→打开该目录本身**（`openPath`，勿用 `showItemInFolder` 以免进上一级）；台词 `*.dialogue.meta.json` 在树里**视觉挂在**对应 csv 下（默认折叠；磁盘同级） |
+| 资源管理器 | 右键「在文件资源管理器中显示」：文件→定位并选中；**文件夹/工作区→打开该目录本身**（`openPath`，勿用 `showItemInFolder` 以免进上一级）；台词 meta/choices/layout 在树里**视觉挂在**对应 csv 下（默认折叠；磁盘同级） |
 | 语言 | 中文 + 英文 UI |
 | Markdown 预览 | **不设分屏预览**；WYSIWYG 即阅读/写作态；源码模式看原始 Markdown |
 | 多窗口 | Blender 式：**新建主窗口**=完整工作台+同工作区+空标签；**新建窗口**=精简单文件窗（无顶栏菜单，含 `.kmind`）；同路径正文经 DocumentHub **实时共享**；欢迎页无活动文件时「新建窗口」灰显；关最后主窗退出；无主窗持有该工作区时关掉其精简窗 |
@@ -26,10 +26,10 @@
 | 分发 | Windows：**目录版** `release/KENTUCKY-<version>/`（内含 `KENTUCKY.exe`）；可选 `npm run dist:portable` 单文件。图标 `build/icon.png`（灰白 K，圆角） |
 | 拼写检查 | 正文关闭浏览器拼写检查（无红波浪线） |
 | 帮助链接 | 「了解 KENTUCKY」→ https://github.com/CCFOX12/Kentucky-Article-Editor |
-| 台词对话 | **独立功能**（非 Markdown 混写）；磁盘真相 = `*.dialogue.csv`（11 列）+ 工作区根固定 `characters.csv`；UI 类聊天；`speaker` 存角色 **id**；稳定 id `{scene\|stem}_{charId}_{###}`；改字/演出字段默认不改 id；仅「复制为新台词」生成新 id（并复制演出三字段）；工作区级 id 冲突顺延并 toast；列 `emotion` UI 称「配音」 |
-| 台词角色 | 须先创建再 `@`；可删（警告）；孤儿台词显示「未知角色」；列：`id,name,color,note,model_node`（无 `display_name`；创建时 `model_node` 必填）；打开 `characters.csv` 用 **CharactersEditor 卡片 UI**（非 Monaco） |
-| 台词导出 | 完整管线 CSV（可选 emotion/condition/audio/focus_node/font_size/text_color）+ 本地化 `keys,<lang>`（仅 id+text）；范围=当前文件或勾选句子；不做全工作区一键导出 |
-| Godot 热编辑 | **同路径磁盘联动**（非进程内 API）：打开工程内 `dialogue/` 当工作区；`Ctrl+S` 写盘。协议 **v1.1**：台词含可选演出声明 `focus_node`/`font_size`/`text_color`（写回始终 11 列；旧 8 列可读）。新建台词写 `*.dialogue.meta.json`（`godot_scene`/`dialogue_id`），文件名自动 `场景_对话.dialogue.csv`，改名走资源管理器重命名（同步 meta）。Kentucky=声明器；执行器参考实现见 [ai_river_godot](https://github.com/CCFOX12/ai_river_godot)（Kentucky 本仓不附带插件）。契约见 `extras/godot-kentucky-dialogue/README.md`。不做双向实时协议 |
+| 台词对话 | **独立功能**；磁盘真相 = `*.dialogue.csv`（11 列）+ 可选 `*.dialogue.choices.json` + 工作区根 `characters.csv`；**节点图画布**（顺序边/选项边/End；贝塞尔连线；可调宽检视器；思维导图式小地图）；`speaker` 存角色 **id**；布局 `*.dialogue.layout.json` 仅 Kentucky；保存须防未就绪写空 CSV |
+| 台词角色 | 顶栏创建；检视器选 speaker；列：`id,name,color,note,model_node`（创建时 `model_node` 必填）；打开 `characters.csv` 用 CharactersEditor |
+| 台词导出 | 完整管线 CSV + 本地化 `keys,<lang>`；挂画布工具栏 |
+| Godot 热编辑 | **同路径磁盘**；协议 **v1.2**。执行器读 csv/meta/characters/**choices**（忽略 layout）。参考 [ai_river_godot](https://github.com/CCFOX12/ai_river_godot) Louisville Station。完整说明书：`extras/godot-kentucky-dialogue/README.md`。不做 IPC / 表达式引擎 / 图格式替代 CSV |
 | 活动栏 | 视窗键=起始页（`home`，不关工作区、隐藏侧栏）；**工程徽章列表**（可多开）+ 末尾「+」开文件夹；**AI 对话键**=右侧 Agent 栏（`Ctrl+L`）；齿轮=设置 |
 | 多工程 | 同窗口多文件夹；切换保留各工程标签/树；聊天与面板记忆按路径隔离 |
 | 工作区布局 | Cursor 工作区容器含两个软件根：`win/`（本 Electron 应用）与 `android/`（独立 Capacitor）；互不共享源码树 |
@@ -52,8 +52,12 @@
 | 会话 | 多会话 JSON：`data/ai-chats/`；**按工作区路径严格隔离**（列表/打开均过滤，互不互通） |
 | 面板开关 | **绑定工作区**：启动默认关闭；`data/ai-workspace-prefs.json` 记住各工作区是否打开；无工作区时不可开 AI |
 | 上下文 | **L5**：当前文件/选区/`@` + 自动角色表摘要；上下文占用进度条；接近满时禁止静默丢弃历史 |
-| 工具 | 只读 list/read；**L1** continuity_check；**L2** 角色驱动；**L3** scene↔kmind；**L4** 台词追加/演出/cast_check；`.kmind` + dagre；无 Shell/Git/联网 |
+| 工具 | 只读 list/read；**L1** continuity_check；**L2** 角色驱动；**L3** scene↔kmind；**L4** 台词图；`.kmind` + dagre；**Skills**（`data/ai-skills/`）；可选 **联网搜索**（默认关，DuckDuckGo；Brave/Tavily 预留）；无 Shell/Git |
 | 导图可读性 | AI 须建树/分层 DAG（非角色↔场景全连接网）；缺省 Sugiyama/LR；乱图可 `layout_kmind` |
+| 台词图能力 | AI 按协议 **v1.2** 读写：`read_dialogue` 看链/分支；`propose_dialogue_graph` 整图（csv+choices+layout）；`propose_set_dialogue_choices` / `layout_dialogue` / 行级增改排；speaker=角色 id |
+| Skills | 全局 `data/ai-skills/<id>/SKILL.md`；设置开关/导入；catalog 注入提示；`list_skills` / `read_skill`；**不**执行 scripts |
+| 联网搜索 | 设置 `webSearchEnabled`（默认关）；`web_search` + `web_research`；DuckDuckGo 失败自动回退 Bing；可直选 Bing |
+
 | 加载态 | 思考中 / 调工具时必须有可见指示，禁止长时间空白像卡死 |
 | 文案 | pending 提案引导用户在卡片上接受/拒绝；自动类标明已写入 |
 | 费用 | **不做**账单累计 |
@@ -98,4 +102,5 @@
 - 多窗口：精简窗内换文件、跨窗同步光标/选区、主窗标签列表镜像
 - 台词：分支/条件可视化、表达式编辑器、Godot **双向实时协议**、多语言对照编辑、音频播放/资源库、Markdown 内嵌台词、`characters.csv` 路径可配置、全工作区台词一键导出、Kentucky 内预览对焦/校验节点、在本仓附带/打包 Godot 插件  
   （执行器参考：[ai_river_godot](https://github.com/CCFOX12/ai_river_godot)；同目录磁盘联动 ≠ Kentucky 内嵌引擎；协议 v1.1 见 extras）
-- AI：命令面板式入口、扩展市场、Shell/Git 工具、网页检索、费用账单、云同步 Key、正文↔导图自动双向同步、Composer 整页多文件编辑器、Cursor Tab 补全
+- AI：命令面板式入口、扩展市场、Shell/Git 工具、费用账单、云同步 Key、正文↔导图自动双向同步、Composer 整页多文件编辑器、Cursor Tab 补全、工作区 skills、执行 skill 脚本、通用网页 fetch/浏览器自动化
+  （联网搜索：设置可选开启；Brave/Tavily 真实请求尚未实现）

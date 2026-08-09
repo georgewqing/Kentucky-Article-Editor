@@ -4,37 +4,72 @@ import {
   useMemo,
   useRef,
   useState,
-  type DragEvent,
   type FormEvent,
-  type KeyboardEvent
+  type MouseEvent as ReactMouseEvent
 } from 'react'
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  ReactFlowProvider,
+  useEdgesState,
+  useNodesState,
+  useReactFlow,
+  ConnectionMode,
+  type Connection,
+  type Edge,
+  type OnSelectionChangeParams
+} from '@xyflow/react'
+import '@xyflow/react/dist/style.css'
 import { useTranslation } from 'react-i18next'
 import type { FileEntry } from '@/platform'
 import { getPlatform } from '@/platform'
 import { useAppStore } from '@/state/appStore'
+import { useSettingsStore } from '@/state/settingsStore'
 import { askConfirm } from '@/state/confirmDialogStore'
-import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 import {
   allocateDialogueId,
   CHARACTER_COLOR_PRESETS,
   type Character,
   type DialogueLine,
+  dialogueChoicesPathFor,
+  dialogueLayoutPathFor,
+  dialogueMetaPathFor,
+  DIALOGUE_END_NODE_ID,
   emptyDialogueCsv,
   exportLocaleCsv,
   exportPipelineCsv,
   fileStemFromPath,
   isDialoguePath,
-  dialogueMetaPathFor,
-  normalizeFontSize,
-  normalizeTextColor,
   parseCharactersCsv,
+  parseDialogueChoices,
   parseDialogueCsv,
   parseDialogueFileMeta,
-  type DialogueFileMeta,
+  parseDialogueLayout,
   serializeCharactersCsv,
+  serializeDialogueChoices,
   serializeDialogueCsv,
-  slugifyCharacterId
+  serializeDialogueLayout,
+  slugifyCharacterId,
+  type DialogueFileMeta
 } from './dialogueCsv'
+import {
+  diskFromGraph,
+  graphFromDisk,
+  hasChoiceOut,
+  hasSequenceOut,
+  listBrokenRefsIfDelete,
+  refreshNodePresentation,
+  wouldCreateSequenceCycle,
+  type DialogueFlowEdge,
+  type DialogueFlowNode,
+  CHOICE_EDGE_LABEL_STYLE,
+  CHOICE_EDGE_LABEL_BG_STYLE
+} from './dialogueGraphMap'
+import { dialogueNodeTypes } from './DialogueLineNode'
+import { DialogueInspector } from './DialogueInspector'
+import { DialogueMiniMap } from './DialogueMiniMap'
+import { setDialogueSidecarFlush } from './dialogueSidecarFlush'
 
 async function collectWorkspaceDialogueIds(
   workspacePath: string | null,
@@ -44,7 +79,6 @@ async function collectWorkspaceDialogueIds(
 ): Promise<Set<string>> {
   const ids = new Set<string>()
   const platform = getPlatform()
-
   const walk = async (entries: FileEntry[]): Promise<void> => {
     for (const e of entries) {
       if (e.isDirectory && e.children) {
@@ -62,11 +96,10 @@ async function collectWorkspaceDialogueIds(
         const raw = await platform.readFile(e.path)
         for (const line of parseDialogueCsv(raw)) ids.add(line.id)
       } catch {
-        /* ignore unreadable files */
+        /* ignore */
       }
     }
   }
-
   if (workspacePath) await walk(fileTree)
   if (extraLines) for (const l of extraLines) ids.add(l.id)
   return ids
@@ -76,34 +109,49 @@ function charactersPath(workspacePath: string): string {
   return getPlatform().joinPath(workspacePath, 'characters.csv')
 }
 
-export function DialogueEditor({ tabId }: { tabId: string }) {
+const UNDO_MAX = 40
+const INSPECTOR_MIN = 200
+const INSPECTOR_MAX = 480
+const INSPECTOR_DEFAULT = 280
+
+function useDialogueChrome() {
+  const themeMode = useSettingsStore((s) => s.themeMode)
+  const accent = useSettingsStore((s) => s.accent)
+  return useMemo(() => {
+    const css = getComputedStyle(document.documentElement)
+    const gray =
+      css.getPropertyValue('--bg-elev-3').trim() || (themeMode === 'dark' ? '#242424' : '#eeeeee')
+    return {
+      minimap: {
+        bgColor: gray,
+        nodeColor: accent,
+        edgeColor: themeMode === 'dark' ? 'rgba(255, 255, 255, 0.35)' : 'rgba(0, 0, 0, 0.3)'
+      }
+    }
+  }, [themeMode, accent])
+}
+
+function DialogueGraphInner({ tabId }: { tabId: string }) {
   const { t, i18n } = useTranslation()
+  const chrome = useDialogueChrome()
   const tab = useAppStore((s) => s.tabs.find((x) => x.id === tabId))
   const workspacePath = useAppStore((s) => s.workspacePath)
   const fileTree = useAppStore((s) => s.fileTree)
   const updateTabContent = useAppStore((s) => s.updateTabContent)
   const showToast = useAppStore((s) => s.showToast)
   const refreshTree = useAppStore((s) => s.refreshTree)
+  const { fitView, screenToFlowPosition } = useReactFlow()
 
-  const [lines, setLines] = useState<DialogueLine[]>([])
   const [characters, setCharacters] = useState<Character[]>([])
-  const [selectedSpeaker, setSelectedSpeaker] = useState<string>('')
-  const [draft, setDraft] = useState('')
-  const [mentionOpen, setMentionOpen] = useState(false)
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [createOpen, setCreateOpen] = useState(false)
-  const [editingCharacter, setEditingCharacter] = useState(false)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [exportOpen, setExportOpen] = useState(false)
-  /** Line ids with Godot staging subsection expanded (default collapsed). */
-  const [stagingOpenIds, setStagingOpenIds] = useState<Set<string>>(() => new Set())
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editText, setEditText] = useState('')
-  const [dragId, setDragId] = useState<string | null>(null)
-  const [idManual, setIdManual] = useState(false)
   const [fileMeta, setFileMeta] = useState<DialogueFileMeta | null>(null)
-
+  const [nodes, setNodes, onNodesChange] = useNodesState<DialogueFlowNode>([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState<DialogueFlowEdge>([])
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  const [editingEdgeLabel, setEditingEdgeLabel] = useState<string | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
+  const [inspectorWidth, setInspectorWidth] = useState(INSPECTOR_DEFAULT)
   const [newChar, setNewChar] = useState({
     id: '',
     name: '',
@@ -111,18 +159,127 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
     note: '',
     model_node: ''
   })
+
   const applyingRef = useRef(false)
-  const listRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
-  useOverlayScroll(listRef)
+  const hydratedPath = useRef<string | null>(null)
+  /** False until first successful graph hydrate — blocks save from writing empty CSV. */
+  const graphReadyRef = useRef(false)
+  const nodesRef = useRef(nodes)
+  const edgesRef = useRef(edges)
+  const undoStack = useRef<{ nodes: DialogueFlowNode[]; edges: DialogueFlowEdge[] }[]>([])
+  const redoStack = useRef<{ nodes: DialogueFlowNode[]; edges: DialogueFlowEdge[] }[]>([])
+  const skipUndo = useRef(false)
+
+  nodesRef.current = nodes
+  edgesRef.current = edges
 
   const fileStem = tab ? fileStemFromPath(tab.path) : 'dialogue'
   const defaultScene = fileMeta?.dialogue_id?.trim() || fileStem
+
   const charMap = useMemo(() => {
     const m = new Map<string, Character>()
     for (const c of characters) m.set(c.id, c)
     return m
   }, [characters])
+
+  const speakerName = useCallback(
+    (id: string) => charMap.get(id)?.name || id,
+    [charMap]
+  )
+  const speakerColor = useCallback(
+    (id: string) => charMap.get(id)?.color || '#88c0d0',
+    [charMap]
+  )
+
+  const pushUndo = useCallback((): void => {
+    if (skipUndo.current) return
+    undoStack.current.push({
+      nodes: structuredClone(nodesRef.current),
+      edges: structuredClone(edgesRef.current)
+    })
+    if (undoStack.current.length > UNDO_MAX) undoStack.current.shift()
+    redoStack.current = []
+  }, [])
+
+  const applyGraph = useCallback(
+    (nextNodes: DialogueFlowNode[], nextEdges: DialogueFlowEdge[], markDirty = true) => {
+      const { lines, openingId } = diskFromGraph(nextNodes, nextEdges)
+      const presented = refreshNodePresentation(
+        nextNodes,
+        nextEdges,
+        openingId,
+        speakerName,
+        speakerColor
+      )
+      skipUndo.current = true
+      setNodes(presented)
+      setEdges(nextEdges)
+      requestAnimationFrame(() => {
+        skipUndo.current = false
+      })
+      if (markDirty && tab) {
+        const existingLines = parseDialogueCsv(tab.content || '')
+        const lineNodeCount = nextNodes.filter((n) => n.data?.kind === 'line').length
+        // Never clobber non-empty buffer with empty CSV unless user removed all line nodes.
+        if (lines.length === 0 && existingLines.length > 0 && lineNodeCount > 0) {
+          return
+        }
+        applyingRef.current = true
+        updateTabContent(tabId, serializeDialogueCsv(lines))
+        requestAnimationFrame(() => {
+          applyingRef.current = false
+        })
+      }
+    },
+    [setNodes, setEdges, speakerName, speakerColor, tab, tabId, updateTabContent]
+  )
+
+  const flushSidecars = useCallback(async () => {
+    if (!tab) return
+    if (!graphReadyRef.current) {
+      // Editor not hydrated yet — keep existing tab buffer / disk untouched.
+      return
+    }
+    const { lines, choices, layout } = diskFromGraph(nodesRef.current, edgesRef.current)
+    const existingLines = parseDialogueCsv(
+      useAppStore.getState().tabs.find((t) => t.id === tabId)?.content || tab.content || ''
+    )
+    const lineNodeCount = nodesRef.current.filter((n) => n.data?.kind === 'line').length
+    if (lines.length === 0 && existingLines.length > 0) {
+      // Either graph data lost (line nodes without payloads) or not safe to clobber.
+      if (lineNodeCount > 0) {
+        showToast(t('dialogue.saveGraphInconsistent'), 'error')
+        return
+      }
+      // lineNodeCount === 0 && graphReady: user deleted every line — allow empty write.
+    }    // Ensure CSV buffer matches graph before docSave
+    applyingRef.current = true
+    updateTabContent(tabId, serializeDialogueCsv(lines))
+    applyingRef.current = false
+
+    const platform = getPlatform()
+    const choicesPath = dialogueChoicesPathFor(tab.path)
+    const layoutPath = dialogueLayoutPathFor(tab.path)
+    const choicesText = serializeDialogueChoices(choices)
+    try {
+      if (choicesText) {
+        await platform.writeFile(choicesPath, choicesText)
+      } else if (await platform.exists(choicesPath)) {
+        await platform.delete(choicesPath)
+      }
+      if (lineNodeCount > 0 || lines.length > 0) {
+        await platform.writeFile(layoutPath, serializeDialogueLayout(layout))
+      }
+      await refreshTree()
+    } catch {
+      showToast(t('dialogue.saveSidecarFailed'), 'error')
+    }
+  }, [tab, tabId, updateTabContent, refreshTree, showToast, t])
+
+  useEffect(() => {
+    setDialogueSidecarFlush(flushSidecars)
+    return () => setDialogueSidecarFlush(null)
+  }, [flushSidecars])
 
   const loadCharacters = useCallback(async () => {
     if (!workspacePath) {
@@ -132,28 +289,15 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
     const path = charactersPath(workspacePath)
     const platform = getPlatform()
     try {
-      const exists = await platform.exists(path)
-      if (!exists) {
+      if (!(await platform.exists(path))) {
         setCharacters([])
         return
       }
-      const raw = await platform.readFile(path)
-      setCharacters(parseCharactersCsv(raw))
+      setCharacters(parseCharactersCsv(await platform.readFile(path)))
     } catch {
       setCharacters([])
     }
   }, [workspacePath])
-
-  const saveCharacters = useCallback(
-    async (next: Character[]) => {
-      if (!workspacePath) return
-      const path = charactersPath(workspacePath)
-      await getPlatform().writeFile(path, serializeCharactersCsv(next))
-      setCharacters(next)
-      await refreshTree()
-    },
-    [workspacePath, refreshTree]
-  )
 
   useEffect(() => {
     void loadCharacters()
@@ -165,7 +309,7 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
       return
     }
     let cancelled = false
-    const load = async (): Promise<void> => {
+    void (async () => {
       try {
         const metaPath = dialogueMetaPathFor(tab.path)
         const platform = getPlatform()
@@ -178,908 +322,633 @@ export function DialogueEditor({ tabId }: { tabId: string }) {
       } catch {
         if (!cancelled) setFileMeta(null)
       }
-    }
-    void load()
+    })()
     return () => {
       cancelled = true
     }
   }, [tab?.path])
 
+  // Reset hydrate marker when switching files
+  useEffect(() => {
+    hydratedPath.current = null
+    graphReadyRef.current = false
+  }, [tab?.path, tab?.id])
+
+  // Hydrate once per tab open — do NOT depend on content (edits would re-enter races).
   useEffect(() => {
     if (!tab) return
-    if (applyingRef.current) return
-    setLines(parseDialogueCsv(tab.content || emptyDialogueCsv()))
-  }, [tab?.id, tab?.content])
-
-  const persist = useCallback(
-    (next: DialogueLine[]) => {
-      setLines(next)
-      applyingRef.current = true
-      updateTabContent(tabId, serializeDialogueCsv(next))
-      requestAnimationFrame(() => {
-        applyingRef.current = false
+    const hydrateKey = `${tab.id}:${tab.path}`
+    if (hydratedPath.current === hydrateKey) return
+    let cancelled = false
+    void (async () => {
+      const platform = getPlatform()
+      // Prefer latest store buffer (openFile may settle after first paint).
+      const latest =
+        useAppStore.getState().tabs.find((t) => t.id === tabId)?.content ?? tab.content ?? ''
+      const lines = parseDialogueCsv(latest || emptyDialogueCsv())
+      let choices = parseDialogueChoices('')
+      let layout = null as ReturnType<typeof parseDialogueLayout> | null
+      try {
+        const cp = dialogueChoicesPathFor(tab.path)
+        if (await platform.exists(cp)) {
+          choices = parseDialogueChoices(await platform.readFile(cp))
+        }
+      } catch {
+        /* */
+      }
+      try {
+        const lp = dialogueLayoutPathFor(tab.path)
+        if (await platform.exists(lp)) {
+          layout = parseDialogueLayout(await platform.readFile(lp))
+        }
+      } catch {
+        /* */
+      }
+      if (cancelled) return
+      const g = graphFromDisk({
+        lines,
+        choices,
+        layout,
+        speakerName,
+        speakerColor
       })
+      skipUndo.current = true
+      setNodes(g.nodes)
+      setEdges(g.edges)
+      undoStack.current = []
+      redoStack.current = []
+      hydratedPath.current = hydrateKey
+      graphReadyRef.current = true
+      requestAnimationFrame(() => {
+        skipUndo.current = false
+        fitView({ padding: 0.2 })
+      })
+    })()
+    return () => {
+      cancelled = true
+    }
+    // speakerName/Color intentionally omitted — presentation refreshed below
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab?.path, tab?.id, tabId, fitView, setNodes, setEdges])
+
+  // Refresh speaker labels when characters load (do not rebuild from CSV).
+  useEffect(() => {
+    if (!graphReadyRef.current) return
+    const cur = nodesRef.current
+    if (!cur.some((n) => n.data?.kind === 'line')) return
+    const { openingId } = diskFromGraph(cur, edgesRef.current)
+    skipUndo.current = true
+    setNodes(refreshNodePresentation(cur, edgesRef.current, openingId, speakerName, speakerColor))
+    requestAnimationFrame(() => {
+      skipUndo.current = false
+    })
+  }, [characters, speakerName, speakerColor, setNodes])
+
+  const onConnect = useCallback(
+    (conn: Connection) => {
+      if (!conn.source || !conn.target) return
+      if (conn.source === DIALOGUE_END_NODE_ID) return
+      if (conn.target === conn.source) return
+
+      const handle = conn.sourceHandle || 'sequence'
+      const kind = handle === 'choice' ? 'choice' : 'sequence'
+
+      if (kind === 'sequence') {
+        if (conn.target === DIALOGUE_END_NODE_ID) {
+          showToast(t('dialogue.sequenceNotToEnd'), 'error')
+          return
+        }
+        if (hasChoiceOut(edgesRef.current, conn.source)) {
+          showToast(t('dialogue.noSeqWithChoice'), 'error')
+          return
+        }
+        if (hasSequenceOut(edgesRef.current, conn.source)) {
+          showToast(t('dialogue.oneSequenceOnly'), 'error')
+          return
+        }
+        if (wouldCreateSequenceCycle(edgesRef.current, conn.source, conn.target)) {
+          showToast(t('dialogue.noCycle'), 'error')
+          return
+        }
+      } else {
+        if (hasSequenceOut(edgesRef.current, conn.source)) {
+          showToast(t('dialogue.noSeqWithChoice'), 'error')
+          return
+        }
+      }
+
+      pushUndo()
+      const id = `e_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+      const label = kind === 'choice' ? t('dialogue.defaultChoice') : undefined
+      const edge: DialogueFlowEdge = {
+        id,
+        source: conn.source,
+        target: conn.target,
+        sourceHandle: kind === 'choice' ? 'choice' : 'sequence',
+        targetHandle: 'in',
+        type: 'default',
+        label,
+        ...(kind === 'choice'
+          ? {
+              labelStyle: { ...CHOICE_EDGE_LABEL_STYLE },
+              labelBgStyle: { ...CHOICE_EDGE_LABEL_BG_STYLE },
+              labelBgPadding: [4, 6] as [number, number],
+              labelBgBorderRadius: 4
+            }
+          : {}),
+        data: { kind, label },
+        className: kind === 'choice' ? 'dialogue-edge-choice' : 'dialogue-edge-sequence'
+      }
+      applyGraph(nodesRef.current, [...edgesRef.current, edge])
     },
-    [tabId, updateTabContent]
+    [applyGraph, pushUndo, showToast, t]
   )
 
-  const scrollToBottom = (): void => {
-    requestAnimationFrame(() => {
-      const el = listRef.current
-      if (el) el.scrollTop = el.scrollHeight
-    })
-  }
+  const onSelectionChange = useCallback((p: OnSelectionChangeParams) => {
+    const n = p.nodes[0]
+    const e = p.edges[0]
+    setSelectedNodeId(n && n.id !== DIALOGUE_END_NODE_ID ? n.id : n?.id === DIALOGUE_END_NODE_ID ? null : null)
+    if (n?.id && n.id !== DIALOGUE_END_NODE_ID) {
+      setSelectedEdgeId(null)
+      setEditingEdgeLabel(null)
+    } else if (e) {
+      setSelectedNodeId(null)
+      setSelectedEdgeId(e.id)
+      const de = e as DialogueFlowEdge
+      if (de.data?.kind === 'choice') {
+        setEditingEdgeLabel(String(de.data.label || de.label || ''))
+      } else {
+        setEditingEdgeLabel(null)
+      }
+    } else {
+      setSelectedEdgeId(null)
+      setEditingEdgeLabel(null)
+    }
+  }, [])
 
-  const appendLine = async (): Promise<void> => {
-    const text = draft.trim()
-    if (!text) return
-    if (!selectedSpeaker) {
+  const onNodeDragStart = useCallback(() => {
+    pushUndo()
+  }, [pushUndo])
+
+  const onNodeDragStop = useCallback(() => {
+    applyGraph(nodesRef.current, edgesRef.current)
+  }, [applyGraph])
+
+  const onEdgesDelete = useCallback(
+    (deleted: Edge[]) => {
+      if (!deleted.length) return
+      pushUndo()
+      const ids = new Set(deleted.map((e) => e.id))
+      applyGraph(
+        nodesRef.current,
+        edgesRef.current.filter((e) => !ids.has(e.id))
+      )
+    },
+    [applyGraph, pushUndo]
+  )
+
+  const deleteSelectedNode = useCallback(async () => {
+    const id = selectedNodeId
+    if (!id || id === DIALOGUE_END_NODE_ID) return
+    const broken = listBrokenRefsIfDelete(id, edgesRef.current)
+    const seqIn = edgesRef.current.filter((e) => e.target === id || e.source === id)
+    const msg =
+      broken.length > 0
+        ? t('dialogue.confirmDeleteNodeRefs', {
+            count: broken.length,
+            refs: broken.map((b) => `${b.from} → "${b.label}"`).join('\n')
+          })
+        : t('dialogue.confirmDeleteLine')
+    const ok = await askConfirm({
+      title: t('dialogue.delete'),
+      message: msg,
+      confirmLabel: t('dialogue.delete'),
+      danger: true
+    })
+    if (!ok) return
+    pushUndo()
+    const nextNodes = nodesRef.current.filter((n) => n.id !== id)
+    const nextEdges = edgesRef.current.filter((e) => e.source !== id && e.target !== id)
+    void seqIn
+    applyGraph(nextNodes, nextEdges)
+    setSelectedNodeId(null)
+  }, [selectedNodeId, applyGraph, pushUndo, t])
+
+  const addLine = useCallback(async () => {
+    const speaker = characters[0]?.id
+    if (!speaker) {
       showToast(t('dialogue.needSpeaker'), 'error')
+      setCreateOpen(true)
       return
     }
-    const char = charMap.get(selectedSpeaker)
-    if (!char) {
-      showToast(t('dialogue.unknownSpeaker'), 'error')
-      return
-    }
+    const { lines } = diskFromGraph(nodesRef.current, edgesRef.current)
     const existing = await collectWorkspaceDialogueIds(workspacePath, fileTree, tab?.path, lines)
-    const scene = defaultScene
     const id = allocateDialogueId(existing, {
-      scene,
+      scene: defaultScene,
       fileStem,
-      characterId: char.id
+      characterId: speaker
     })
     const line: DialogueLine = {
       id,
-      speaker: char.id,
-      text,
+      speaker,
+      text: '',
       note: '',
       emotion: '',
-      scene,
+      scene: defaultScene,
       condition: '',
       audio: '',
       focus_node: '',
       font_size: '',
       text_color: ''
     }
-    persist([...lines, line])
-    setDraft('')
-    setMentionOpen(false)
-    scrollToBottom()
-  }
-
-  const onComposerKey = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      void appendLine()
-    }
-  }
-
-  const updateLine = (id: string, patch: Partial<DialogueLine>): void => {
-    persist(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)))
-  }
-
-  const updateStagingField = (
-    id: string,
-    field: 'focus_node' | 'font_size' | 'text_color',
-    raw: string,
-    commit: boolean
-  ): void => {
-    if (field === 'focus_node') {
-      updateLine(id, { focus_node: raw })
-      return
-    }
-    if (!commit) {
-      updateLine(id, { [field]: raw } as Partial<DialogueLine>)
-      return
-    }
-    if (field === 'font_size') {
-      const n = normalizeFontSize(raw)
-      if (!n.ok) showToast(t('dialogue.invalidFontSize'), 'error')
-      updateLine(id, { font_size: n.value })
-      return
-    }
-    const n = normalizeTextColor(raw)
-    if (!n.ok) showToast(t('dialogue.invalidTextColor'), 'error')
-    updateLine(id, { text_color: n.value })
-  }
-
-  const deleteLine = async (id: string): Promise<void> => {
-    const ok = await askConfirm({
-      title: t('dialogue.delete'),
-      message: t('dialogue.confirmDeleteLine'),
-      confirmLabel: t('dialogue.delete'),
-      danger: true
+    const pos = screenToFlowPosition({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2
     })
-    if (!ok) return
-    persist(lines.filter((l) => l.id !== id))
-    setSelectedIds((prev) => {
-      const n = new Set(prev)
-      n.delete(id)
-      return n
-    })
-    if (expandedId === id) setExpandedId(null)
-  }
-
-  const duplicateLine = async (id: string): Promise<void> => {
-    const src = lines.find((l) => l.id === id)
-    if (!src) return
-    const existing = await collectWorkspaceDialogueIds(workspacePath, fileTree, tab?.path, lines)
-    const newId = allocateDialogueId(existing, {
-      scene: src.scene,
-      fileStem,
-      characterId: src.speaker || 'char'
-    })
-    const copy: DialogueLine = { ...src, id: newId }
-    const idx = lines.findIndex((l) => l.id === id)
-    const next = [...lines]
-    next.splice(idx + 1, 0, copy)
-    persist(next)
-  }
-
-  const onDropReorder = (targetId: string): void => {
-    if (!dragId || dragId === targetId) {
-      setDragId(null)
-      return
+    pushUndo()
+    const node: DialogueFlowNode = {
+      id,
+      type: 'dialogueLine',
+      position: { x: pos.x - 90, y: pos.y - 40 },
+      data: {
+        kind: 'line',
+        line,
+        speakerName: speakerName(speaker),
+        speakerColor: speakerColor(speaker),
+        choiceCount: 0
+      }
     }
-    const from = lines.findIndex((l) => l.id === dragId)
-    const to = lines.findIndex((l) => l.id === targetId)
-    if (from < 0 || to < 0) {
-      setDragId(null)
-      return
+    applyGraph([...nodesRef.current, node], edgesRef.current)
+    setSelectedNodeId(id)
+  }, [
+    characters,
+    workspacePath,
+    fileTree,
+    tab?.path,
+    defaultScene,
+    fileStem,
+    screenToFlowPosition,
+    pushUndo,
+    applyGraph,
+    speakerName,
+    speakerColor,
+    showToast,
+    t
+  ])
+
+  const undo = useCallback(() => {
+    const prev = undoStack.current.pop()
+    if (!prev) return
+    redoStack.current.push({
+      nodes: structuredClone(nodesRef.current),
+      edges: structuredClone(edgesRef.current)
+    })
+    applyGraph(prev.nodes, prev.edges)
+  }, [applyGraph])
+
+  const redo = useCallback(() => {
+    const next = redoStack.current.pop()
+    if (!next) return
+    undoStack.current.push({
+      nodes: structuredClone(nodesRef.current),
+      edges: structuredClone(edgesRef.current)
+    })
+    applyGraph(next.nodes, next.edges)
+  }, [applyGraph])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        undo()
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
+        e.preventDefault()
+        redo()
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const tag = (e.target as HTMLElement)?.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+        if (selectedEdgeId) {
+          pushUndo()
+          applyGraph(
+            nodesRef.current,
+            edgesRef.current.filter((ed) => ed.id !== selectedEdgeId)
+          )
+          setSelectedEdgeId(null)
+          setEditingEdgeLabel(null)
+        } else if (selectedNodeId) {
+          void deleteSelectedNode()
+        }
+      }
     }
-    const next = [...lines]
-    const [item] = next.splice(from, 1)
-    next.splice(to, 0, item)
-    persist(next)
-    setDragId(null)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [undo, redo, selectedEdgeId, selectedNodeId, deleteSelectedNode, applyGraph, pushUndo])
+
+  const selectedLine = useMemo(() => {
+    if (!selectedNodeId) return null
+    const n = nodes.find((x) => x.id === selectedNodeId)
+    return n?.data?.line || null
+  }, [nodes, selectedNodeId])
+
+  const updateSelectedLine = (patch: Partial<DialogueLine>): void => {
+    if (!selectedNodeId) return
+    pushUndo()
+    const nextNodes = nodesRef.current.map((n) => {
+      if (n.id !== selectedNodeId || !n.data.line) return n
+      return { ...n, data: { ...n.data, line: { ...n.data.line, ...patch } } }
+    })
+    applyGraph(nextNodes, edgesRef.current)
   }
 
-  const submitCreateCharacter = async (e?: FormEvent): Promise<void> => {
-    e?.preventDefault()
+  const updateEdgeLabel = (label: string): void => {
+    if (!selectedEdgeId) return
+    setEditingEdgeLabel(label)
+    const nextEdges = edgesRef.current.map((e) =>
+      e.id === selectedEdgeId
+        ? {
+            ...e,
+            label,
+            labelStyle: { ...CHOICE_EDGE_LABEL_STYLE },
+            labelBgStyle: { ...CHOICE_EDGE_LABEL_BG_STYLE },
+            labelBgPadding: [4, 6] as [number, number],
+            labelBgBorderRadius: 4,
+            data: { ...e.data, kind: 'choice' as const, label }
+          }
+        : e
+    )
+    applyGraph(nodesRef.current, nextEdges)
+  }
+
+  const onEdgeDoubleClick = (_: ReactMouseEvent, edge: Edge): void => {
+    const de = edge as DialogueFlowEdge
+    if (de.data?.kind !== 'choice') return
+    setSelectedEdgeId(edge.id)
+    setSelectedNodeId(null)
+    const cur = String(de.data.label || de.label || '')
+    const next = window.prompt(t('dialogue.choiceText'), cur)
+    if (next === null) return
+    pushUndo()
+    const label = next.trim() || cur
+    applyGraph(
+      nodesRef.current,
+      edgesRef.current.map((e) =>
+        e.id === edge.id
+          ? {
+              ...e,
+              label,
+              labelStyle: { ...CHOICE_EDGE_LABEL_STYLE },
+              labelBgStyle: { ...CHOICE_EDGE_LABEL_BG_STYLE },
+              labelBgPadding: [4, 6] as [number, number],
+              labelBgBorderRadius: 4,
+              data: { ...e.data, kind: 'choice' as const, label }
+            }
+          : e
+      )
+    )
+    setEditingEdgeLabel(label)
+  }
+
+  const saveCharacters = async (next: Character[]): Promise<void> => {
+    if (!workspacePath) return
+    await getPlatform().writeFile(charactersPath(workspacePath), serializeCharactersCsv(next))
+    setCharacters(next)
+    await refreshTree()
+  }
+
+  const onCreateCharacter = async (e: FormEvent): Promise<void> => {
+    e.preventDefault()
     const name = newChar.name.trim()
-    const modelNode = newChar.model_node.trim()
-    if (!name) return
-    if (!modelNode) {
+    const model = newChar.model_node.trim()
+    if (!name || !model) {
       showToast(t('dialogue.modelNodeRequired'), 'error')
       return
     }
-    let id = (newChar.id.trim() || slugifyCharacterId(name)).replace(/\s+/g, '_')
-    if (!id) id = 'char'
-    if (editingCharacter) {
-      if (!selectedSpeaker) return
-      const next = characters.map((c) =>
-        c.id === selectedSpeaker
-          ? {
-              ...c,
-              name,
-              color: newChar.color || CHARACTER_COLOR_PRESETS[0],
-              note: newChar.note,
-              model_node: modelNode
-            }
-          : c
-      )
-      await saveCharacters(next)
-      setCreateOpen(false)
-      setEditingCharacter(false)
-      setPickerOpen(false)
-      setIdManual(false)
-      setNewChar({ id: '', name: '', color: CHARACTER_COLOR_PRESETS[0], note: '', model_node: '' })
-      return
-    }
+    let id = (newChar.id.trim() || slugifyCharacterId(name)).trim()
+    if (!id) id = slugifyCharacterId(name)
     if (characters.some((c) => c.id === id)) {
       showToast(t('dialogue.characterIdConflict'), 'error')
       return
     }
-    const next = [
+    await saveCharacters([
       ...characters,
-      {
-        id,
-        name,
-        color: newChar.color || CHARACTER_COLOR_PRESETS[0],
-        note: newChar.note,
-        model_node: modelNode
-      }
-    ]
-    await saveCharacters(next)
-    setSelectedSpeaker(id)
+      { id, name, color: newChar.color, note: newChar.note, model_node: model }
+    ])
     setCreateOpen(false)
-    setEditingCharacter(false)
-    setPickerOpen(false)
-    setIdManual(false)
-    setNewChar({ id: '', name: '', color: CHARACTER_COLOR_PRESETS[0], note: '', model_node: '' })
-  }
-
-  const openEditCharacter = (): void => {
-    const c = selectedSpeaker ? charMap.get(selectedSpeaker) : undefined
-    if (!c) return
-    setPickerOpen(false)
-    setEditingCharacter(true)
-    setIdManual(true)
     setNewChar({
-      id: c.id,
-      name: c.name,
-      color: c.color,
-      note: c.note,
-      model_node: c.model_node || ''
+      id: '',
+      name: '',
+      color: CHARACTER_COLOR_PRESETS[0],
+      note: '',
+      model_node: ''
     })
-    setCreateOpen(true)
   }
 
-  const deleteCharacter = async (id: string): Promise<void> => {
-    const usedHere = lines.some((l) => l.speaker === id)
-    const msg = usedHere ? t('dialogue.confirmDeleteCharacterUsed') : t('dialogue.confirmDeleteCharacter')
-    const ok = await askConfirm({
-      title: t('dialogue.deleteCharacter'),
-      message: msg,
-      confirmLabel: t('dialogue.delete'),
-      danger: true
-    })
-    if (!ok) return
-    await saveCharacters(characters.filter((c) => c.id !== id))
-    if (selectedSpeaker === id) setSelectedSpeaker('')
-    setPickerOpen(false)
-  }
-
-  const exportSelection = (): DialogueLine[] => {
-    if (selectedIds.size === 0) return lines
-    return lines.filter((l) => selectedIds.has(l.id))
-  }
-
-  const runExport = async (
-    mode: 'pipeline' | 'locale',
-    opts: {
-      emotion: boolean
-      condition: boolean
-      audio: boolean
-      focus_node: boolean
-      font_size: boolean
-      text_color: boolean
-      lang: string
-    }
-  ): Promise<void> => {
-    const data = exportSelection()
-    if (data.length === 0) {
-      showToast(t('dialogue.nothingToExport'), 'error')
-      return
-    }
+  const runExport = async (kind: 'pipeline' | 'locale'): Promise<void> => {
+    if (!tab) return
+    const { lines } = diskFromGraph(nodesRef.current, edgesRef.current)
     const platform = getPlatform()
-    const csv =
-      mode === 'pipeline' ? exportPipelineCsv(data, opts) : exportLocaleCsv(data, opts.lang)
-    const suffix = mode === 'pipeline' ? 'pipeline' : `locale-${opts.lang}`
-    const name = `${fileStem}-${suffix}.csv`
-    const dir = tab ? platform.dirname(tab.path) : workspacePath
-    if (!dir) return
-    const outPath = platform.joinPath(dir, name)
-    try {
-      await platform.writeFile(outPath, csv)
-      await refreshTree()
-      setExportOpen(false)
-      showToast(t('dialogue.exported', { path: name }), 'info')
-    } catch {
-      showToast(t('errors.saveFailed'), 'error')
+    const dir = platform.dirname(tab.path)
+    const stem = fileStemFromPath(tab.path)
+    if (kind === 'pipeline') {
+      const text = exportPipelineCsv(lines, {
+        emotion: true,
+        condition: true,
+        audio: true,
+        focus_node: true,
+        font_size: true,
+        text_color: true
+      })
+      await platform.writeFile(platform.joinPath(dir, `${stem}-pipeline.csv`), text)
+    } else {
+      const lang = i18n.language?.startsWith('zh') ? 'zh' : 'en'
+      await platform.writeFile(
+        platform.joinPath(dir, `${stem}-locale-${lang}.csv`),
+        exportLocaleCsv(lines, lang)
+      )
     }
+    setExportOpen(false)
+    await refreshTree()
+    showToast(t('dialogue.exported', { path: stem }))
   }
 
-  const filteredMentions = useMemo(() => {
-    if (!mentionOpen) return []
-    const at = draft.lastIndexOf('@')
-    const q = at >= 0 ? draft.slice(at + 1).toLowerCase() : ''
-    if (!q) return characters
-    return characters.filter(
-      (c) => c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q)
-    )
-  }, [mentionOpen, draft, characters])
-
-  const pickMention = (c: Character): void => {
-    setSelectedSpeaker(c.id)
-    setMentionOpen(false)
-    const at = draft.lastIndexOf('@')
-    if (at >= 0) setDraft(draft.slice(0, at).replace(/\s+$/, ''))
-    inputRef.current?.focus()
+  const onInspectorSashDown = (e: ReactMouseEvent): void => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = inspectorWidth
+    const onMove = (ev: MouseEvent): void => {
+      const next = Math.min(INSPECTOR_MAX, Math.max(INSPECTOR_MIN, startW - (ev.clientX - startX)))
+      setInspectorWidth(next)
+    }
+    const onUp = (): void => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
   }
 
   if (!tab) return null
 
-  const selectedChar = selectedSpeaker ? charMap.get(selectedSpeaker) : undefined
-
   return (
-    <div className="dialogue-host">
-      <div className="dialogue-toolbar">
-        <button type="button" onClick={() => setExportOpen(true)}>
-          {t('dialogue.export')}
-        </button>
-        <span className="dialogue-toolbar-hint">
+    <div className="dialogue-graph-editor">
+      <div className="dialogue-graph-toolbar">
+        <div className="dialogue-graph-toolbar-left">
+          <button type="button" onClick={() => void addLine()}>
+            {t('dialogue.addLine')}
+          </button>
+          <button type="button" onClick={() => fitView({ padding: 0.2 })}>
+            {t('dialogue.fitView')}
+          </button>
+          <button type="button" onClick={undo}>
+            {t('dialogue.undo')}
+          </button>
+          <button type="button" onClick={() => setCreateOpen(true)}>
+            {t('dialogue.createCharacter')}
+          </button>
+          <button type="button" onClick={() => setExportOpen(true)}>
+            {t('dialogue.export')}
+          </button>
+          {selectedNodeId ? (
+            <button type="button" className="danger" onClick={() => void deleteSelectedNode()}>
+              {t('dialogue.delete')}
+            </button>
+          ) : null}
+        </div>
+        <div className="dialogue-graph-meta">
           {fileMeta
             ? t('dialogue.metaHint', { scene: fileMeta.godot_scene, id: fileMeta.dialogue_id })
-            : selectedIds.size > 0
-              ? t('dialogue.selectedCount', { count: selectedIds.size })
-              : t('dialogue.lineCount', { count: lines.length })}
-        </span>
+            : t('dialogue.graphHint')}
+        </div>
       </div>
 
-      <div className="dialogue-list kentucky-overlay-scroll" ref={listRef}>
-        {lines.length === 0 ? (
-          <div className="dialogue-empty">{t('dialogue.empty')}</div>
-        ) : (
-          lines.map((line) => {
-            const char = charMap.get(line.speaker)
-            const name = char?.name ?? t('dialogue.unknownCharacter')
-            const color = char?.color ?? '#8b8b8b'
-            const selected = selectedIds.has(line.id)
-            const expanded = expandedId === line.id
-            return (
-              <div
-                key={line.id}
-                className={`dialogue-bubble ${selected ? 'selected' : ''} ${dragId === line.id ? 'dragging' : ''}`}
-                draggable
-                onDragStart={() => setDragId(line.id)}
-                onDragOver={(e: DragEvent) => e.preventDefault()}
-                onDrop={() => onDropReorder(line.id)}
-              >
-                <label className="dialogue-select">
-                  <input
-                    type="checkbox"
-                    checked={selected}
-                    onChange={() => {
-                      setSelectedIds((prev) => {
-                        const n = new Set(prev)
-                        if (n.has(line.id)) n.delete(line.id)
-                        else n.add(line.id)
-                        return n
-                      })
-                    }}
-                  />
-                </label>
-                <div className="dialogue-bubble-body">
-                  <div className="dialogue-bubble-head">
-                    <span className="dialogue-speaker" style={{ color }}>
-                      {name}
-                    </span>
-                    <button
-                      type="button"
-                      className="dialogue-id"
-                      title={t('dialogue.copyId')}
-                      onClick={() => void navigator.clipboard.writeText(line.id)}
-                    >
-                      {line.id}
-                    </button>
-                  </div>
-                  {editingId === line.id ? (
-                    <textarea
-                      className="dialogue-edit-text"
-                      value={editText}
-                      autoFocus
-                      onChange={(e) => setEditText(e.target.value)}
-                      onBlur={() => {
-                        updateLine(line.id, { text: editText })
-                        setEditingId(null)
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Escape') setEditingId(null)
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault()
-                          updateLine(line.id, { text: editText })
-                          setEditingId(null)
-                        }
-                      }}
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      className="dialogue-text"
-                      onClick={() => {
-                        setEditingId(line.id)
-                        setEditText(line.text)
-                      }}
-                    >
-                      {line.text || t('dialogue.emptyText')}
-                    </button>
-                  )}
-                  <div className="dialogue-bubble-actions">
-                    <button type="button" onClick={() => setExpandedId(expanded ? null : line.id)}>
-                      {expanded ? t('dialogue.collapse') : t('dialogue.details')}
-                    </button>
-                    <button type="button" onClick={() => void duplicateLine(line.id)}>
-                      {t('dialogue.duplicate')}
-                    </button>
-                    <button type="button" className="danger" onClick={() => void deleteLine(line.id)}>
-                      {t('dialogue.delete')}
-                    </button>
-                  </div>
-                  {expanded ? (
-                    <div className="dialogue-details">
-                      <label>
-                        {t('dialogue.speaker')}
-                        <select
-                          value={line.speaker}
-                          onChange={(e) => updateLine(line.id, { speaker: e.target.value })}
-                        >
-                          {!char ? (
-                            <option value={line.speaker}>{t('dialogue.unknownCharacter')}</option>
-                          ) : null}
-                          {characters.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        {t('dialogue.scene')}
-                        <input
-                          value={line.scene}
-                          onChange={(e) => updateLine(line.id, { scene: e.target.value })}
-                        />
-                      </label>
-                      <label>
-                        {t('dialogue.note')}
-                        <input
-                          value={line.note}
-                          onChange={(e) => updateLine(line.id, { note: e.target.value })}
-                        />
-                      </label>
-                      <label>
-                        {t('dialogue.emotion')}
-                        <input
-                          value={line.emotion}
-                          onChange={(e) => updateLine(line.id, { emotion: e.target.value })}
-                        />
-                      </label>
-                      <label>
-                        {t('dialogue.condition')}
-                        <input
-                          value={line.condition}
-                          onChange={(e) => updateLine(line.id, { condition: e.target.value })}
-                        />
-                      </label>
-                      <label>
-                        {t('dialogue.audio')}
-                        <input
-                          value={line.audio}
-                          onChange={(e) => updateLine(line.id, { audio: e.target.value })}
-                        />
-                      </label>
-                      <div className="dialogue-staging">
-                        <button
-                          type="button"
-                          className="dialogue-staging-toggle"
-                          onClick={() =>
-                            setStagingOpenIds((prev) => {
-                              const n = new Set(prev)
-                              if (n.has(line.id)) n.delete(line.id)
-                              else n.add(line.id)
-                              return n
-                            })
-                          }
-                        >
-                          {stagingOpenIds.has(line.id)
-                            ? t('dialogue.stagingCollapse')
-                            : t('dialogue.staging')}
-                        </button>
-                        {stagingOpenIds.has(line.id) ? (
-                          <div className="dialogue-staging-fields">
-                            <label>
-                              {t('dialogue.focusNode')}
-                              <input
-                                value={line.focus_node ?? ''}
-                                placeholder={t('dialogue.focusNodePlaceholder')}
-                                onChange={(e) =>
-                                  updateStagingField(line.id, 'focus_node', e.target.value, false)
-                                }
-                                spellCheck={false}
-                              />
-                            </label>
-                            <label>
-                              {t('dialogue.fontSize')}
-                              <input
-                                type="number"
-                                min={0}
-                                inputMode="numeric"
-                                value={line.font_size ?? ''}
-                                placeholder={t('dialogue.fontSizePlaceholder')}
-                                onChange={(e) =>
-                                  updateStagingField(line.id, 'font_size', e.target.value, false)
-                                }
-                                onBlur={(e) =>
-                                  updateStagingField(line.id, 'font_size', e.target.value, true)
-                                }
-                              />
-                            </label>
-                            <label>
-                              {t('dialogue.textColor')}
-                              <div className="dialogue-color-row">
-                                <input
-                                  type="color"
-                                  value={
-                                    /^#[0-9a-fA-F]{6}$/.test(line.text_color ?? '')
-                                      ? line.text_color
-                                      : /^#[0-9a-fA-F]{3}$/.test(line.text_color ?? '')
-                                        ? `#${(line.text_color as string)
-                                            .slice(1)
-                                            .split('')
-                                            .map((c) => c + c)
-                                            .join('')}`
-                                        : '#ffffff'
-                                  }
-                                  onChange={(e) =>
-                                    updateStagingField(line.id, 'text_color', e.target.value, true)
-                                  }
-                                  title={t('dialogue.textColor')}
-                                />
-                                <input
-                                  value={line.text_color ?? ''}
-                                  placeholder={t('dialogue.textColorPlaceholder')}
-                                  onChange={(e) =>
-                                    updateStagingField(line.id, 'text_color', e.target.value, false)
-                                  }
-                                  onBlur={(e) =>
-                                    updateStagingField(line.id, 'text_color', e.target.value, true)
-                                  }
-                                  spellCheck={false}
-                                />
-                                {(line.text_color ?? '') ? (
-                                  <button
-                                    type="button"
-                                    className="dialogue-staging-clear"
-                                    onClick={() =>
-                                      updateStagingField(line.id, 'text_color', '', true)
-                                    }
-                                  >
-                                    {t('dialogue.clearColor')}
-                                  </button>
-                                ) : null}
-                              </div>
-                            </label>
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            )
-          })
-        )}
-      </div>
-
-      <div className="dialogue-composer">
-        {mentionOpen && filteredMentions.length > 0 ? (
-          <div className="dialogue-mention-menu">
-            {filteredMentions.map((c) => (
-              <button key={c.id} type="button" onClick={() => pickMention(c)}>
-                <span className="dialogue-mention-swatch" style={{ background: c.color }} />
-                {c.name}
-                <span className="muted">@{c.id}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <div className="dialogue-composer-card">
-          <textarea
-            ref={inputRef}
-            className="dialogue-composer-input"
-            rows={2}
-            placeholder={t('dialogue.composerPlaceholder')}
-            value={draft}
-            onChange={(e) => {
-              const v = e.target.value
-              setDraft(v)
-              setMentionOpen(v.includes('@'))
+      <div className="dialogue-graph-body">
+        <div className="dialogue-graph-canvas">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onSelectionChange={onSelectionChange}
+            onNodeDragStart={onNodeDragStart}
+            onNodeDragStop={onNodeDragStop}
+            onEdgesDelete={onEdgesDelete}
+            onEdgeDoubleClick={onEdgeDoubleClick}
+            onNodeDoubleClick={(_, n) => {
+              if (n.id !== DIALOGUE_END_NODE_ID) setSelectedNodeId(n.id)
             }}
-            onKeyDown={onComposerKey}
+            nodeTypes={dialogueNodeTypes}
+            defaultEdgeOptions={{ type: 'default' }}
+            connectionMode={ConnectionMode.Loose}
+            fitView
+            deleteKeyCode={null}
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background gap={18} size={1} />
+            <Controls showInteractive={false} />
+            <DialogueMiniMap
+              bgColor={chrome.minimap.bgColor}
+              nodeColor={chrome.minimap.nodeColor}
+              edgeColor={chrome.minimap.edgeColor}
+            />
+          </ReactFlow>
+        </div>
+        <div
+          className="sash dialogue-inspector-sash"
+          onMouseDown={onInspectorSashDown}
+          role="separator"
+          aria-orientation="vertical"
+        />
+        <div className="dialogue-inspector-wrap" style={{ width: inspectorWidth }}>
+          <DialogueInspector
+            line={selectedLine}
+            characters={characters}
+            edgeLabel={selectedEdgeId && editingEdgeLabel !== null ? editingEdgeLabel : null}
+            onUpdateLine={updateSelectedLine}
+            onUpdateEdgeLabel={updateEdgeLabel}
+            onInvalid={(msg) => showToast(msg, 'error')}
           />
-          <div className="dialogue-composer-footer">
-            <div className="dialogue-mode-picker">
-              <button
-                type="button"
-                className={`dialogue-mode-chip ${pickerOpen ? 'open' : ''}`}
-                onClick={() => setPickerOpen((v) => !v)}
-              >
-                {selectedChar ? (
-                  <>
-                    <span
-                      className="dialogue-mention-swatch"
-                      style={{ background: selectedChar.color }}
-                    />
-                    {selectedChar.name}
-                  </>
-                ) : (
-                  t('dialogue.pickSpeaker')
-                )}
-                <span className="dialogue-mode-caret">▾</span>
-              </button>
-              {pickerOpen ? (
-                <div className="dialogue-mode-menu">
-                  {characters.length === 0 ? (
-                    <div className="dialogue-mode-empty">{t('dialogue.noCharacters')}</div>
-                  ) : (
-                    characters.map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        className={c.id === selectedSpeaker ? 'active' : ''}
-                        onClick={() => {
-                          setSelectedSpeaker(c.id)
-                          setPickerOpen(false)
-                        }}
-                      >
-                        <span className="dialogue-mention-swatch" style={{ background: c.color }} />
-                        {c.name}
-                      </button>
-                    ))
-                  )}
-                  <div className="ctx-sep" />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPickerOpen(false)
-                      setEditingCharacter(false)
-                      setCreateOpen(true)
-                      setIdManual(false)
-                      setNewChar({
-                        id: '',
-                        name: '',
-                        color:
-                          CHARACTER_COLOR_PRESETS[characters.length % CHARACTER_COLOR_PRESETS.length],
-                        note: '',
-                        model_node: ''
-                      })
-                    }}
-                  >
-                    {t('dialogue.createCharacter')}
-                  </button>
-                  {selectedSpeaker ? (
-                    <button type="button" onClick={() => openEditCharacter()}>
-                      {t('dialogue.editCharacter')}
-                    </button>
-                  ) : null}
-                  {selectedSpeaker ? (
-                    <button
-                      type="button"
-                      className="danger"
-                      onClick={() => void deleteCharacter(selectedSpeaker)}
-                    >
-                      {t('dialogue.deleteCharacter')}
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-            <button
-              type="button"
-              className="dialogue-send"
-              title={t('dialogue.send')}
-              aria-label={t('dialogue.send')}
-              disabled={!draft.trim()}
-              onClick={() => void appendLine()}
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-                <path
-                  fill="currentColor"
-                  d="M8 3a.75.75 0 0 1 .53.22l3.5 3.5a.75.75 0 0 1-1.06 1.06L8.75 5.56v7.19a.75.75 0 0 1-1.5 0V5.56L5.03 7.78a.75.75 0 0 1-1.06-1.06l3.5-3.5A.75.75 0 0 1 8 3Z"
-                />
-              </svg>
-            </button>
-          </div>
         </div>
       </div>
 
       {createOpen ? (
-        <div className="app-dialog-backdrop" role="presentation">
-          <form className="app-dialog" onSubmit={(e) => void submitCreateCharacter(e)}>
-            <h2 className="app-dialog-title">
-              {editingCharacter ? t('dialogue.editCharacter') : t('dialogue.createCharacter')}
-            </h2>
-            <div className="dialogue-char-form">
-              <label>
-                {t('dialogue.characterName')}
-                <input
-                  value={newChar.name}
-                  required
-                  onChange={(e) => {
-                    const name = e.target.value
-                    setNewChar((s) => ({
-                      ...s,
-                      name,
-                      id: editingCharacter || idManual ? s.id : slugifyCharacterId(name)
-                    }))
-                  }}
-                />
-              </label>
-              <label>
-                {t('dialogue.characterId')}
-                <input
-                  value={newChar.id}
-                  disabled={editingCharacter}
-                  onChange={(e) => {
-                    setIdManual(true)
-                    setNewChar((s) => ({ ...s, id: e.target.value.trim() }))
-                  }}
-                />
-              </label>
-              <label title={t('dialogue.modelNodeHint')}>
-                {t('dialogue.modelNode')}
-                <input
-                  value={newChar.model_node}
-                  required
-                  placeholder={t('dialogue.modelNodePlaceholder')}
-                  title={t('dialogue.modelNodeHint')}
-                  onChange={(e) => setNewChar((s) => ({ ...s, model_node: e.target.value }))}
-                  spellCheck={false}
-                />
-              </label>
-              <label>
-                {t('dialogue.characterColor')}
-                <div className="dialogue-color-row">
-                  {CHARACTER_COLOR_PRESETS.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      className={`dialogue-color-dot ${newChar.color === c ? 'active' : ''}`}
-                      style={{ background: c }}
-                      onClick={() => setNewChar((s) => ({ ...s, color: c }))}
-                    />
-                  ))}
-                  <input
-                    type="color"
-                    value={/^#[0-9a-fA-F]{6}$/.test(newChar.color) ? newChar.color : '#88c0d0'}
-                    onChange={(e) => setNewChar((s) => ({ ...s, color: e.target.value }))}
-                  />
-                </div>
-              </label>
-              <label>
-                {t('dialogue.characterNote')}
-                <input
-                  value={newChar.note}
-                  onChange={(e) => setNewChar((s) => ({ ...s, note: e.target.value }))}
-                />
-              </label>
-            </div>
+        <div className="app-dialog-backdrop" role="presentation" onClick={() => setCreateOpen(false)}>
+          <form
+            className="app-dialog"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => void onCreateCharacter(e)}
+          >
+            <h2 className="app-dialog-title">{t('dialogue.createCharacter')}</h2>
+            <label className="dialogue-inspector-field">
+              <span>{t('dialogue.characterName')}</span>
+              <input
+                value={newChar.name}
+                onChange={(e) =>
+                  setNewChar((c) => ({
+                    ...c,
+                    name: e.target.value,
+                    id: c.id || slugifyCharacterId(e.target.value)
+                  }))
+                }
+                required
+              />
+            </label>
+            <label className="dialogue-inspector-field">
+              <span>{t('dialogue.characterId')}</span>
+              <input
+                value={newChar.id}
+                onChange={(e) => setNewChar((c) => ({ ...c, id: e.target.value }))}
+              />
+            </label>
+            <label className="dialogue-inspector-field">
+              <span>{t('dialogue.modelNode')}</span>
+              <input
+                value={newChar.model_node}
+                onChange={(e) => setNewChar((c) => ({ ...c, model_node: e.target.value }))}
+                required
+              />
+            </label>
             <div className="app-dialog-actions">
-              <button
-                type="button"
-                className="app-dialog-btn ghost"
-                onClick={() => {
-                  setCreateOpen(false)
-                  setEditingCharacter(false)
-                }}
-              >
-                {t('editor.cancel')}
+              <button type="button" onClick={() => setCreateOpen(false)}>
+                {t('dialog.cancel')}
               </button>
-              <div className="app-dialog-actions-end">
-                <button type="submit" className="app-dialog-btn primary">
-                  {editingCharacter ? t('dialogue.saveCharacter') : t('explorer.create')}
-                </button>
-              </div>
+              <button type="submit" className="btn-primary">
+                {t('dialog.confirm')}
+              </button>
             </div>
           </form>
         </div>
       ) : null}
 
       {exportOpen ? (
-        <ExportDialog
-          langDefault={i18n.language.startsWith('zh') ? 'zh' : 'en'}
-          onClose={() => setExportOpen(false)}
-          onExport={(mode, opts) => void runExport(mode, opts)}
-        />
+        <div className="app-dialog-backdrop" role="presentation" onClick={() => setExportOpen(false)}>
+          <div className="app-dialog" onClick={(e) => e.stopPropagation()}>
+            <h2 className="app-dialog-title">{t('dialogue.export')}</h2>
+            <p className="app-dialog-body">{t('dialogue.exportHint')}</p>
+            <div className="app-dialog-actions">
+              <button type="button" onClick={() => void runExport('pipeline')}>
+                {t('dialogue.exportPipeline')}
+              </button>
+              <button type="button" onClick={() => void runExport('locale')}>
+                {t('dialogue.exportLocale')}
+              </button>
+              <button type="button" onClick={() => setExportOpen(false)}>
+                {t('dialog.cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   )
 }
 
-function ExportDialog({
-  langDefault,
-  onClose,
-  onExport
-}: {
-  langDefault: string
-  onClose: () => void
-  onExport: (
-    mode: 'pipeline' | 'locale',
-    opts: {
-      emotion: boolean
-      condition: boolean
-      audio: boolean
-      focus_node: boolean
-      font_size: boolean
-      text_color: boolean
-      lang: string
-    }
-  ) => void
-}) {
-  const { t } = useTranslation()
-  const [emotion, setEmotion] = useState(true)
-  const [condition, setCondition] = useState(true)
-  const [audio, setAudio] = useState(true)
-  const [focusNode, setFocusNode] = useState(true)
-  const [fontSize, setFontSize] = useState(true)
-  const [textColor, setTextColor] = useState(true)
-  const [lang, setLang] = useState(langDefault)
-
-  const opts = {
-    emotion,
-    condition,
-    audio,
-    focus_node: focusNode,
-    font_size: fontSize,
-    text_color: textColor,
-    lang
-  }
-
+export function DialogueEditor({ tabId }: { tabId: string }) {
   return (
-    <div className="app-dialog-backdrop" role="presentation">
-      <div className="app-dialog">
-        <h2 className="app-dialog-title">{t('dialogue.export')}</h2>
-        <p className="app-dialog-body">{t('dialogue.exportHint')}</p>
-        <div className="dialogue-export-opts">
-          <label>
-            <input type="checkbox" checked={emotion} onChange={(e) => setEmotion(e.target.checked)} />
-            emotion
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={condition}
-              onChange={(e) => setCondition(e.target.checked)}
-            />
-            condition
-          </label>
-          <label>
-            <input type="checkbox" checked={audio} onChange={(e) => setAudio(e.target.checked)} />
-            audio
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={focusNode}
-              onChange={(e) => setFocusNode(e.target.checked)}
-            />
-            focus_node
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={fontSize}
-              onChange={(e) => setFontSize(e.target.checked)}
-            />
-            font_size
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={textColor}
-              onChange={(e) => setTextColor(e.target.checked)}
-            />
-            text_color
-          </label>
-          <label>
-            {t('dialogue.localeLang')}
-            <input value={lang} onChange={(e) => setLang(e.target.value.trim() || 'zh')} />
-          </label>
-        </div>
-        <div className="app-dialog-actions">
-          <button type="button" className="app-dialog-btn ghost" onClick={onClose}>
-            {t('editor.cancel')}
-          </button>
-          <div className="app-dialog-actions-end">
-            <button
-              type="button"
-              className="app-dialog-btn"
-              onClick={() => onExport('locale', opts)}
-            >
-              {t('dialogue.exportLocale')}
-            </button>
-            <button
-              type="button"
-              className="app-dialog-btn primary"
-              onClick={() => onExport('pipeline', opts)}
-            >
-              {t('dialogue.exportPipeline')}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <ReactFlowProvider>
+      <DialogueGraphInner tabId={tabId} />
+    </ReactFlowProvider>
   )
 }

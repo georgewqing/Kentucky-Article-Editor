@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '@/state/settingsStore'
-import { useAiStore, type AiProfileView } from '@/state/aiStore'
+import { useAiStore, type AiProfileView, type AiSkillView } from '@/state/aiStore'
 import { ACCENT_PRESETS } from '@/theme/applyTheme'
 import i18n, { setStoredLocale, type AppLocale } from '@/i18n'
 
@@ -21,16 +21,31 @@ export function SettingsPage() {
   const upsertProfile = useAiStore((s) => s.upsertProfile)
   const deleteProfile = useAiStore((s) => s.deleteProfile)
   const setProfileKey = useAiStore((s) => s.setProfileKey)
+  const listSkills = useAiStore((s) => s.listSkills)
+  const setSkillEnabled = useAiStore((s) => s.setSkillEnabled)
+  const revealSkillsDir = useAiStore((s) => s.revealSkillsDir)
+  const importSkillFolder = useAiStore((s) => s.importSkillFolder)
   const [keyDraft, setKeyDraft] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
   const [aiSection] = useState(true)
+  const [skills, setSkills] = useState<AiSkillView[]>([])
+  const [skillMsg, setSkillMsg] = useState<string | null>(null)
 
   const editing: AiProfileView | null =
     profiles.find((p) => p.id === (editId || ai?.activeProfileId)) || profiles[0] || null
 
+  const refreshSkills = async (): Promise<void> => {
+    const list = await listSkills()
+    setSkills(list)
+  }
+
   useEffect(() => {
     if (!ai) void hydrateAi()
   }, [ai, hydrateAi])
+
+  useEffect(() => {
+    if (ai) void refreshSkills()
+  }, [ai?.activeProfileId])
 
   useEffect(() => {
     if (editing) setEditId(editing.id)
@@ -336,6 +351,126 @@ export function SettingsPage() {
               onChange={(e) => void saveSettings({ styleMemo: e.target.value })}
             />
           </div>
+
+          <h3 style={{ marginTop: 24, marginBottom: 8 }}>{t('settings.webSearch')}</h3>
+          <p className="settings-hint">{t('settings.webSearchDesc')}</p>
+          <div className="settings-row">
+            <label>{t('settings.webSearch')}</label>
+            <div className="theme-toggle">
+              <button
+                type="button"
+                className={ai.webSearchEnabled ? 'active' : ''}
+                onClick={() => void saveSettings({ webSearchEnabled: true })}
+              >
+                {t('settings.on')}
+              </button>
+              <button
+                type="button"
+                className={!ai.webSearchEnabled ? 'active' : ''}
+                onClick={() => void saveSettings({ webSearchEnabled: false })}
+              >
+                {t('settings.off')}
+              </button>
+            </div>
+          </div>
+          <div className="settings-row">
+            <label>{t('settings.webSearchProvider')}</label>
+            <select
+              className="settings-input"
+              value={ai.webSearchProvider || 'duckduckgo'}
+              onChange={(e) =>
+                void saveSettings({
+                  webSearchProvider: e.target.value as
+                    | 'duckduckgo'
+                    | 'bing'
+                    | 'brave'
+                    | 'tavily'
+                })
+              }
+            >
+              <option value="duckduckgo">DuckDuckGo (+ Bing fallback)</option>
+              <option value="bing">Bing</option>
+              <option value="brave">Brave (soon)</option>
+              <option value="tavily">Tavily (soon)</option>
+            </select>
+          </div>
+          <p className="settings-hint">{t('settings.webSearchProviderHint')}</p>
+          <div className="settings-row">
+            <label>{t('settings.webSearchMaxResults')}</label>
+            <input
+              className="settings-input"
+              type="number"
+              min={1}
+              max={10}
+              value={ai.webSearchMaxResults ?? 5}
+              onChange={(e) =>
+                void saveSettings({
+                  webSearchMaxResults: Math.min(10, Math.max(1, Number(e.target.value) || 5))
+                })
+              }
+            />
+          </div>
+
+          <h3 style={{ marginTop: 24, marginBottom: 8 }}>{t('settings.skills')}</h3>
+          <p className="settings-hint">{t('settings.skillsDesc')}</p>
+          <div className="theme-toggle" style={{ marginBottom: 12 }}>
+            <button type="button" onClick={() => void revealSkillsDir()}>
+              {t('settings.skillsOpenFolder')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void importSkillFolder().then((r) => {
+                  setSkillMsg(r.ok ? `Imported: ${r.id}` : r.error || 'Import failed')
+                  void refreshSkills()
+                })
+              }}
+            >
+              {t('settings.skillsImport')}
+            </button>
+          </div>
+          {skillMsg ? <p className="settings-hint">{skillMsg}</p> : null}
+          {skills.length === 0 ? (
+            <p className="settings-hint">{t('settings.skillsEmpty')}</p>
+          ) : (
+            <div className="settings-key-block">
+              {skills.map((s) => (
+                <div
+                  key={s.id}
+                  className="settings-row"
+                  style={{ alignItems: 'flex-start', marginBottom: 8 }}
+                >
+                  <label style={{ minWidth: 120 }}>
+                    <strong>{s.name || s.id}</strong>
+                    <div style={{ fontSize: 12, opacity: 0.75 }}>{s.id}</div>
+                  </label>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, marginBottom: 6 }}>{s.description}</div>
+                    <div className="theme-toggle">
+                      <button
+                        type="button"
+                        className={s.enabled ? 'active' : ''}
+                        onClick={() => {
+                          void setSkillEnabled(s.id, true).then(setSkills)
+                        }}
+                      >
+                        {t('settings.skillsEnabled')}
+                      </button>
+                      <button
+                        type="button"
+                        className={!s.enabled ? 'active' : ''}
+                        onClick={() => {
+                          void setSkillEnabled(s.id, false).then(setSkills)
+                        }}
+                      >
+                        {t('settings.skillsDisabled')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       ) : null}
     </div>

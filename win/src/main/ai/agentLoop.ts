@@ -19,6 +19,7 @@ import {
 import { getWritingToolsForMode, runTool, LITERARY_SYSTEM_PROMPT, applyProposalToDisk, type AgentToolMode } from './tools'
 import { parseCharactersCsv } from './formats'
 import { shouldAutoApply, type FileProposalEx } from './proposalGate'
+import { skillsCatalogText } from './skills'
 
 const activeAborts = new Map<number, AbortController>()
 const MAX_CTX_FILE_CHARS = 24000
@@ -115,7 +116,13 @@ function toApiMessagesWithTools(
 ): ChatCompletionMessage[] {
   const settings = loadAiSettings()
   const msgs: ChatCompletionMessage[] = [
-    { role: 'system', content: LITERARY_SYSTEM_PROMPT(settings.styleMemo, mode) }
+    {
+      role: 'system',
+      content: LITERARY_SYSTEM_PROMPT(settings.styleMemo, mode, {
+        skillsCatalog: skillsCatalogText(),
+        webSearchEnabled: settings.webSearchEnabled
+      })
+    }
   ]
   const ctxParts: string[] = []
   if (editor.workspacePath) ctxParts.push(`Workspace: ${editor.workspacePath}`)
@@ -254,7 +261,10 @@ export async function runAgentTurn(opts: {
   let steps = 0
   const maxSteps = mode === 'ask' ? 1 : settings.agentEnabled ? 20 : 1
   const turnPaths = new Set<string>()
-  const tools = settings.agentEnabled && workspaceRoot ? getWritingToolsForMode(mode) : undefined
+  const tools =
+    settings.agentEnabled && workspaceRoot
+      ? getWritingToolsForMode(mode, { webSearchEnabled: settings.webSearchEnabled })
+      : undefined
 
   try {
     while (steps < maxSteps) {
@@ -370,7 +380,10 @@ export async function runAgentTurn(opts: {
           onOpenFile: (relPath, line) => {
             send(opts.win, 'ai:workspaceOp', { op: 'openFile', path: relPath, line })
           },
-          getPlan: () => session.plan
+          getPlan: () => session.plan,
+          webSearchEnabled: settings.webSearchEnabled,
+          webSearchProvider: settings.webSearchProvider,
+          webSearchMaxResults: settings.webSearchMaxResults
         })
         session.messages.push({
           id: randomUUID(),

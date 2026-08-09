@@ -1,8 +1,8 @@
 # KENTUCKY
 
-**English:** A local desktop writing app (Electron + React + TypeScript). Built for focused article writing: Markdown WYSIWYG with optional source mode, a freeform whiteboard mind map, and a chat-style dialogue CSV editor for game/script writing. The UI aims for a Cursor-like workbench feel—soft edges, a unified palette, dark/light themes, and a tunable accent color.
+**English:** A local desktop writing app (Electron + React + TypeScript). Built for focused article writing: Markdown WYSIWYG with optional source mode, a freeform whiteboard mind map, and a **node-graph** dialogue CSV editor (Godot-linked branching) for game/script writing. The UI aims for a Cursor-like workbench feel—soft edges, a unified palette, dark/light themes, and a tunable accent color.
 
-**中文：** 本地写作桌面应用（Electron + React + TypeScript）。面向**专心写文章**与**台词**：`.md` 所见即所得 + 可切源码；自由白板思维导图；聊天式 `.dialogue.csv` 编辑器。界面气质接近 Cursor 工作台：少硬边框、统一色阶，支持深色 / 浅色与可调主体色。
+**中文：** 本地写作桌面应用（Electron + React + TypeScript）。面向**专心写文章**与**台词**：`.md` 所见即所得 + 可切源码；自由白板思维导图；节点式 `.dialogue.csv` 编辑器。界面气质接近 Cursor 工作台：少硬边框、统一色阶，支持深色 / 浅色与可调主体色。
 
 > **Development note / 开发说明:** Built collaboratively by the author and AI (Cursor Agent).  
 > **Update policy / 更新原则:** Features ship primarily for the author’s own writing needs—this is **partly a personal tool**. The public repo is welcome to browse and learn from; the roadmap and UX trade-offs may not match a fully productized app.
@@ -19,18 +19,18 @@ Architecture and decision notes: [`project-memory/`](./project-memory/README.md)
 - **Explorer / 资源管理器:** File tree; create file / folder / mind map / dialogue from toolbar or context menu; rename / delete; “Reveal in File Explorer”; resizable sidebar. / 文件树、新建（含台词）、重命名、删除、「在文件资源管理器中显示」。
 - **Writing / 文本写作:** `.md` via TipTap WYSIWYG + minimal toolbar (toggle Monaco source, non-whitespace character count); other text via softened Monaco; dirty flag + save; browser spellcheck squiggles disabled. / `.md` 为 TipTap 所见即所得 + 极简工具栏；`.txt` 等为软化 Monaco；脏标记与保存；关闭拼写红波浪线。
 - **Mind map / 思维导图:** Standalone `.kmind` v2 (React Flow freeform board); rectangle / rounded / ellipse; drag edges onto empty canvas to create linked nodes; custom minimap; node links, images, reference images, and note “chin” panels; weak coupling to articles (no auto-sync). / 独立 `.kmind` v2；节点链接/插图/参考图/批注「黑下巴」；与正文弱联动、不同步。
-- **Dialogue / 台词:** Chat-style `*.dialogue.csv` (11 cols incl. optional Godot staging `focus_node`/`font_size`/`text_color`) + root `characters.csv` (`model_node`); file meta `*.dialogue.meta.json`; auto filename from scene + dialogue id. Protocol **v1.1**: [`extras/godot-kentucky-dialogue/README.md`](./extras/godot-kentucky-dialogue/README.md). Godot executor reference: [ai_river_godot](https://github.com/CCFOX12/ai_river_godot). / 聊天式台词（含演出声明列）；meta + 节点名；Godot 契约 v1.1 见 extras；执行器参考 ai_river_godot。
+- **Dialogue / 台词:** Node-graph `*.dialogue.csv` (11 cols + optional Godot staging) + optional `*.dialogue.choices.json` branching + Kentucky-only `*.dialogue.layout.json`; root `characters.csv`; meta `*.dialogue.meta.json`. Protocol **v1.2**: [`extras/godot-kentucky-dialogue/README.md`](./extras/godot-kentucky-dialogue/README.md). Godot executor: [ai_river_godot](https://github.com/CCFOX12/ai_river_godot). / 节点式台词图；choices 分支；契约 v1.2。
 - **Multi-window / 多窗口:** Blender-style **New Window** (slim single-file editor) and **New Main Window** (full workbench, same workspace, empty tabs); same-path buffers shared live across windows; in-app unsaved dialog (Save / Don’t Save / Cancel). / Blender 式新建窗口/新建主窗口；同路径正文跨窗实时共享；应用内未保存对话框。
 - **Split view / 分屏:** Side-by-side editor panes. / 编辑器左右分栏。
 - **Settings / 设置:** Dark/light, accent (presets + picker), font size, Chinese/English UI; menus follow locale; startup splash follows saved accent; **AI** (OpenAI-compatible URL/key/model, agent tools, Apply mode). / 深色/浅色、主体色、字号、中英 UI；启动闪屏跟主体色；**AI** 设置。
-- **AI writing agent / AI 写作代理人 (v0.2.0):** Right Cursor-like panel (`Ctrl+L`); streaming chat; propose→Apply file edits (Markdown/dialogue/characters/`.kmind`); multi-session history + encrypted key in app-body `data/` (not in project, not AppData); context usage bar; no web search / Shell. / 右侧 Cursor 式对话栏；流式聊天；先提案再应用；会话与密钥在软件本体 `data/`；上下文进度条；无联网检索。
+- **AI writing agent / AI 写作代理人 (v0.2.0):** Right Cursor-like panel (`Ctrl+L`); streaming chat; propose→Apply file edits (Markdown/dialogue/characters/`.kmind`); multi-session history + encrypted key in app-body `data/` (not in project, not AppData); context usage bar; **optional Skills** (`data/ai-skills/`) and **optional web search** (off by default; DuckDuckGo multi-query research); no Shell. / 右侧 Cursor 式对话栏；可选 Skills 与联网搜索（默认关）；无 Shell。
 - **Platform / 平台抽象:** Renderer talks to the filesystem only through `Platform` (Electron preload). Android is a **separate software root** (`../android/`), not bundled here. / 渲染层经 `Platform` 访问文件系统；安卓为独立软件根，不在本目录。
 
 ## Out of scope (for now) / 明确不做（现阶段）
 
 - Split Markdown preview (WYSIWYG is the reading surface); auto-sync between article and mind map / Markdown 左右分屏预览、正文 ↔ 导图自动同步
 - Command palette / extensions / Git / cloud sync / 命令面板、扩展、Git、云同步
-- AI: billing UI, web search, Shell tools, cloud key sync / AI 费用账单、联网检索、Shell、云同步密钥
+- AI: billing UI, Shell tools, cloud key sync; Brave/Tavily live search (DDG optional search is in-app) / AI 费用账单、Shell、云同步密钥；Brave/Tavily 尚未接通（DuckDuckGo 可选搜索已内置）
 - Phone-narrow layouts / 手机窄屏布局
 - Switching files inside a slim window; syncing caret/selection across windows / 精简窗内换文件、跨窗同步光标/选区
 - Godot bidirectional live protocol (Kentucky does not embed Godot or push IPC) / Godot 双向实时协议（不同路径磁盘联动）

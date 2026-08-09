@@ -39,6 +39,8 @@ export interface FileProposal {
     | 'characters'
     | 'dialogue'
     | 'dialogue_performance'
+    | 'dialogue_choices'
+    | 'dialogue_layout'
     | 'kmind'
     | 'kmind_layout'
     | 'other'

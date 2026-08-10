@@ -198,7 +198,7 @@ export function getWritingTools(): ToolDef[] {
       function: {
         name: 'propose_dialogue_performance',
         description:
-          'Batch-update performance fields (focus_node, font_size, text_color, emotion). Always requires Accept.',
+          'Batch-update performance fields (focus_node, font_size, text_color, emotion). text_color empty = engine default body color — do NOT use characters.color. Always requires Accept.',
         parameters: {
           type: 'object',
           properties: {
@@ -211,7 +211,11 @@ export function getWritingTools(): ToolDef[] {
                   id: { type: 'string' },
                   focus_node: { type: 'string' },
                   font_size: { type: 'string' },
-                  text_color: { type: 'string' },
+                  text_color: {
+                    type: 'string',
+                    description:
+                      'Body text hex (#RGB/#RRGGBB/#RRGGBBAA) or empty for engine default. Not characters.color.'
+                  },
                   emotion: { type: 'string' }
                 },
                 required: ['id']
@@ -1897,7 +1901,9 @@ export function LITERARY_SYSTEM_PROMPT(
     '- Patch lines only → propose_update_dialogue_lines / propose_append_dialogue_lines (afterId inserts near that id in CSV) / propose_reorder_dialogue_lines.',
     '- Patch options only → propose_set_dialogue_choices. Empty nodes deletes choices file (isolated lines with no outs).',
     '- After structural edits, call layout_dialogue if layout was not already written (canvas coordinates; Godot ignores).',
-    '- Playback follows options.goto / end only; CSV first row = opening.',
+    '- Playback follows options.goto / end only; CSV first row = opening. Unreachable lines (no path from opening via options) will not play.',
+    '- text_color is body text color for Godot UI: leave empty for engine default (usually white). NEVER copy characters.color into text_color (character color is Kentucky canvas badge only).',
+    '- Opening speaker may be operable; if the user wants NPC speech immediately on enter, opening speaker should be non-operable.',
     '- Performance fields → propose_dialogue_performance. Cast orphans → dialogue_cast_check.',
     '',
     'When editing .kmind, prefer scene_to_kmind or propose_kmind_edit. To fix a tangled map, call layout_kmind.',

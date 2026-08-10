@@ -5,6 +5,8 @@ import { normalizeFontSize, normalizeTextColor } from './dialogueCsv'
 type Props = {
   line: DialogueLine | null
   characters: Character[]
+  isOpening?: boolean
+  onSetOpening?: () => void
   edgeLabel: string | null
   onUpdateLine: (patch: Partial<DialogueLine>) => void
   onUpdateEdgeLabel: (label: string) => void
@@ -14,6 +16,8 @@ type Props = {
 export function DialogueInspector({
   line,
   characters,
+  isOpening = false,
+  onSetOpening,
   edgeLabel,
   onUpdateLine,
   onUpdateEdgeLabel,
@@ -59,6 +63,17 @@ export function DialogueInspector({
   return (
     <aside className="dialogue-inspector">
       <h3>{t('dialogue.inspectorTitle')}</h3>
+      <label className="dialogue-inspector-field character-operable-row" title={t('dialogue.openingHint')}>
+        <input
+          type="checkbox"
+          checked={isOpening}
+          disabled={isOpening}
+          onChange={(e) => {
+            if (e.target.checked) onSetOpening?.()
+          }}
+        />
+        <span>{t('dialogue.opening')}</span>
+      </label>
       <label className="dialogue-inspector-field">
         <span>{t('dialogue.speaker')}</span>
         <select
@@ -118,6 +133,8 @@ export function DialogueInspector({
             value={line.text_color}
             onChange={(e) => onUpdateLine({ text_color: e.target.value })}
             onBlur={(e) => commitColor(e.target.value)}
+            placeholder={t('dialogue.textColorPlaceholder')}
+            title={t('dialogue.textColorHint')}
           />
         </label>
       </details>

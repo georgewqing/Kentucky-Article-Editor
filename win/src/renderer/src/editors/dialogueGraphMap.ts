@@ -378,8 +378,44 @@ export function graphFromDisk(opts: {
 }
 
 /**
+ * Prefer explicit `data.isOpening`; if none/many, fall back to top-left root
+ * (no incoming option edges), else top-left line. At most one id.
+ */
+export function resolveOpeningId(
+  nodes: DialogueFlowNode[],
+  edges: DialogueFlowEdge[]
+): string | null {
+  const lineNodes = nodes.filter((n) => n.data?.kind === 'line' && n.data.line)
+  if (!lineNodes.length) return null
+  const marked = lineNodes.filter((n) => n.data.isOpening)
+  if (marked.length === 1) return marked[0].id
+  if (marked.length > 1) return sortByPosition(marked)[0]?.id ?? null
+
+  const optionEdges = edges.filter((e) => lineNodes.some((n) => n.id === e.source))
+  const targets = new Set(
+    optionEdges.filter((e) => e.target !== DIALOGUE_END_NODE_ID).map((e) => e.target)
+  )
+  const roots = sortByPosition(lineNodes.filter((n) => !targets.has(n.id)))
+  return (roots[0] || sortByPosition(lineNodes)[0])?.id ?? null
+}
+
+/** Mark exactly one line node as opening (others cleared). */
+export function withExclusiveOpening(
+  nodes: DialogueFlowNode[],
+  openingId: string | null
+): DialogueFlowNode[] {
+  return nodes.map((n) => {
+    if (n.data?.kind !== 'line') return n
+    return {
+      ...n,
+      data: { ...n.data, isOpening: Boolean(openingId && n.id === openingId) }
+    }
+  })
+}
+
+/**
  * Serialize graph → CSV lines, choices, layout (protocol v1.3).
- * Opening = top-left-most line with no incoming option edges → CSV first row.
+ * Opening = explicit isOpening (exclusive) → CSV first row; else top-left root heuristic.
  * Empty-text options are written; nodes empty → caller may delete choices file.
  */
 export function diskFromGraph(
@@ -394,12 +430,8 @@ export function diskFromGraph(
   const lineNodes = nodes.filter((n) => n.data?.kind === 'line' && n.data.line)
 
   const optionEdges = edges.filter((e) => lineNodes.some((n) => n.id === e.source))
-  const targets = new Set(
-    optionEdges.filter((e) => e.target !== DIALOGUE_END_NODE_ID).map((e) => e.target)
-  )
-  const roots = sortByPosition(lineNodes.filter((n) => !targets.has(n.id)))
-  const opening = roots[0] || sortByPosition(lineNodes)[0] || null
-  const openingId = opening?.id ?? null
+  const openingId = resolveOpeningId(nodes, edges)
+  const opening = openingId ? lineNodes.find((n) => n.id === openingId) || null : null
 
   const ordered: DialogueLine[] = []
   const visited = new Set<string>()

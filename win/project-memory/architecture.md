@@ -120,6 +120,8 @@ AiPanel / aiStore
 
 - **主窗**有 `ActivityBar`；**精简窗**为 `FloatWorkbench`（文件名标题 + 单编辑器，**无**顶栏菜单）
 - Windows/Linux 顶栏 `AppMenuBar`（点击展开）；macOS 用系统菜单
+- Toast：`ToastLayer`（进出动画）；确认 / 未保存：`ConfirmDialog` / `UnsavedChangesDialog` + `AnimatedDialogShell`
+- 动效 tokens 与 `prefers-reduced-motion`：`styles/global.css`；boot：`index.html` / `public/splash.html`
 - 无工作区 → `WelcomePage`（品牌 + 打开文件夹 + 最多 6 张工作区卡片）
 - 有工作区 → `Sidebar` + `EditorArea`
 - `activeView`: `'explorer' | 'settings' | 'home'`
@@ -142,11 +144,11 @@ AiPanel / aiStore
 
 ## 台词 CSV
 
-- **台词文件** `*.dialogue.csv`：列 `id,speaker,text,note,emotion,scene,condition,audio,focus_node,font_size,text_color`（写回始终 11 列；旧 8 列可读）；CSV 首行=开场；播放序看 choices；`speaker`=角色 id
+- **台词文件** `*.dialogue.csv`：列 `id,speaker,text,note,emotion,scene,condition,audio,focus_node,font_size,text_color`（写回始终 11 列；旧 8 列可读）；CSV 首行=开场（检视器可显式指定唯一开场）；播放序看 choices；`speaker`=角色 id；`text_color` 空=引擎默认（≠ 角色色）
 - **播放图** `*.dialogue.choices.json`（空 text=确认续句/NPC 自动，取决于 `characters.operable`；非空=选项 UI）；**布局** `*.dialogue.layout.json`（仅 Kentucky）
 - **角色表** 工作区根 `characters.csv`：`id,name,color,note,model_node,operable`（路径固定不可配）
-- 解析/序列化：`dialogueCsv.ts` + `dialogueGraphMap.ts`；落盘 flush：`dialogueSidecarFlush.ts`（须 `graphReady`，防空覆盖）
-- UI：`DialogueEditor` 节点画布 + `DialogueLineNode` / `DialogueInspector` / `DialogueMiniMap`
+- 解析/序列化：`dialogueCsv.ts` + `dialogueGraphMap.ts`（`resolveOpeningId` / `withExclusiveOpening`）；落盘 flush：`dialogueSidecarFlush.ts`（须 `graphReady`，防空覆盖）
+- UI：`DialogueEditor` 节点画布 + `DialogueLineNode` / `DialogueInspector`（开场开关 + text_color hint）/ `DialogueMiniMap`
 - 稳定 id：`allocateDialogueId` 在工作区所有 `.dialogue.csv` 内查重顺延
 - Godot 契约：`extras/godot-kentucky-dialogue/README.md`（协议 **v1.3**）；执行器：[ai_river_godot](https://github.com/CCFOX12/ai_river_godot)
 

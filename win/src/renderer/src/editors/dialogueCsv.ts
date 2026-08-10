@@ -15,7 +15,7 @@ export interface DialogueLine {
   focus_node: string
   /** Pixel font size as decimal string; empty/`0` → Godot UI default (disk always ''). */
   font_size: string
-  /** Body color `#RGB` / `#RRGGBB` / `#RRGGBBAA`; empty → Godot default. */
+  /** Body color `#RGB` / `#RRGGBB` / `#RRGGBBAA`; empty → Godot default (not characters.color). */
   text_color: string
 }
 

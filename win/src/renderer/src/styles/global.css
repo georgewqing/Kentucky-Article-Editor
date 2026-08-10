@@ -32,6 +32,13 @@
   --status-height: 24px;
   --title-height: 36px;
   --radius: 6px;
+  /* Motion (Emil: strong ease-out; UI under 300ms) */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --duration-press: 140ms;
+  --duration-popover: 150ms;
+  --duration-toast: 180ms;
+  --duration-modal: 220ms;
+  --duration-chrome: 110ms;
 }
 
 *,
@@ -146,6 +153,17 @@ input[type='color'] {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity var(--duration-popover) var(--ease-out),
+    transform var(--duration-popover) var(--ease-out);
+}
+@starting-style {
+  .app-menu-dropdown {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 
 .app-menu-item {
@@ -300,6 +318,14 @@ input[type='color'] {
   opacity: 0.75;
   position: relative;
   flex-shrink: 0;
+  transition:
+    background-color var(--duration-chrome) ease,
+    color var(--duration-chrome) ease,
+    opacity var(--duration-chrome) ease,
+    transform var(--duration-press) var(--ease-out);
+}
+.activity-btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .activity-btn:hover {
@@ -474,6 +500,17 @@ input[type='color'] {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity var(--duration-popover) var(--ease-out),
+    transform var(--duration-popover) var(--ease-out);
+}
+@starting-style {
+  .ctx-menu {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 
 .ctx-menu button {
@@ -710,6 +747,9 @@ input[type='color'] {
   position: relative;
   cursor: pointer;
   user-select: none;
+  transition:
+    background-color var(--duration-chrome) ease,
+    color var(--duration-chrome) ease;
 }
 
 .tab:hover {
@@ -761,6 +801,10 @@ input[type='color'] {
   color: var(--fg-muted);
   font-size: 14px;
   opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    background-color var(--duration-chrome) ease,
+    color var(--duration-chrome) ease;
 }
 
 .tab:hover .tab-close,
@@ -789,6 +833,13 @@ input[type='color'] {
   border-radius: 5px;
   color: var(--fg-muted);
   font-size: 12px;
+  transition:
+    background-color var(--duration-chrome) ease,
+    color var(--duration-chrome) ease,
+    transform var(--duration-press) var(--ease-out);
+}
+.tab-bar-actions button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .tab-bar-actions button:hover {
@@ -930,6 +981,13 @@ input[type='color'] {
   border-radius: 5px;
   color: var(--fg-muted);
   background: transparent;
+  transition:
+    background-color var(--duration-chrome) ease,
+    color var(--duration-chrome) ease,
+    transform var(--duration-press) var(--ease-out);
+}
+.article-toolbar button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .article-toolbar button:hover:not(:disabled) {
@@ -1166,6 +1224,13 @@ input[type='color'] {
   padding: 5px 12px;
   color: var(--fg);
   font-size: 12px;
+  transition:
+    background-color var(--duration-chrome) ease,
+    color var(--duration-chrome) ease,
+    transform var(--duration-press) var(--ease-out);
+}
+.mindmap-toolbar button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .mindmap-toolbar button:hover:not(:disabled) {
@@ -1469,6 +1534,7 @@ input[type='color'] {
   border: 1px solid var(--bg-editor) !important;
   opacity: 0;
   z-index: 5;
+  transition: opacity 0.12s ease;
 }
 
 /* Center handle on the node edge (half in / half out) — all node shapes. */
@@ -1884,6 +1950,16 @@ input[type='color'] {
   justify-content: center;
   background: rgba(0, 0, 0, 0.45);
   padding: 24px;
+  opacity: 1;
+  transition: opacity var(--duration-modal) var(--ease-out);
+}
+.app-dialog-backdrop.is-leaving {
+  opacity: 0;
+}
+@starting-style {
+  .app-dialog-backdrop {
+    opacity: 0;
+  }
 }
 
 .app-dialog {
@@ -1893,6 +1969,21 @@ input[type='color'] {
   border-radius: 8px;
   padding: 18px 18px 14px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity var(--duration-modal) var(--ease-out),
+    transform var(--duration-modal) var(--ease-out);
+}
+.app-dialog.is-leaving {
+  opacity: 0;
+  transform: scale(0.98);
+}
+@starting-style {
+  .app-dialog {
+    opacity: 0;
+    transform: scale(0.98);
+  }
 }
 
 .app-dialog-title {
@@ -1929,6 +2020,13 @@ input[type='color'] {
   color: var(--fg);
   background: var(--bg-elev-4);
   border: 1px solid transparent;
+  transition:
+    background-color var(--duration-chrome) ease,
+    color var(--duration-chrome) ease,
+    transform var(--duration-press) var(--ease-out);
+}
+.app-dialog-btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .app-dialog-btn:hover {
@@ -1978,6 +2076,21 @@ input[type='color'] {
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
   z-index: 100;
   max-width: 360px;
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity var(--duration-toast) var(--ease-out),
+    transform var(--duration-toast) var(--ease-out);
+}
+.toast.is-leaving {
+  opacity: 0;
+  transform: translateY(8px);
+}
+@starting-style {
+  .toast {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
 
 .toast.error {
@@ -2061,6 +2174,12 @@ input[type='color'] {
   border-radius: 6px;
   cursor: pointer;
   font-size: 12px;
+  transition:
+    background-color var(--duration-chrome) ease,
+    transform var(--duration-press) var(--ease-out);
+}
+.dialogue-toolbar button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .dialogue-toolbar button:hover {
@@ -2341,6 +2460,12 @@ input[type='color'] {
   background: var(--bg-elev-2);
   color: var(--fg);
   cursor: pointer;
+  transition:
+    background-color var(--duration-chrome) ease,
+    transform var(--duration-press) var(--ease-out);
+}
+.dialogue-graph-toolbar button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 .dialogue-graph-toolbar button:hover {
   background: var(--bg-hover);
@@ -2683,6 +2808,17 @@ input[type='color'] {
   margin-bottom: 8px;
   z-index: 5;
   padding: 4px;
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity var(--duration-popover) var(--ease-out),
+    transform var(--duration-popover) var(--ease-out);
+}
+@starting-style {
+  .dialogue-mention-menu {
+    opacity: 0;
+    transform: translateY(4px);
+  }
 }
 
 .dialogue-mention-menu button {
@@ -2821,6 +2957,17 @@ input[type='color'] {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   padding: 4px;
   z-index: 6;
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity var(--duration-popover) var(--ease-out),
+    transform var(--duration-popover) var(--ease-out);
+}
+@starting-style {
+  .dialogue-mode-menu {
+    opacity: 0;
+    transform: translateY(4px);
+  }
 }
 
 .dialogue-mode-menu button {
@@ -3015,6 +3162,7 @@ input[type='color'] {
   gap: 4px;
   flex-shrink: 0;
   opacity: 0;
+  transition: opacity 0.12s ease;
 }
 
 .character-card:hover .character-card-actions,
@@ -3849,4 +3997,39 @@ input[type='color'] {
   font: inherit;
   font-size: 11px;
   cursor: pointer;
+}
+
+/* Emil motion: respect OS reduce-motion */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-press: 0ms;
+    --duration-popover: 0ms;
+    --duration-toast: 0ms;
+    --duration-modal: 0ms;
+    --duration-chrome: 0ms;
+  }
+  .dialogue-graph-canvas .dialogue-edge-flow .react-flow__edge-path,
+  .dialogue-graph-canvas .react-flow__edge.animated path {
+    animation: none !important;
+  }
+  .ai-thinking-spinner {
+    animation: none !important;
+  }
+  .ai-msg-streaming::after {
+    animation: none !important;
+  }
+  .toast,
+  .toast.is-leaving,
+  .app-dialog-backdrop,
+  .app-dialog-backdrop.is-leaving,
+  .app-dialog,
+  .app-dialog.is-leaving,
+  .app-menu-dropdown,
+  .ctx-menu,
+  .dialogue-mention-menu,
+  .dialogue-mode-menu {
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
 }

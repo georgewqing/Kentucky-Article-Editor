@@ -30,7 +30,7 @@ Kentucky 只保证：打开文件夹后编辑，`Ctrl+S` **写同一路径磁盘
 | 新建文件名 | **自动** `{sceneStem}_{dialogueId}.dialogue.csv` |
 | 改名/删除/移动 | 同步 **meta + choices + layout** |
 | Kentucky UI | 节点图：底边 option；芯片「下一句」(可操作空 text) /「自动」(NPC 空 text) / 文案 /「结束」；End→`end: true` |
-| CSV 行序 | **非播放序**；仅开场 = 第一行；播放只跟 `goto` / `end` |
+| CSV 行序 | **非播放序**；仅开场 = 第一行（Kentucky 可显式指定唯一开场）；播放只跟 `goto` / `end` |
 | 联动方式 | **同路径磁盘**，无 IPC / 无内嵌引擎 |
 
 例：`res://scenes/tavern.tscn` + `intro` →  
@@ -204,6 +204,7 @@ id,speaker,text,note,emotion,scene,condition,audio,focus_node,font_size,text_col
 | `id` | 是 | 全工作区稳定唯一；choices 的 `goto` / 节点键 |
 | `speaker` | 是 | character **id** |
 | `text` | 是 | 正文 |
+| `text_color` | 否 | **正文色**；空 = 执行器默认正文色（通常白）。**不是** `characters.color` |
 | 其它列 | 否 | 同 v1.1 / v1.2 |
 
 **CSV 第一行 = 开场。** 行序**不是**播放序；播放只跟 choices。
@@ -217,7 +218,20 @@ focus_node（非空）
       → warning，跳过对焦
 ```
 
+`font_size`：空或 `0` → 执行器默认字号。  
+`text_color`：空 → 执行器默认正文色；**禁止**把 `characters.color`（画布名牌/描边色）当作正文色默认写入。仅高亮/强调行才填 `#RGB` / `#RRGGBB` / `#RRGGBBAA`。
+
 Kentucky **不**校验节点存在。写回始终 **11 列**。
+
+### 4.2 作者 / 声明器注意（联调协调）
+
+| 项 | 约定 |
+|----|------|
+| `text_color` | 要默认白正文就**留空**；勿填角色色。角色色只用于 Kentucky 画布 speaker 名牌/描边 |
+| 开场 operable | 协议允许开场 speaker 为可操作；若希望**进对话立刻听 NPC**，开场 speaker 须 **非 operable**（空 text 自动过） |
+| 不可达节点 | 播放只跟 choices 的 `goto`。CSV 有行但从开场经 option 边**到不了** → **播不到**；须在画布接上 |
+| 切换台词文件 | Kentucky 只写磁盘。换篇由 Godot 侧 `dialogue_id` / 工程内 `dialogue_file_override` 决定（playground 锁死 override 时须改或清空）——**非** Kentucky API |
+| Keep File | Kentucky **永不**读写 `*.dialogue.csv.import`；作者在 Godot 保存/重导后须确认 `importer="keep"`，避免 Translation 副产品 |
 
 ### 稳定 id
 
@@ -236,7 +250,10 @@ Kentucky **不**校验节点存在。写回始终 **11 列**。
 
 ## 6. Godot 导入建议
 
-台词 `*.dialogue.csv` 建议 **Keep File**，避免当 Translation。
+台词 `*.dialogue.csv` 建议 **Keep File**（`importer="keep"`），避免当 Translation。  
+
+- Kentucky **不**创建、修改或删除 `*.dialogue.csv.import`。  
+- 在 Godot 中保存或触发重导后，作者应确认 `.import` 仍为 Keep File，避免再出 translation 副产品。
 
 ---
 
@@ -272,8 +289,9 @@ load_choices(csv_path)-> { version, nodes } | empty
 get_choices_after(csv_path, line_id) -> Option[]
 resolve_speaker(line) -> character | fallback
 resolve_focus(line)   -> focus_node | model_node | default_subject
-apply_ui(line)        -> font_size / text_color（空或 0 → 默认）
+apply_ui(line)        -> font_size / text_color（空或 0 → 引擎默认正文样式；text_color 空 ≠ characters.color）
 ```
+
 
 播放伪代码（v1.3）：
 
@@ -309,7 +327,7 @@ loop:
 | 底边 A→B（空文案） | `{ text: "", goto: B }` |
 | 底边 A→B（有文案） | `{ text, goto: B }` |
 | 底边 A→End | `{ text: "", end: true }`（可非空告别） |
-| 开场 | 无入边根中最左上 → CSV 第一行 |
+| 开场 | Kentucky 可显式指定（检视器「开场」）；落盘 = CSV 第一行。未指定时缺省为无入边根中最左上 |
 | 空/非空混排 | 编辑器即时拒绝 |
 | 环 / 回跳 | 允许 |
 
@@ -351,6 +369,14 @@ Godot **只消费 CSV + choices + characters + meta**，不读图、不读 layou
 4. 多选项（非空 text）：弹出 UI（与 operable 无关）；`end` 结束  
 5. **勿**再测「无 choices 文件仍按行序播」为正式行为  
 6. `focus_node` / `model_node` 对焦回退正常  
+
+### 作者侧联调检查
+
+1. 默认白正文：`text_color` **留空**（勿写成角色色）；仅刻意高亮才填 hex  
+2. 若需进对话立刻听 NPC：开场 speaker **非 operable**  
+3. 每条要播到的行：从开场经 choices 可达（无「CSV 有、图未接」孤儿）  
+4. Godot 换篇：改 `dialogue_id` 或 playground 的 `dialogue_file_override`（勿以为 Kentucky 会切运行时篇）  
+5. 保存/重导后：`*.dialogue.csv.import` 仍为 `importer="keep"`  
 
 参考 smoke（以参考仓库为准）：
 

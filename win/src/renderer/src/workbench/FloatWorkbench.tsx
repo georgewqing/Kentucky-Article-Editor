@@ -5,11 +5,11 @@ import { MonacoTextEditor } from '@/editors/MonacoTextEditor'
 import { MarkdownArticleEditor } from '@/editors/MarkdownArticleEditor'
 import { MindMapEditor } from '@/editors/MindMapEditor'
 import { DialogueEditor } from '@/editors/DialogueEditor'
+import { ToastLayer } from './ToastLayer'
 
 export function FloatWorkbench() {
   const { t } = useTranslation()
   const tab = useAppStore((s) => s.tabs[0])
-  const toast = useAppStore((s) => s.toast)
 
   const isMarkdown = tab ? getPlatform().extname(tab.path) === '.md' : false
 
@@ -38,7 +38,7 @@ export function FloatWorkbench() {
           <MonacoTextEditor tabId={tab.id} />
         )}
       </div>
-      {toast ? <div className={`toast ${toast.type}`}>{toast.message}</div> : null}
+      <ToastLayer />
     </div>
   )
 }

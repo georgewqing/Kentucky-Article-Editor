@@ -22,14 +22,15 @@
 | 语言 | 中文 + 英文 UI |
 | Markdown 预览 | **不设分屏预览**；WYSIWYG 即阅读/写作态；源码模式看原始 Markdown |
 | 多窗口 | Blender 式：**新建主窗口**=完整工作台+同工作区+空标签；**新建窗口**=精简单文件窗（无顶栏菜单，含 `.kmind`）；同路径正文经 DocumentHub **实时共享**；欢迎页无活动文件时「新建窗口」灰显；关最后主窗退出；无主窗持有该工作区时关掉其精简窗 |
-| 未保存确认 | 关窗 / 关脏标签 / 关工作区用应用内对话框（保存 / 不保存 / 取消），风格跟工作台一致；不用系统 `confirm` / `beforeunload` |
+| 未保存确认 | 关窗 / 关脏标签 / 关工作区用应用内对话框（保存 / 不保存 / 取消），风格跟工作台一致；`AnimatedDialogShell` 进出动画；不用系统 `confirm` / `beforeunload` |
+| UI 动效 | Emil 取向：偶尔表面（toast/dialog/菜单）短 ease-out；chrome 轻 hover/press；**不**动画键盘高频操作；尊重 `prefers-reduced-motion`；不加 framer-motion |
 | 分发 | Windows：**目录版** `release/KENTUCKY-<version>/`（内含 `KENTUCKY.exe`）；可选 `npm run dist:portable` 单文件。图标 `build/icon.png`（灰白 K，圆角） |
 | 拼写检查 | 正文关闭浏览器拼写检查（无红波浪线） |
 | 帮助链接 | 「了解 KENTUCKY」→ https://github.com/CCFOX12/Kentucky-Article-Editor |
-| 台词对话 | **独立功能**；磁盘真相 = `*.dialogue.csv`（11 列）+ `*.dialogue.choices.json`（播放图；空 text 由 `characters.operable` 决定确认或自动）+ 工作区根 `characters.csv`；**节点图画布**（底边 option / End 沉底；smoothstep；选项芯片；可调宽检视器；小地图）；`speaker` 存角色 **id**；布局 `*.dialogue.layout.json` 仅 Kentucky；保存须防未就绪写空 CSV |
-| 台词角色 | 顶栏创建；检视器选 speaker；列：`id,name,color,note,model_node,operable`（创建时 `model_node` 必填；`operable=1` 为可操作玩家，空文案需确认；否则 NPC 自动过句）；打开 `characters.csv` 用 CharactersEditor |
+| 台词对话 | **独立功能**；磁盘真相 = `*.dialogue.csv`（11 列）+ `*.dialogue.choices.json`（播放图；空 text 由 `characters.operable` 决定确认或自动）+ 工作区根 `characters.csv`；**节点图画布**（底边 option / End 沉底；smoothstep；选项芯片；检视器可设唯一开场；可调宽检视器；小地图）；`speaker` 存角色 **id**；`text_color` 空=引擎默认正文色（**≠** 角色色）；布局 `*.dialogue.layout.json` 仅 Kentucky；保存须防未就绪写空 CSV |
+| 台词角色 | 顶栏创建；检视器选 speaker；列：`id,name,color,note,model_node,operable`（创建时 `model_node` 必填；`operable=1` 为可操作玩家，空文案需确认；否则 NPC 自动过句；进对话立刻听 NPC → 开场 speaker 用非 operable）；打开 `characters.csv` 用 CharactersEditor |
 | 台词导出 | 完整管线 CSV + 本地化 `keys,<lang>`；挂画布工具栏 |
-| Godot 热编辑 | **同路径磁盘**；协议 **v1.3**。执行器读 csv/meta/characters（含 **operable**）/**choices**（忽略 layout）；空 text 按 speaker 可操作确认 / NPC 自动。参考 [ai_river_godot](https://github.com/CCFOX12/ai_river_godot) Louisville Station。完整说明书：`extras/godot-kentucky-dialogue/README.md`。不做 IPC / 表达式引擎 / 图格式替代 CSV |
+| Godot 热编辑 | **同路径磁盘**；协议 **v1.3**。执行器读 csv/meta/characters（含 **operable**）/**choices**（忽略 layout）；空 text 按 speaker 可操作确认 / NPC 自动。Kentucky 不碰 `.import`（Keep File 由作者自检）。换篇是 Godot `dialogue_id` / override。参考 [ai_river_godot](https://github.com/CCFOX12/ai_river_godot) Louisville Station。完整说明书：`extras/godot-kentucky-dialogue/README.md`。不做 IPC / 表达式引擎 / 图格式替代 CSV |
 | 活动栏 | 视窗键=起始页（`home`，不关工作区、隐藏侧栏）；**工程徽章列表**（可多开）+ 末尾「+」开文件夹；**AI 对话键**=右侧 Agent 栏（`Ctrl+L`）；齿轮=设置 |
 | 多工程 | 同窗口多文件夹；切换保留各工程标签/树；聊天与面板记忆按路径隔离 |
 | 工作区布局 | Cursor 工作区容器含两个软件根：`win/`（本 Electron 应用）与 `android/`（独立 Capacitor）；互不共享源码树 |

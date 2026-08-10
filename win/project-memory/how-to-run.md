@@ -118,9 +118,9 @@ YourGodotProject/
 2. **新建台词**信息卡：只填 Godot 场景 + 对话标识 → 自动生成文件名并写 `*.dialogue.meta.json`（卡上无改名入口）。
 3. **创建角色**须填模型节点名 `model_node`；玩家角色勾选 **可操作**（顶栏「创建角色」或打开 `characters.csv` 卡片页）。
 4. 需要改文件名：资源管理器 **右键 → 重命名**（同步 meta / choices / layout）。
-5. 在**节点画布**编辑：从底边拉**选项边**（空文案：可操作=下一句确认，NPC=自动；可连 End）；右侧检视器改正文与 Godot 演出；`Ctrl+S` → csv + choices + layout。
-6. Godot（Louisville Station 等）读同一目录；检查器填 `dialogue_dir` + `dialogue_id`；**不要**把导出 CSV 当热编辑主路径；执行器需按 **v1.3** 播 options，并读 `characters.operable`。
-7. **完整协议 / 插件说明书 v1.3**：[`extras/godot-kentucky-dialogue/README.md`](../extras/godot-kentucky-dialogue/README.md)。
+5. 在**节点画布**编辑：从底边拉**选项边**（空文案：可操作=下一句确认，NPC=自动；可连 End）；检视器可勾选唯一**开场**；须保证要播的行从开场可达；右侧检视器改正文与 Godot 演出（`text_color` 留空=默认白正文，勿填角色色）；`Ctrl+S` → csv + choices + layout。
+6. Godot（Louisville Station 等）读同一目录；检查器填 `dialogue_dir` + `dialogue_id`（playground 若锁了 `dialogue_file_override` 须改或清空才能换篇）；**不要**把导出 CSV 当热编辑主路径；执行器需按 **v1.3** 播 options，并读 `characters.operable`；保存/重导后确认 `*.dialogue.csv.import` 仍为 Keep File。
+7. **完整协议 / 插件说明书 v1.3**：[`extras/godot-kentucky-dialogue/README.md`](../extras/godot-kentucky-dialogue/README.md)（含 §4.2 作者联调注意、显式开场）。
 
 保存注意：画布未加载完时不要依赖立刻 `Ctrl+S` 写盘；若提示图与缓冲区不一致，先确认画布已显示台词再保存（防空覆盖）。
 

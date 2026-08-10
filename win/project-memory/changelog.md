@@ -391,6 +391,27 @@
 - Godot 联动说明书整篇升 **v1.3**；AI / project-memory / win README 去 v1.2 行序语义
 - **可操作角色** `characters.operable`：仅玩家空 text 等确认；NPC 空 text 自动过句；协议速览 / 执行器伪代码 / 自测清单已对齐
 
+## 50. 协议吸收 Godot 联调作者协调项
+
+- `text_color` 空=引擎默认正文色（≠ 角色色）；开场立刻听 NPC → 非 operable；不可达行播不到；换篇属 Godot override；Kentucky 不碰 Keep File `.import`
+- extras §4.2 + 作者侧自测；gotchas / product-decisions / how-to-run；检视器与 AI 提示勿把角色色写入 `text_color`
+
+## 51. 开场节点互斥开关
+
+- 检视器「开场节点」勾选设唯一入口（已是开场不可取消，须改设其它节点）
+- `resolveOpeningId` / `withExclusiveOpening`：`diskFromGraph` 优先 `data.isOpening` → CSV 第一行；缺省/多标归一；删开场回退无入边最左上
+- 协议 §9：Kentucky 可显式指定开场；Godot 仍只认 CSV 首行（无新 sidecar 字段）
+- 涉及：`dialogueGraphMap.ts`、`DialogueEditor.tsx`、`DialogueInspector.tsx`、i18n
+
+## 52. UI 动效抛光（Emil Kowalski skills）
+
+- 气质：工作台 crisp；偶尔出现的表面才动画；**不**动画高频键盘切标签；无 framer-motion
+- Tokens（`global.css`）：`--ease-out`、`--duration-press|popover|toast|modal|chrome`
+- Toast：`ToastLayer.tsx`（Workbench / FloatWorkbench）；进出 `opacity` + `translateY(8px)` ~180ms
+- 对话框：`AnimatedDialogShell.tsx` 包裹 Confirm / Unsaved；backdrop fade + 面板 `scale(0.98)`；内联 `app-dialog` 靠 `@starting-style` 入场
+- Chrome：tab / activity / toolbar / dialog 按钮短 hover + `:active scale(0.97)`；菜单/ctx/mention/mode 微入场；character-card / kmind-handle opacity 对齐 bubble-actions
+- A11y：`prefers-reduced-motion` 停 edge-flow / ai-spin / blink / boot-slide；覆盖层 duration→0；`index.html` + `public/splash.html`
+
 ## 其它小修
 
 - 选项卡悬停用 `cursor: pointer`

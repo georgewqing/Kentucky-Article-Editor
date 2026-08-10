@@ -63,6 +63,8 @@ import {
   edgesOnPathsTowardEnd,
   wouldCreateMixedEmptyOptions,
   choiceEdgeVisualProps,
+  resolveOpeningId,
+  withExclusiveOpening,
   type DialogueFlowEdge,
   type DialogueFlowNode
 } from './dialogueGraphMap'
@@ -511,10 +513,20 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
     const nextNodes = nodesRef.current.filter((n) => n.id !== id)
     const nextEdges = edgesRef.current.filter((e) => e.source !== id && e.target !== id)
     void seqIn
-    applyGraph(nextNodes, nextEdges)
+    const openingId = resolveOpeningId(nextNodes, nextEdges)
+    applyGraph(withExclusiveOpening(nextNodes, openingId), nextEdges)
     setSelectedNodeId(null)
   }, [selectedNodeId, applyGraph, pushUndo, t])
 
+  const setOpening = useCallback(
+    (lineId: string) => {
+      const exists = nodesRef.current.some((n) => n.id === lineId && n.data?.kind === 'line')
+      if (!exists) return
+      pushUndo()
+      applyGraph(withExclusiveOpening(nodesRef.current, lineId), edgesRef.current)
+    },
+    [applyGraph, pushUndo]
+  )
   const addLine = useCallback(async () => {
     const speaker = characters[0]?.id
     if (!speaker) {
@@ -633,6 +645,11 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
     if (!selectedNodeId) return null
     const n = nodes.find((x) => x.id === selectedNodeId)
     return n?.data?.line || null
+  }, [nodes, selectedNodeId])
+
+  const selectedIsOpening = useMemo(() => {
+    if (!selectedNodeId) return false
+    return Boolean(nodes.find((x) => x.id === selectedNodeId)?.data?.isOpening)
   }, [nodes, selectedNodeId])
 
   const flowingEdgeIds = useMemo(
@@ -882,6 +899,10 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
           <DialogueInspector
             line={selectedLine}
             characters={characters}
+            isOpening={selectedIsOpening}
+            onSetOpening={() => {
+              if (selectedNodeId) setOpening(selectedNodeId)
+            }}
             edgeLabel={selectedEdgeId && editingEdgeLabel !== null ? editingEdgeLabel : null}
             onUpdateLine={updateSelectedLine}
             onUpdateEdgeLabel={updateEdgeLabel}

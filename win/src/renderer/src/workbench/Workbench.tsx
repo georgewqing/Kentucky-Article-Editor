@@ -8,6 +8,7 @@ import { WelcomePage } from './WelcomePage'
 import { SettingsPage } from './SettingsPage'
 import { AppMenuBar } from './AppMenuBar'
 import { FloatWorkbench } from './FloatWorkbench'
+import { ToastLayer } from './ToastLayer'
 import { AiPanel } from '@/ai/AiPanel'
 import { useAiStore } from '@/state/aiStore'
 
@@ -16,7 +17,6 @@ export function Workbench() {
   const workspacePath = useAppStore((s) => s.workspacePath)
   const sidebarVisible = useAppStore((s) => s.sidebarVisible)
   const activeView = useAppStore((s) => s.activeView)
-  const toast = useAppStore((s) => s.toast)
   const aiVisible = useAiStore((s) => s.panelVisible)
   const aiWidth = useAiStore((s) => s.panelWidth)
   const setAiWidth = useAiStore((s) => s.setPanelWidth)
@@ -120,7 +120,7 @@ export function Workbench() {
           </>
         ) : null}
       </div>
-      {toast ? <div className={`toast ${toast.type}`}>{toast.message}</div> : null}
+      <ToastLayer />
     </div>
   )
 }

@@ -76,12 +76,17 @@
 - 台词 id 唯一性要扫工作区全部 `.dialogue.csv`（不只当前文件）；改 text/meta 默认不改 id。
 - Godot 热编辑：打开工程内 `dialogue/` 当工作区即可同文件联动；执行器参考 [ai_river_godot](https://github.com/CCFOX12/ai_river_godot)（Kentucky **不**附带插件），契约见 `extras/godot-kentucky-dialogue/README.md`（**v1.3**）。勿把「导出 CSV」当热编辑主路径。
 - 启动闪屏主题：读 `userData/kentucky-theme.json`；dev 下 splash 走 Vite URL（避免 `out/renderer/boot-theme.js` 过期）；query 里 accent **不带 `#`**；主进程在 `dom-ready`/`did-finish-load` **注入** `--boot-accent*`，不单靠页面脚本。
-- 台词演出列：`focus_node` / `font_size` / `text_color`；`font_size` 空与 `0` 磁盘统一空串；`text_color` 仅 `#RGB`/`#RRGGBB`/`#RRGGBBAA`；Kentucky 不校验节点存在。
+- 台词演出列：`focus_node` / `font_size` / `text_color`；`font_size` 空与 `0` 磁盘统一空串；`text_color` 仅 `#RGB`/`#RRGGBB`/`#RRGGBBAA`；**空 = 引擎默认正文色，不是** `characters.color`（角色色只用于画布名牌）；Kentucky 不校验节点存在。
+- 播放只跟 choices：CSV 有行但从开场经 option 边到不了 → 播不到；开场若要立刻听 NPC，开场 speaker 用非 operable。
+- Godot Keep File：Kentucky **不**读写 `*.dialogue.csv.import`；作者在引擎保存/重导后自检 `importer="keep"`。换篇是 Godot `dialogue_id` / `dialogue_file_override`，非 Kentucky API。
 - 台词 sidecar：`foo.dialogue.csv` ↔ `foo.dialogue.meta.json` / `.choices.json` / `.layout.json`（非 `.dialogue.csv.meta.json`）；删/重命名/移动同步三者；树里挂在 csv 下默认收起。
 - 台词保存：画布未就绪时不得 flush 空 CSV；曾出现「保存后重启文件被清空」即因此。异常时应提示 `saveGraphInconsistent` 而非静默覆盖。
 - 台词图：底边全为 option（无顺序边）；空 text：可操作角色=下一句（确认），非可操作=自动过；非空=玩家选项；禁止同节点空/非空混排；连线用 smoothstep。乱图用工具栏「自动排版」（dagre TB，End 沉底）；`.layout.json` 仅 Kentucky 画布用。
+- 开场：检视器可设唯一开场节点（互斥）；落盘 CSV 第一行；删除开场后回退无入边最左上；`diskFromGraph` 优先 `isOpening`，勿再用位置覆盖用户选择。
 - 角色表 `operable` 列：勾选可操作（玩家）；缺列/空=NPC 自动过句；执行器须按当前行 `speaker` 查表，不可一律等确认。
-- 新建台词文件名由场景 stem + 对话标识自动生成；信息卡不提供改名，改名用资源管理器右键。
+- UI 动效：Toast/Dialog 离开须本地 retain DOM（`ToastLayer` / `AnimatedDialogShell`），勿在 store 清内容后立刻卸载导致空白闪一下；duration 与 CSS token 对齐（toast 180ms / modal 220ms）。
+- `prefers-reduced-motion: reduce` 时须停无限动画（dialogue edge-flow、ai-spin、boot-slide）；覆盖层可瞬切。
+- `@starting-style` 入场依赖较新 Chromium（Electron 内可用）；无支持时退化为无入场动画，不影响功能。- 新建台词文件名由场景 stem + 对话标识自动生成；信息卡不提供改名，改名用资源管理器右键。
 - 活动栏：视窗键=`home`（起始页、藏侧栏、不关项目）；文件夹键=`explorer`；勿把视窗键做成 `closeWorkspace`。
 - 应用图标只维护 `build/icon.png`（无 SVG 底稿）。
 - 台词/角色列表滚动：`.editor-area` / `.editor-pane` 须 `min-height: 0` + `overflow: hidden`，否则列表 `overflow-y: auto` 不生效。

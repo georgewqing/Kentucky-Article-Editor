@@ -34,10 +34,11 @@
         font-family: 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
         user-select: none;
         opacity: 1;
-        transition: opacity 0.45s ease;
+        transition: opacity 0.45s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)), transform 0.45s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
       }
       #boot-splash.boot-splash-out {
         opacity: 0;
+        transform: translateY(-4px);
         pointer-events: none;
       }
       #boot-splash .boot-brand {
@@ -67,6 +68,19 @@
         }
         100% {
           transform: translateX(320%);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot-splash {
+          transition: none !important;
+        }
+        #boot-splash.boot-splash-out {
+          transform: none !important;
+        }
+        #boot-splash .boot-bar-fill {
+          animation: none !important;
+          width: 70%;
+          transform: none !important;
         }
       }
     </style>

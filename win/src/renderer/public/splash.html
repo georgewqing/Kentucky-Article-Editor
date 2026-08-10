@@ -61,6 +61,13 @@
           transform: translateX(320%);
         }
       }
+      @media (prefers-reduced-motion: reduce) {
+        #boot-splash .boot-bar-fill {
+          animation: none !important;
+          width: 70%;
+          transform: none !important;
+        }
+      }
     </style>
   </head>
   <body>

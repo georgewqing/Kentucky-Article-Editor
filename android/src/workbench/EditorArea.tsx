@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/state/appStore'
 import { getPlatform } from '@/platform'
@@ -19,7 +20,9 @@ function EditorPane({ tabId }: { tabId: string | null }) {
     )
   }
 
-  const isMarkdown = getPlatform().extname(tab.path) === '.md'
+  const isMarkdown =
+    getPlatform().extname(tab.path) === '.md' ||
+    /\.md\.txt$/i.test(tab.path.replace(/\\/g, '/'))
 
   return (
     <div className="editor-pane">
@@ -40,6 +43,9 @@ function EditorPane({ tabId }: { tabId: string | null }) {
 
 export function EditorArea() {
   const { t } = useTranslation()
+  const [compactLayout, setCompactLayout] = useState(() =>
+    window.matchMedia('(max-width: 1100px)').matches
+  )
   const tabs = useAppStore((s) => s.tabs)
   const activeTabId = useAppStore((s) => s.activeTabId)
   const splitEnabled = useAppStore((s) => s.splitEnabled)
@@ -49,6 +55,18 @@ export function EditorArea() {
   const enableSplit = useAppStore((s) => s.enableSplit)
   const disableSplit = useAppStore((s) => s.disableSplit)
   const setSplitTab = useAppStore((s) => s.setSplitTab)
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 1100px)')
+    const update = (): void => setCompactLayout(query.matches)
+    update()
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
+
+  useEffect(() => {
+    if (compactLayout && splitEnabled) disableSplit()
+  }, [compactLayout, splitEnabled, disableSplit])
 
   const onTabClick = (id: string, isSplitPane: boolean) => {
     if (isSplitPane) setSplitTab(id)
@@ -69,13 +87,26 @@ export function EditorArea() {
             }}
           >
             <span className="tab-title">
-              {tab.dirty ? <span className="tab-dirty">● </span> : null}
+              {tab.isNew ? (
+                <span className="tab-new" title={t('editor.tabNew')}>
+                  ●{' '}
+                </span>
+              ) : tab.dirty ? (
+                <span className="tab-dirty" title={t('editor.tabDirty')}>
+                  ●{' '}
+                </span>
+              ) : null}
               {tab.title}
             </span>
             <button
               type="button"
               className="tab-close"
               title={t('editor.close')}
+              aria-label={`${t('editor.close')} ${tab.title}`}
+              onPointerDown={(e) => {
+                // Keep the parent tab from taking ownership before the close click.
+                e.stopPropagation()
+              }}
               onClick={(e) => {
                 e.stopPropagation()
                 void closeTab(tab.id)
@@ -92,7 +123,12 @@ export function EditorArea() {
               {t('editor.closeSplit')}
             </button>
           ) : (
-            <button type="button" disabled={tabs.length < 1} onClick={() => enableSplit()}>
+            <button
+              type="button"
+              disabled={tabs.length < 1 || compactLayout}
+              title={compactLayout ? t('editor.splitNeedsWideScreen') : undefined}
+              onClick={() => enableSplit()}
+            >
               {t('editor.splitEditor')}
             </button>
           )}

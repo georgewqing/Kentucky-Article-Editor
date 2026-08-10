@@ -15,7 +15,7 @@ export interface DialogueLine {
   focus_node: string
   /** Pixel font size as decimal string; empty/`0` → Godot UI default (disk always ''). */
   font_size: string
-  /** Body color `#RGB` / `#RRGGBB` / `#RRGGBBAA`; empty → Godot default. */
+  /** Body color `#RGB` / `#RRGGBB` / `#RRGGBBAA`; empty → Godot default (not characters.color). */
   text_color: string
 }
 
@@ -26,6 +26,8 @@ export interface Character {
   note: string
   /** Godot model / character node name for plugin linkage. */
   model_node: string
+  /** Player-operable: empty-text options wait for confirm. Non-operable: auto-advance. */
+  operable: boolean
 }
 
 /** File-level Godot binding, stored beside `*.dialogue.csv` as `*.dialogue.meta.json`. */
@@ -59,73 +61,250 @@ export function normalizeTextColor(value: string): { value: string; ok: boolean 
   return { value: '', ok: false }
 }
 
-export const CHARACTERS_HEADER = 'id,name,color,note,model_node' as const
+export const CHARACTERS_HEADER = 'id,name,color,note,model_node,operable' as const
+
+/** Parse operable flag: 1/true/yes/y → true; missing/empty/0/false → false. */
+export function parseOperableFlag(raw: string | undefined | null): boolean {
+  const v = String(raw ?? '')
+    .trim()
+    .toLowerCase()
+  return v === '1' || v === 'true' || v === 'yes' || v === 'y'
+}
+
+export function serializeOperableFlag(operable: boolean): string {
+  return operable ? '1' : ''
+}
 
 export const DIALOGUE_EXT = '.dialogue.csv'
 export const DIALOGUE_META_EXT = '.dialogue.meta.json'
+export const DIALOGUE_CHOICES_EXT = '.dialogue.choices.json'
+export const DIALOGUE_LAYOUT_EXT = '.dialogue.layout.json'
+
+/** Virtual End sink id — never written to CSV. */
+export const DIALOGUE_END_NODE_ID = '__kentucky_end__'
+
+export interface DialogueChoiceOption {
+  text: string
+  goto: string
+  end?: boolean
+}
+
+export interface DialogueChoicesFile {
+  version: 1
+  nodes: Record<string, { options: DialogueChoiceOption[] }>
+}
+
+export interface DialogueLayoutFile {
+  version: 1
+  nodes: Record<string, { x: number; y: number }>
+  end?: { x: number; y: number }
+}
+
+/**
+ * Android SAF often appends `.txt` when files were created with MIME text/plain
+ * (`foo.dialogue.csv.txt`, `foo.md.txt`). Strip that for type detection / sidecars.
+ */
+export function stripSafTextSuffix(path: string): string {
+  const norm = path.replace(/\\/g, '/')
+  const lower = norm.toLowerCase()
+  if (!lower.endsWith('.txt')) return path
+  const without = path.slice(0, -4)
+  const w = without.replace(/\\/g, '/').toLowerCase()
+  if (
+    w.endsWith('.md') ||
+    w.endsWith('.markdown') ||
+    w.endsWith('.csv') ||
+    w.endsWith('.json') ||
+    w.endsWith('.kmind')
+  ) {
+    return without
+  }
+  return path
+}
 
 export function isDialoguePath(path: string): boolean {
-  return path.replace(/\\/g, '/').toLowerCase().endsWith(DIALOGUE_EXT)
+  return stripSafTextSuffix(path).replace(/\\/g, '/').toLowerCase().endsWith(DIALOGUE_EXT)
 }
 
 export function isDialogueMetaPath(path: string): boolean {
-  return path.replace(/\\/g, '/').toLowerCase().endsWith(DIALOGUE_META_EXT)
+  return stripSafTextSuffix(path).replace(/\\/g, '/').toLowerCase().endsWith(DIALOGUE_META_EXT)
+}
+
+export function isDialogueChoicesPath(path: string): boolean {
+  return stripSafTextSuffix(path).replace(/\\/g, '/').toLowerCase().endsWith(DIALOGUE_CHOICES_EXT)
+}
+
+export function isDialogueLayoutPath(path: string): boolean {
+  return stripSafTextSuffix(path).replace(/\\/g, '/').toLowerCase().endsWith(DIALOGUE_LAYOUT_EXT)
+}
+
+export function isDialogueSidecarPath(path: string): boolean {
+  return isDialogueMetaPath(path) || isDialogueChoicesPath(path) || isDialogueLayoutPath(path)
 }
 
 /** Workspace role table: basename must be characters.csv (any folder). */
 export function isCharactersPath(path: string): boolean {
-  const base = path.replace(/\\/g, '/').split('/').pop() || ''
+  const base = stripSafTextSuffix(path).replace(/\\/g, '/').split('/').pop() || ''
   return base.toLowerCase() === 'characters.csv'
+}
+
+function replaceDialogueExt(dialogueCsvPath: string, nextExt: string): string {
+  const normalized = stripSafTextSuffix(dialogueCsvPath)
+  const lower = normalized.toLowerCase()
+  const idx = lower.lastIndexOf(DIALOGUE_EXT)
+  if (idx >= 0 && idx === lower.length - DIALOGUE_EXT.length) {
+    return normalized.slice(0, idx) + nextExt
+  }
+  return normalized + nextExt
 }
 
 /** `foo.dialogue.csv` → `foo.dialogue.meta.json` */
 export function dialogueMetaPathFor(dialogueCsvPath: string): string {
-  const lower = dialogueCsvPath.toLowerCase()
-  const idx = lower.lastIndexOf(DIALOGUE_EXT)
-  if (idx >= 0 && idx === lower.length - DIALOGUE_EXT.length) {
-    return dialogueCsvPath.slice(0, idx) + DIALOGUE_META_EXT
-  }
-  return dialogueCsvPath + DIALOGUE_META_EXT
+  return replaceDialogueExt(dialogueCsvPath, DIALOGUE_META_EXT)
+}
+
+export function dialogueChoicesPathFor(dialogueCsvPath: string): string {
+  return replaceDialogueExt(dialogueCsvPath, DIALOGUE_CHOICES_EXT)
+}
+
+export function dialogueLayoutPathFor(dialogueCsvPath: string): string {
+  return replaceDialogueExt(dialogueCsvPath, DIALOGUE_LAYOUT_EXT)
 }
 
 function normPathKey(path: string): string {
   return path.replace(/\\/g, '/').toLowerCase()
 }
 
+function emptyDialogueChoices(): DialogueChoicesFile {
+  return { version: 1, nodes: {} }
+}
+
+export function parseDialogueChoices(text: string): DialogueChoicesFile {
+  try {
+    const raw = JSON.parse(text) as Partial<DialogueChoicesFile>
+    const nodes: DialogueChoicesFile['nodes'] = {}
+    if (raw && raw.nodes && typeof raw.nodes === 'object') {
+      for (const [lineId, node] of Object.entries(raw.nodes)) {
+        const id = String(lineId || '').trim()
+        if (!id || !node || !Array.isArray(node.options)) continue
+        const options: DialogueChoiceOption[] = []
+        for (const opt of node.options) {
+          if (!opt || typeof opt !== 'object') continue
+          // v1.3: empty text is valid (silent continue / end)
+          const textVal = typeof opt.text === 'string' ? opt.text.trim() : ''
+          const end = Boolean(opt.end)
+          const goto = typeof opt.goto === 'string' ? opt.goto.trim() : ''
+          if (end) options.push({ text: textVal, goto: '', end: true })
+          else if (goto) options.push({ text: textVal, goto })
+        }
+        if (options.length) nodes[id] = { options }
+      }
+    }
+    return { version: 1, nodes }
+  } catch {
+    return emptyDialogueChoices()
+  }
+}
+
+/** Empty nodes → empty string (caller should delete file). */
+export function serializeDialogueChoices(file: DialogueChoicesFile): string {
+  const nodes: DialogueChoicesFile['nodes'] = {}
+  for (const [id, node] of Object.entries(file.nodes || {})) {
+    const options = (node?.options || [])
+      .map((o) => {
+        const text = (o.text || '').trim()
+        if (o.end) return { text, goto: '', end: true as const }
+        const goto = (o.goto || '').trim()
+        if (!goto) return null
+        return { text, goto }
+      })
+      .filter(Boolean) as DialogueChoiceOption[]
+    if (options.length) nodes[id] = { options }
+  }
+  if (!Object.keys(nodes).length) return ''
+  return JSON.stringify({ version: 1, nodes }, null, 2) + '\n'
+}
+
+export function parseDialogueLayout(text: string): DialogueLayoutFile {
+  try {
+    const raw = JSON.parse(text) as Partial<DialogueLayoutFile>
+    const nodes: DialogueLayoutFile['nodes'] = {}
+    if (raw?.nodes && typeof raw.nodes === 'object') {
+      for (const [id, pos] of Object.entries(raw.nodes)) {
+        if (!id || !pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') continue
+        nodes[id] = { x: pos.x, y: pos.y }
+      }
+    }
+    const end =
+      raw?.end && typeof raw.end.x === 'number' && typeof raw.end.y === 'number'
+        ? { x: raw.end.x, y: raw.end.y }
+        : undefined
+    return { version: 1, nodes, end }
+  } catch {
+    return { version: 1, nodes: {} }
+  }
+}
+
+export function serializeDialogueLayout(file: DialogueLayoutFile): string {
+  const nodes: DialogueLayoutFile['nodes'] = {}
+  for (const [id, pos] of Object.entries(file.nodes || {})) {
+    if (!id || id === DIALOGUE_END_NODE_ID) continue
+    if (typeof pos?.x !== 'number' || typeof pos?.y !== 'number') continue
+    nodes[id] = { x: pos.x, y: pos.y }
+  }
+  const out: DialogueLayoutFile = { version: 1, nodes }
+  if (file.end && typeof file.end.x === 'number' && typeof file.end.y === 'number') {
+    out.end = { x: file.end.x, y: file.end.y }
+  }
+  return JSON.stringify(out, null, 2) + '\n'
+}
+
 /**
- * Display-only: nest sibling `*.dialogue.meta.json` under matching `*.dialogue.csv`
- * (disk layout unchanged). Orphan meta files stay as siblings.
+ * Display-only: nest sibling meta / choices / layout under matching `*.dialogue.csv`.
+ * Orphan sidecars stay as siblings.
  */
-export function nestDialogueMetaInTree(entries: FileEntry[]): FileEntry[] {
+export function nestDialogueSidecarsInTree(entries: FileEntry[]): FileEntry[] {
   const walk = (list: FileEntry[]): FileEntry[] => {
     const normalized = list.map((e) =>
       e.isDirectory && e.children ? { ...e, children: walk(e.children) } : e
     )
 
-    const metaByKey = new Map<string, FileEntry>()
+    const byKey = new Map<string, FileEntry>()
     for (const e of normalized) {
-      if (!e.isDirectory && isDialogueMetaPath(e.path)) {
-        metaByKey.set(normPathKey(e.path), e)
-      }
+      if (e.isDirectory || !isDialogueSidecarPath(e.path)) continue
+      byKey.set(normPathKey(e.path), e)
     }
 
     const claimed = new Set<string>()
     for (const e of normalized) {
       if (e.isDirectory || !isDialoguePath(e.path)) continue
-      const key = normPathKey(dialogueMetaPathFor(e.path))
-      if (metaByKey.has(key)) claimed.add(key)
+      for (const p of [
+        dialogueMetaPathFor(e.path),
+        dialogueChoicesPathFor(e.path),
+        dialogueLayoutPathFor(e.path)
+      ]) {
+        const key = normPathKey(p)
+        if (byKey.has(key)) claimed.add(key)
+      }
     }
 
     const out: FileEntry[] = []
     for (const e of normalized) {
-      if (!e.isDirectory && isDialogueMetaPath(e.path) && claimed.has(normPathKey(e.path))) {
+      if (!e.isDirectory && isDialogueSidecarPath(e.path) && claimed.has(normPathKey(e.path))) {
         continue
       }
       if (!e.isDirectory && isDialoguePath(e.path)) {
-        const key = normPathKey(dialogueMetaPathFor(e.path))
-        const meta = metaByKey.get(key)
-        if (meta) {
-          out.push({ ...e, children: [meta] })
+        const children: FileEntry[] = []
+        for (const p of [
+          dialogueMetaPathFor(e.path),
+          dialogueChoicesPathFor(e.path),
+          dialogueLayoutPathFor(e.path)
+        ]) {
+          const side = byKey.get(normPathKey(p))
+          if (side) children.push(side)
+        }
+        if (children.length) {
+          out.push({ ...e, children })
           continue
         }
       }
@@ -134,6 +313,11 @@ export function nestDialogueMetaInTree(entries: FileEntry[]): FileEntry[] {
     return out
   }
   return walk(entries)
+}
+
+/** @deprecated Use nestDialogueSidecarsInTree */
+export function nestDialogueMetaInTree(entries: FileEntry[]): FileEntry[] {
+  return nestDialogueSidecarsInTree(entries)
 }
 
 export function parseDialogueFileMeta(text: string): DialogueFileMeta | null {
@@ -353,6 +537,7 @@ export function parseCharactersCsv(text: string): Character[] {
   const colorI = colIndex(header, 'color')
   const noteI = colIndex(header, 'note')
   const modelI = colIndex(header, 'model_node')
+  const operableI = colIndex(header, 'operable')
   if (idI < 0 || nameI < 0) return []
   const out: Character[] = []
   for (let r = 1; r < rows.length; r++) {
@@ -365,16 +550,24 @@ export function parseCharactersCsv(text: string): Character[] {
       name: get(nameI).trim() || id,
       color: get(colorI).trim() || '#88c0d0',
       note: get(noteI),
-      model_node: get(modelI).trim()
+      model_node: get(modelI).trim(),
+      operable: parseOperableFlag(get(operableI))
     })
   }
   return out
 }
 
 export function serializeCharactersCsv(chars: Character[]): string {
-  const rows: string[][] = [['id', 'name', 'color', 'note', 'model_node']]
+  const rows: string[][] = [['id', 'name', 'color', 'note', 'model_node', 'operable']]
   for (const c of chars) {
-    rows.push([c.id, c.name, c.color, c.note, c.model_node ?? ''])
+    rows.push([
+      c.id,
+      c.name,
+      c.color,
+      c.note,
+      c.model_node ?? '',
+      serializeOperableFlag(Boolean(c.operable))
+    ])
   }
   return serializeCsv(rows)
 }

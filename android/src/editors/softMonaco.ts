@@ -23,8 +23,11 @@ export const SOFT_MONACO_OPTIONS: editor.IStandaloneEditorConstructionOptions = 
   renderWhitespace: 'none',
   padding: { top: 16, bottom: 24 },
   scrollbar: {
-    verticalScrollbarSize: 10,
-    horizontalScrollbarSize: 10
+    verticalScrollbarSize: 8,
+    horizontalScrollbarSize: 8,
+    useShadows: false,
+    vertical: 'auto',
+    horizontal: 'auto'
   },
   fontFamily: "Cascadia Code, Consolas, 'Courier New', monospace",
   smoothScrolling: true,

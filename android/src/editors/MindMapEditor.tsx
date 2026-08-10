@@ -7,7 +7,8 @@ import {
   useState,
   createContext,
   useContext,
-  type MouseEvent as ReactMouseEvent
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent
 } from 'react'
 import {
   ReactFlow,
@@ -38,6 +39,12 @@ import {
 import '@xyflow/react/dist/style.css'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/state/appStore'
+import { RF_TRACKPAD_PROPS } from '@/editors/rfTrackpadProps'
+import {
+  isModifiedPrimaryClick,
+  notePointerType,
+  shouldSuppressTouchContextMenu
+} from '@/hooks/useSecondaryClick'
 import {
   createEmptyKMind,
   parseKMind,
@@ -51,6 +58,7 @@ import {
   type KMindNodeLink,
   type KMindNodeImage
 } from './kmind'
+import { setMindmapViewportFlush } from './mindmapViewportFlush'
 import { useSettingsStore } from '@/state/settingsStore'
 import { getPlatform } from '@/platform'
 import type { FileEntry } from '@/platform'
@@ -231,7 +239,8 @@ function buildConnectEdge(
       source: fromNodeId,
       sourceHandle: fromHandleId ?? undefined,
       target: toNode.id,
-      targetHandle: nearHandle
+      targetHandle: nearHandle,
+      data: { persistHandles: true }
     }
   }
   return {
@@ -239,7 +248,8 @@ function buildConnectEdge(
     source: toNode.id,
     sourceHandle: nearHandle,
     target: fromNodeId,
-    targetHandle: fromHandleId ?? undefined
+    targetHandle: fromHandleId ?? undefined,
+    data: { persistHandles: true }
   }
 }
 
@@ -270,9 +280,11 @@ function docToFlow(doc: KMindDocument): { nodes: RFNode[]; edges: Edge[] } {
   const byId = new Map(nodes.map((n) => [n.id, n]))
 
   const edges: Edge[] = doc.edges.map((e) => {
+    const hadExplicitHandles = Boolean(e.sourceHandle || e.targetHandle)
     let sourceHandle = e.sourceHandle
     let targetHandle = e.targetHandle
     // Older files omitted handles → RF defaults every edge to the same side (merged smoothstep trunk).
+    // Infer for display only; do not write inferred handles back unless the file already had them.
     if (!sourceHandle || !targetHandle) {
       const s = byId.get(e.source)
       const t = byId.get(e.target)
@@ -310,7 +322,8 @@ function docToFlow(doc: KMindDocument): { nodes: RFNode[]; edges: Edge[] } {
       source: e.source,
       target: e.target,
       sourceHandle,
-      targetHandle
+      targetHandle,
+      data: { persistHandles: hadExplicitHandles }
     }
   })
 
@@ -343,13 +356,22 @@ function flowToDoc(
           }
         : {})
     })),
-    edges: edges.map((e) => ({
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      ...(e.sourceHandle ? { sourceHandle: String(e.sourceHandle) } : {}),
-      ...(e.targetHandle ? { targetHandle: String(e.targetHandle) } : {})
-    })),
+    edges: edges.map((e) => {
+      const persistHandles = Boolean(
+        (e.data as { persistHandles?: boolean } | undefined)?.persistHandles
+      )
+      return {
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        ...(persistHandles && e.sourceHandle
+          ? { sourceHandle: String(e.sourceHandle) }
+          : {}),
+        ...(persistHandles && e.targetHandle
+          ? { targetHandle: String(e.targetHandle) }
+          : {})
+      }
+    }),
     viewport
   }
 }
@@ -815,18 +837,37 @@ function MindMapCanvas({ tabId }: { tabId: string }) {
 
   const onConnect = useCallback(
     (connection: Connection) => {
-      setEdges((eds) => addEdge({ ...connection, id: newEdgeId() }, eds))
+      setEdges((eds) =>
+        addEdge({ ...connection, id: newEdgeId(), data: { persistHandles: true } }, eds)
+      )
     },
     [setEdges]
   )
 
-  const onMoveEnd: OnMoveEnd = useCallback(
-    (_e, viewport) => {
-      viewportRef.current = viewport
-      persist(nodes, edges)
-    },
-    [nodes, edges, persist]
-  )
+  const onMoveEnd: OnMoveEnd = useCallback((_e, viewport) => {
+    // Pan/zoom is view chrome only — keep it in memory. Persisting here used to
+    // mark the tab dirty via DocumentHub. Viewport is flushed on real edits + save.
+    viewportRef.current = viewport
+  }, [])
+
+  const flushViewportToStore = useCallback(() => {
+    if (skipSerializeRef.current) return
+    const doc = flowToDoc(nodes, edges, viewportRef.current)
+    const json = serializeKMind(doc)
+    if (json === lastJsonRef.current) return
+    lastJsonRef.current = json
+    updateTabContent(tabId, json)
+  }, [tabId, nodes, edges, updateTabContent])
+
+  useEffect(() => {
+    setMindmapViewportFlush(flushViewportToStore)
+    return () => setMindmapViewportFlush(null)
+  }, [flushViewportToStore])
+
+  const flushViewportAndSave = useCallback(async () => {
+    flushViewportToStore()
+    await saveTab(tabId)
+  }, [flushViewportToStore, saveTab, tabId])
 
   const addNodeAt = useCallback(
     (x: number, y: number): string => {
@@ -1239,19 +1280,27 @@ function MindMapCanvas({ tabId }: { tabId: string }) {
     return () => window.removeEventListener('pointerdown', close)
   }, [])
 
-  const onPaneContextMenu = useCallback(
-    (e: MouseEvent | ReactMouseEvent) => {
-      e.preventDefault()
-      const flow = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+  const openPaneMenuAt = useCallback(
+    (clientX: number, clientY: number) => {
+      const flow = screenToFlowPosition({ x: clientX, y: clientY })
       setMenu({
         kind: 'pane',
-        x: e.clientX,
-        y: e.clientY,
+        x: clientX,
+        y: clientY,
         flowX: flow.x,
         flowY: flow.y
       })
     },
     [screenToFlowPosition]
+  )
+
+  const onPaneContextMenu = useCallback(
+    (e: MouseEvent | ReactMouseEvent) => {
+      e.preventDefault()
+      if (shouldSuppressTouchContextMenu(e)) return
+      openPaneMenuAt(e.clientX, e.clientY)
+    },
+    [openPaneMenuAt]
   )
 
   const onConnectEnd: OnConnectEnd = useCallback(
@@ -1308,8 +1357,28 @@ function MindMapCanvas({ tabId }: { tabId: string }) {
 
   const onNodeContextMenu = useCallback((e: ReactMouseEvent, node: Node) => {
     e.preventDefault()
+    if (shouldSuppressTouchContextMenu(e)) return
     setMenu({ kind: 'node', x: e.clientX, y: e.clientY, nodeId: node.id })
   }, [])
+
+  const onHostPointerDownCapture = useCallback(
+    (e: ReactPointerEvent) => {
+      notePointerType(e)
+      if (!isModifiedPrimaryClick(e)) return
+      const el = e.target as HTMLElement | null
+      if (el?.closest?.('.ctx-menu')) return
+      e.preventDefault()
+      e.stopPropagation()
+      const nodeEl = el?.closest?.('.react-flow__node') as HTMLElement | null
+      const nodeId = nodeEl?.getAttribute('data-id')
+      if (nodeId) {
+        setMenu({ kind: 'node', x: e.clientX, y: e.clientY, nodeId })
+        return
+      }
+      openPaneMenuAt(e.clientX, e.clientY)
+    },
+    [openPaneMenuAt]
+  )
 
   const onNodeDoubleClick = useCallback((_e: ReactMouseEvent, node: Node) => {
     const n = node as RFNode
@@ -1336,7 +1405,7 @@ function MindMapCanvas({ tabId }: { tabId: string }) {
 
   return (
     <MindMapActionsCtx.Provider value={mindActions}>
-    <div className="mindmap-host">
+    <div className="mindmap-host rf-host" onPointerDownCapture={onHostPointerDownCapture}>
       <div className="mindmap-toolbar">
         <button
           type="button"
@@ -1382,7 +1451,7 @@ function MindMapCanvas({ tabId }: { tabId: string }) {
         <button type="button" onClick={() => fitView({ padding: 0.2 })}>
           {t('mindmap.fitView')}
         </button>
-        <button type="button" onClick={() => void saveTab(tabId)}>
+        <button type="button" onClick={() => void flushViewportAndSave()}>
           {t('editor.save')}
         </button>
       </div>
@@ -1406,6 +1475,7 @@ function MindMapCanvas({ tabId }: { tabId: string }) {
         selectionMode={SelectionMode.Partial}
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={{ type: 'smoothstep' }}
+        {...RF_TRACKPAD_PROPS}
       >
         <Background gap={18} size={1.25} color={chrome.dotColor} />
         <Controls showInteractive={false} />

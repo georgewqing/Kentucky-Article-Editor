@@ -27,7 +27,8 @@ export function CharactersEditor({ tabId }: { tabId: string }) {
     name: '',
     color: CHARACTER_COLOR_PRESETS[0],
     note: '',
-    model_node: ''
+    model_node: '',
+    operable: false
   })
 
   const applyingRef = useRef(false)
@@ -72,7 +73,8 @@ export function CharactersEditor({ tabId }: { tabId: string }) {
       name: '',
       color: CHARACTER_COLOR_PRESETS[0],
       note: '',
-      model_node: ''
+      model_node: '',
+      operable: false
     })
     setCreateOpen(true)
   }
@@ -99,7 +101,8 @@ export function CharactersEditor({ tabId }: { tabId: string }) {
         name,
         color: form.color || CHARACTER_COLOR_PRESETS[0],
         note: form.note,
-        model_node: modelNode
+        model_node: modelNode,
+        operable: Boolean(form.operable)
       }
     ])
     setCreateOpen(false)
@@ -141,6 +144,11 @@ export function CharactersEditor({ tabId }: { tabId: string }) {
                     <div className="character-card-head">
                       <span className="character-card-name">{c.name}</span>
                       <span className="character-card-id">@{c.id}</span>
+                      {c.operable ? (
+                        <span className="character-card-badge">{t('characters.operableBadge')}</span>
+                      ) : (
+                        <span className="character-card-badge muted">{t('characters.npcBadge')}</span>
+                      )}
                     </div>
                     <div className="character-card-meta">
                       <span>
@@ -194,6 +202,14 @@ export function CharactersEditor({ tabId }: { tabId: string }) {
                         value={c.note}
                         onChange={(e) => updateCharacter(c.id, { note: e.target.value })}
                       />
+                    </label>
+                    <label className="character-operable-row" title={t('characters.operableHint')}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(c.operable)}
+                        onChange={(e) => updateCharacter(c.id, { operable: e.target.checked })}
+                      />
+                      <span>{t('characters.operable')}</span>
                     </label>
                     <label>
                       {t('dialogue.characterColor')}
@@ -293,6 +309,14 @@ export function CharactersEditor({ tabId }: { tabId: string }) {
                   value={form.note}
                   onChange={(e) => setForm((s) => ({ ...s, note: e.target.value }))}
                 />
+              </label>
+              <label className="character-operable-row" title={t('characters.operableHint')}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.operable)}
+                  onChange={(e) => setForm((s) => ({ ...s, operable: e.target.checked }))}
+                />
+                <span>{t('characters.operable')}</span>
               </label>
             </div>
             <div className="app-dialog-actions">

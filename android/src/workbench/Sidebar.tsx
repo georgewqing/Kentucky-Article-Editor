@@ -1,8 +1,13 @@
-import { useRef, useState, type MouseEvent as ReactMouseEvent, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/state/appStore'
 import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 import { FileTree } from './FileTree'
+import {
+  CREATE_FILE_EXT,
+  CREATE_MINDMAP_EXT,
+  applyStemKeepExt
+} from './explorerNames'
 
 type CreateKind = 'file' | 'folder' | 'mindmap' | 'dialogue' | null
 
@@ -17,6 +22,7 @@ export function Sidebar() {
   const createFolder = useAppStore((s) => s.createFolder)
   const createMindMap = useAppStore((s) => s.createMindMap)
   const createDialogue = useAppStore((s) => s.createDialogue)
+  const saveAllTabs = useAppStore((s) => s.saveAllTabs)
   const dragging = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const sceneInputRef = useRef<HTMLInputElement>(null)
@@ -30,6 +36,9 @@ export function Sidebar() {
   const [godotScene, setGodotScene] = useState('')
   const [dialogueId, setDialogueId] = useState('')
 
+  const createExt =
+    createKind === 'file' ? CREATE_FILE_EXT : createKind === 'mindmap' ? CREATE_MINDMAP_EXT : ''
+
   const openCreate = (kind: CreateKind, parentDir?: string) => {
     if (!workspacePath || !kind) return
     setCreateParent(parentDir)
@@ -37,21 +46,32 @@ export function Sidebar() {
       setCreateKind('dialogue')
       setGodotScene('')
       setDialogueId('')
-      requestAnimationFrame(() => sceneInputRef.current?.focus())
       return
     }
     const defaults: Record<'file' | 'folder' | 'mindmap', string> = {
-      file: 'untitled.md',
+      file: 'untitled',
       folder: 'folder',
-      mindmap: 'ideas.kmind'
+      mindmap: 'ideas'
     }
     setCreateKind(kind)
     setName(defaults[kind])
-    requestAnimationFrame(() => {
-      inputRef.current?.focus()
-      inputRef.current?.select()
-    })
   }
+
+  useEffect(() => {
+    if (createKind === 'dialogue') {
+      const id = window.setTimeout(() => sceneInputRef.current?.focus(), 0)
+      return () => window.clearTimeout(id)
+    }
+    if (createKind === 'file' || createKind === 'folder' || createKind === 'mindmap') {
+      const id = window.setTimeout(() => {
+        const el = inputRef.current
+        if (!el) return
+        el.focus()
+        el.select()
+      }, 0)
+      return () => window.clearTimeout(id)
+    }
+  }, [createKind])
 
   const cancelCreate = () => {
     setCreateKind(null)
@@ -67,13 +87,14 @@ export function Sidebar() {
       cancelCreate()
       return
     }
-    const trimmed = name.trim()
+    const kind = createKind
+    const parent = createParent
+    const ext = kind === 'file' ? CREATE_FILE_EXT : kind === 'mindmap' ? CREATE_MINDMAP_EXT : ''
+    const trimmed = applyStemKeepExt(name, ext)
     if (!trimmed) {
       cancelCreate()
       return
     }
-    const kind = createKind
-    const parent = createParent
     cancelCreate()
     if (kind === 'file') await createFile(trimmed, parent)
     else if (kind === 'folder') await createFolder(trimmed, parent)
@@ -97,23 +118,28 @@ export function Sidebar() {
         ? t('explorer.promptFolderName')
         : t('explorer.promptMindMapName')
 
-  const onSashDown = (e: ReactMouseEvent) => {
+  const onSashDown = (e: ReactPointerEvent) => {
     e.preventDefault()
+    const el = e.currentTarget as HTMLElement
+    el.setPointerCapture(e.pointerId)
     dragging.current = true
     const startX = e.clientX
     const startW = sidebarWidth
 
-    const onMove = (ev: MouseEvent) => {
+    const onMove = (ev: PointerEvent) => {
       if (!dragging.current) return
       setSidebarWidth(startW + (ev.clientX - startX))
     }
-    const onUp = () => {
+    const onUp = (ev: PointerEvent) => {
       dragging.current = false
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
+      if (el.hasPointerCapture(ev.pointerId)) el.releasePointerCapture(ev.pointerId)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
     }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
   }
 
   const inlineCreate = createKind === 'file' || createKind === 'folder' || createKind === 'mindmap'
@@ -131,6 +157,14 @@ export function Sidebar() {
               onClick={() => openCreate('file')}
             >
               +
+            </button>
+            <button
+              type="button"
+              title={t('explorer.saveAll')}
+              disabled={!workspacePath}
+              onClick={() => void saveAllTabs()}
+            >
+              ⬇
             </button>
             <button
               type="button"
@@ -168,20 +202,34 @@ export function Sidebar() {
         </div>
 
         {inlineCreate ? (
-          <form className="sidebar-create" onSubmit={(e) => void submitCreate(e)}>
-            <label className="sidebar-create-label">{promptLabel}</label>
-            <input
-              ref={inputRef}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') {
-                  e.preventDefault()
-                  cancelCreate()
-                }
-              }}
-              spellCheck={false}
-            />
+          <form
+            className="sidebar-create"
+            onSubmit={(e) => void submitCreate(e)}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <label className="sidebar-create-label" htmlFor="sidebar-create-name">
+              {promptLabel}
+            </label>
+            <div className="sidebar-create-name-row">
+              <input
+                id="sidebar-create-name"
+                ref={inputRef}
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault()
+                    cancelCreate()
+                  }
+                  e.stopPropagation()
+                }}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+              {createExt ? <span className="sidebar-create-ext">{createExt}</span> : null}
+            </div>
             <div className="sidebar-create-actions">
               <button type="submit" className="btn-primary sidebar-create-ok">
                 {t('explorer.create')}
@@ -204,7 +252,7 @@ export function Sidebar() {
           )}
         </div>
       </aside>
-      <div className="sash" onMouseDown={onSashDown} role="separator" aria-orientation="vertical" />
+      <div className="sash" onPointerDown={onSashDown} role="separator" aria-orientation="vertical" />
 
       {createKind === 'dialogue' ? (
         <div className="app-dialog-backdrop" role="presentation">
@@ -216,6 +264,7 @@ export function Sidebar() {
                 {t('dialogue.godotScene')}
                 <input
                   ref={sceneInputRef}
+                  type="text"
                   value={godotScene}
                   required
                   placeholder={t('dialogue.godotScenePlaceholder')}
@@ -226,6 +275,7 @@ export function Sidebar() {
               <label>
                 {t('dialogue.dialogueId')}
                 <input
+                  type="text"
                   value={dialogueId}
                   required
                   placeholder={t('dialogue.dialogueIdPlaceholder')}

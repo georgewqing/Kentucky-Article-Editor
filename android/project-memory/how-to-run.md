@@ -1,41 +1,36 @@
-# 如何运行（Android）
+# How to run（Android）
 
-## 安装
+## 浏览器预览（推荐开发）
 
 ```bash
-cd "d:\Working Directory\Kentucky\android"
+cd android
 npm install
+npm run dev          # http://localhost:5174 — 需 Chrome/Edge
+npm run typecheck
+npm run build
 ```
 
-## 浏览器开发（推荐先这样验证）
-
-```bash
-npm run dev
-```
-
-用 **Chrome / Edge** 打开终端里的本地地址（默认 `http://localhost:5174`）。
-
-- 「打开文件夹」走 **File System Access API**（用户授权的目录句柄，持久化到 IndexedDB）
-- 外接键盘：Ctrl+S 保存、Ctrl+O 打开文件夹
-- 需要较宽视口（平板横屏或桌面拉宽）
+「打开文件夹」使用 File System Access；宽窗口模拟平板。
 
 ## Capacitor 真机 / 模拟器
 
 ```bash
-npm run build
-npx cap add android
-npx cap sync android
-npx cap open android
+cd android
+npm run cap:sync     # build + cap sync android
+npm run cap:open     # Android Studio
 ```
 
-- Web 产物：`dist/`
-- 原生工程目录：`native/`（由 `capacitor.config.ts` 的 `android.path` 指定，避免 `android/android`）
+真机「打开文件夹」走 SAF（系统目录选择器），URI 持久化。
 
-Android Studio 需本机已装 JDK / SDK。
+原生工程：`android/native/`。JDK 建议 **17 或 21**（过新的 JDK 可能导致 Gradle 无法编译）。
 
-## 类型检查 / 构建
+改过 `MainActivity.java`、`styles.xml`、`activity_main.xml` 或 Manifest 后，必须在
+Android Studio **Run 重装**；只执行 `cap sync` 不会重新安装原生代码。
 
-```bash
-npm run typecheck
-npm run build
-```
+平板回归至少检查：顶部 tabs 完全位于黑色系统状态栏下方且关闭按钮可用、Settings
+触控板上下滚动、软键盘不遮输入、系统返回键、90%/130% 界面缩放、窄宽 AI 覆盖
+抽屉，以及 MD ↔ AI 触控板交替滚动。
+
+## AI
+
+设置 → AI：填写 OpenAI 兼容 Base URL / Key / Model → `Ctrl+L` 打开面板。会话与配置写在应用私有 `kentucky-data/`，不在项目目录。

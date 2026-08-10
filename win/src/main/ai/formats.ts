@@ -1,5 +1,7 @@
 /** Shared literary format helpers for main-process AI tools (no renderer imports). */
 
+import dagre from '@dagrejs/dagre'
+
 export interface DialogueLine {
   id: string
   speaker: string
@@ -20,6 +22,8 @@ export interface Character {
   color: string
   note: string
   model_node: string
+  /** Player-operable: empty-text options wait for confirm. Non-operable: auto-advance. */
+  operable: boolean
 }
 
 const DIALOGUE_HEADER =
@@ -122,7 +126,7 @@ export function emptyDialogueLine(partial?: Partial<DialogueLine>): DialogueLine
   }
 }
 
-/** Protocol v1.2 branching sidecar (Godot reads; Kentucky graph options). */
+/** Protocol v1.3 dialogue graph sidecar (Godot plays via options; empty text = confirm-to-continue). */
 export interface DialogueChoiceOption {
   text: string
   goto: string
@@ -195,11 +199,12 @@ export function parseDialogueChoices(text: string): DialogueChoicesFile {
         const options: DialogueChoiceOption[] = []
         for (const opt of node.options) {
           if (!opt || typeof opt !== 'object') continue
+          // v1.3: empty text is valid (silent continue / end)
           const textVal = typeof opt.text === 'string' ? opt.text.trim() : ''
-          if (!textVal) continue
           const end = Boolean(opt.end)
           const goto = typeof opt.goto === 'string' ? opt.goto.trim() : ''
-          options.push(end ? { text: textVal, goto: '', end: true } : { text: textVal, goto })
+          if (end) options.push({ text: textVal, goto: '', end: true })
+          else if (goto) options.push({ text: textVal, goto })
         }
         if (options.length) nodes[id] = { options }
       }
@@ -217,9 +222,10 @@ export function serializeDialogueChoices(file: DialogueChoicesFile): string {
     const options = (node?.options || [])
       .map((o) => {
         const text = (o.text || '').trim()
-        if (!text) return null
         if (o.end) return { text, goto: '', end: true as const }
-        return { text, goto: (o.goto || '').trim() }
+        const goto = (o.goto || '').trim()
+        if (!goto) return null
+        return { text, goto }
       })
       .filter(Boolean) as DialogueChoiceOption[]
     if (options.length) nodes[id] = { options }
@@ -261,11 +267,24 @@ export function serializeDialogueLayout(file: DialogueLayoutFile): string {
   return JSON.stringify(out, null, 2) + '\n'
 }
 
-const LAYOUT_GAP_Y = 120
-const LAYOUT_GAP_X = 280
+const LAYOUT_GAP_Y = 140
+const LAYOUT_GAP_X = 220
 const LAYOUT_BASE_X = 80
+const LAYOUT_LINE_W = 220
+const LAYOUT_LINE_H = 90
+const LAYOUT_CHIP_ROW = 22
+const LAYOUT_END_W = 56
+const LAYOUT_END_H = 56
+const LAYOUT_END_WEIGHT = 4
+/** Must match renderer `DIALOGUE_END_NODE_ID` (layout file only stores end x/y). */
+const LAYOUT_END_ID = '__kentucky_end__'
 
-/** Linear column layout (matches Kentucky canvas default). */
+function layoutLineHeight(choiceCount: number): number {
+  if (choiceCount <= 0) return LAYOUT_LINE_H
+  return LAYOUT_LINE_H + 8 + Math.min(choiceCount, 6) * LAYOUT_CHIP_ROW
+}
+
+/** Linear column layout (fallback when graph has no edges). */
 export function autoLayoutDialogueLinear(lineIds: string[]): DialogueLayoutFile {
   const nodes: DialogueLayoutFile['nodes'] = {}
   lineIds.forEach((id, i) => {
@@ -275,66 +294,136 @@ export function autoLayoutDialogueLinear(lineIds: string[]): DialogueLayoutFile 
     version: 1,
     nodes,
     end: {
-      x: LAYOUT_BASE_X + LAYOUT_GAP_X,
-      y: 40 + Math.max(0, lineIds.length - 1) * LAYOUT_GAP_Y
+      x: LAYOUT_BASE_X + Math.floor(LAYOUT_GAP_X / 2),
+      y: 40 + Math.max(0, lineIds.length) * LAYOUT_GAP_Y
     }
   }
 }
 
 /**
- * Branch-aware canvas layout for agent “排版”:
- * main CSV order in left column; choice targets fan out to the right.
+ * Branch-aware canvas layout for agent “排版” (dagre TB + End bottom sink).
+ * Protocol v1.3: edges from choices options (empty text continue included);
+ * lines missing options get a synthetic empty-text link to the next CSV row.
  */
 export function layoutDialogueGraph(
   lineIds: string[],
   choices: DialogueChoicesFile
 ): DialogueLayoutFile {
-  const nodes: DialogueLayoutFile['nodes'] = {}
-  const placed = new Set<string>()
-  let y = 40
-  let maxCol = 0
-  let endY = 40
-
-  for (const id of lineIds) {
-    if (placed.has(id)) continue
-    nodes[id] = { x: LAYOUT_BASE_X, y }
-    placed.add(id)
-    endY = Math.max(endY, y)
-    const opts = choices.nodes[id]?.options || []
-    if (opts.length) {
-      let col = 1
-      for (const opt of opts) {
-        if (opt.end) {
-          maxCol = Math.max(maxCol, col)
-          continue
-        }
-        const goto = (opt.goto || '').trim()
-        if (goto && !placed.has(goto)) {
-          nodes[goto] = { x: LAYOUT_BASE_X + col * LAYOUT_GAP_X, y }
-          placed.add(goto)
-          maxCol = Math.max(maxCol, col)
-          col += 1
-        }
-      }
-    }
-    y += LAYOUT_GAP_Y
+  const ids = lineIds.filter(Boolean)
+  if (!ids.length) {
+    return { version: 1, nodes: {}, end: { x: LAYOUT_BASE_X, y: 40 } }
   }
 
-  for (const id of lineIds) {
-    if (placed.has(id)) continue
-    nodes[id] = { x: LAYOUT_BASE_X, y }
-    placed.add(id)
-    endY = Math.max(endY, y)
-    y += LAYOUT_GAP_Y
+  const idSet = new Set(ids)
+  const choiceCountById = new Map<string, number>()
+  const sourcesWithOptions = new Set<string>()
+
+  type LayoutEdge = { source: string; target: string; toEnd?: boolean }
+  const edges: LayoutEdge[] = []
+  const seen = new Set<string>()
+  const addEdge = (source: string, target: string, toEnd = false): void => {
+    if (source === target) return
+    const key = `${source}->${target}`
+    if (seen.has(key)) return
+    seen.add(key)
+    edges.push({ source, target, toEnd })
+  }
+
+  let hasEndEdge = false
+  for (const [fromId, node] of Object.entries(choices.nodes || {})) {
+    if (!idSet.has(fromId)) continue
+    const opts = node.options || []
+    if (!opts.length) continue
+    sourcesWithOptions.add(fromId)
+    choiceCountById.set(fromId, opts.length)
+    for (const opt of opts) {
+      if (opt.end) {
+        addEdge(fromId, LAYOUT_END_ID, true)
+        hasEndEdge = true
+        continue
+      }
+      const goto = (opt.goto || '').trim()
+      if (goto && idSet.has(goto)) addEdge(fromId, goto)
+    }
+  }
+
+  for (let i = 0; i < ids.length - 1; i++) {
+    const a = ids[i]
+    if (sourcesWithOptions.has(a)) continue
+    addEdge(a, ids[i + 1])
+    choiceCountById.set(a, (choiceCountById.get(a) || 0) + 1)
+  }
+
+  if (!edges.length) {
+    return autoLayoutDialogueLinear(ids)
+  }
+
+  const g = new dagre.graphlib.Graph()
+  g.setDefaultEdgeLabel(() => ({}))
+  g.setGraph({
+    rankdir: 'TB',
+    nodesep: 90,
+    ranksep: 130,
+    marginx: 48,
+    marginy: 48
+  })
+
+  for (const id of ids) {
+    g.setNode(id, {
+      width: LAYOUT_LINE_W,
+      height: layoutLineHeight(choiceCountById.get(id) || 0)
+    })
+  }
+  if (hasEndEdge) {
+    g.setNode(LAYOUT_END_ID, { width: LAYOUT_END_W, height: LAYOUT_END_H })
+  }
+
+  for (const e of edges) {
+    if (!g.hasNode(e.source) || !g.hasNode(e.target)) continue
+    g.setEdge(e.source, e.target, e.toEnd ? { weight: LAYOUT_END_WEIGHT } : {})
+  }
+
+  dagre.layout(g)
+
+  const positions: Record<string, { x: number; y: number }> = {}
+  for (const id of ids) {
+    const pos = g.node(id) as { x: number; y: number } | undefined
+    if (!pos) continue
+    const h = layoutLineHeight(choiceCountById.get(id) || 0)
+    positions[id] = { x: pos.x - LAYOUT_LINE_W / 2, y: pos.y - h / 2 }
+  }
+
+  let fallbackY = 40
+  for (const p of Object.values(positions)) {
+    fallbackY = Math.max(fallbackY, p.y + LAYOUT_GAP_Y)
+  }
+  for (const id of ids) {
+    if (positions[id]) continue
+    positions[id] = { x: LAYOUT_BASE_X, y: fallbackY }
+    fallbackY += LAYOUT_GAP_Y
+  }
+
+  let endPos = { x: LAYOUT_BASE_X, y: fallbackY }
+  if (hasEndEdge) {
+    const pos = g.node(LAYOUT_END_ID) as { x: number; y: number } | undefined
+    if (pos) {
+      endPos = { x: pos.x - LAYOUT_END_W / 2, y: pos.y - LAYOUT_END_H / 2 }
+    }
+    const endSources = edges
+      .filter((e) => e.target === LAYOUT_END_ID)
+      .map((e) => positions[e.source])
+      .filter(Boolean)
+    if (endSources.length > 0) {
+      const xs = endSources.map((p) => p.x + LAYOUT_LINE_W / 2).sort((a, b) => a - b)
+      const mid = xs[Math.floor(xs.length / 2)]
+      endPos = { x: mid - LAYOUT_END_W / 2, y: endPos.y }
+    }
   }
 
   return {
     version: 1,
-    nodes,
-    end: {
-      x: LAYOUT_BASE_X + Math.max(1, maxCol + 1) * LAYOUT_GAP_X,
-      y: endY
-    }
+    nodes: positions,
+    end: endPos
   }
 }
 
@@ -365,6 +454,12 @@ export function summarizeDialogueGraph(
     if (!idSet.has(cn.after)) {
       warnings.push(`choices key "${cn.after}" is not a line id in CSV`)
     }
+    const texts = cn.options.map((o) => o.text.trim())
+    if (texts.some((t) => t === '') && texts.some((t) => t !== '')) {
+      warnings.push(
+        `choices "${cn.after}" mixes empty-text continue with labeled options (illegal in v1.3)`
+      )
+    }
     for (const o of cn.options) {
       if (!o.end && o.goto && !idSet.has(o.goto)) {
         warnings.push(`option "${o.text}" goto "${o.goto}" missing from CSV`)
@@ -372,18 +467,27 @@ export function summarizeDialogueGraph(
     }
   }
 
-  // Sequence chains: consecutive CSV rows until a choice node (protocol: choices pause row order).
-  const chains: string[][] = []
-  let cur: string[] = []
-  for (const line of lines) {
-    if (!line.id) continue
-    cur.push(line.id)
-    if (choices.nodes[line.id]?.options?.length) {
-      chains.push(cur)
-      cur = []
-    }
+  // Empty-text continue chains via choices goto (not CSV row order).
+  const emptyNext = new Map<string, string>()
+  for (const cn of choiceNodes) {
+    const onlyEmpty =
+      cn.options.length === 1 && !cn.options[0].end && cn.options[0].text.trim() === ''
+    if (onlyEmpty && cn.options[0].goto) emptyNext.set(cn.after, cn.options[0].goto)
   }
-  if (cur.length) chains.push(cur)
+  const chains: string[][] = []
+  const seen = new Set<string>()
+  for (const line of lines) {
+    if (!line.id || seen.has(line.id) || !emptyNext.has(line.id)) continue
+    const chain: string[] = [line.id]
+    seen.add(line.id)
+    let cur = emptyNext.get(line.id)
+    while (cur && !seen.has(cur)) {
+      chain.push(cur)
+      seen.add(cur)
+      cur = emptyNext.get(cur)
+    }
+    chains.push(chain)
+  }
 
   return {
     openingId: lines[0]?.id || null,
@@ -407,21 +511,28 @@ export function parseCharactersCsv(text: string): Character[] {
     }
     const id = get('id')
     if (!id) continue
+    const opRaw = get('operable').trim().toLowerCase()
+    const operable = opRaw === '1' || opRaw === 'true' || opRaw === 'yes' || opRaw === 'y'
     out.push({
       id,
       name: get('name') || id,
       color: get('color') || '#88c0d0',
       note: get('note'),
-      model_node: get('model_node')
+      model_node: get('model_node'),
+      operable
     })
   }
   return out
 }
 
 export function serializeCharactersCsv(chars: Character[]): string {
-  const rows = ['id,name,color,note,model_node']
+  const rows = ['id,name,color,note,model_node,operable']
   for (const c of chars) {
-    rows.push([c.id, c.name, c.color, c.note, c.model_node].map(escapeCsv).join(','))
+    rows.push(
+      [c.id, c.name, c.color, c.note, c.model_node, c.operable ? '1' : '']
+        .map(escapeCsv)
+        .join(',')
+    )
   }
   return rows.join('\n') + '\n'
 }

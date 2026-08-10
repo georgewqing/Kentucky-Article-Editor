@@ -56,15 +56,15 @@ import {
 import {
   diskFromGraph,
   graphFromDisk,
-  hasChoiceOut,
-  hasSequenceOut,
   listBrokenRefsIfDelete,
+  layoutDialogueFlow,
   refreshNodePresentation,
-  wouldCreateSequenceCycle,
+  decorateDialogueEdges,
+  edgesOnPathsTowardEnd,
+  wouldCreateMixedEmptyOptions,
+  choiceEdgeVisualProps,
   type DialogueFlowEdge,
-  type DialogueFlowNode,
-  CHOICE_EDGE_LABEL_STYLE,
-  CHOICE_EDGE_LABEL_BG_STYLE
+  type DialogueFlowNode
 } from './dialogueGraphMap'
 import { dialogueNodeTypes } from './DialogueLineNode'
 import { DialogueInspector } from './DialogueInspector'
@@ -157,7 +157,8 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
     name: '',
     color: CHARACTER_COLOR_PRESETS[0],
     note: '',
-    model_node: ''
+    model_node: '',
+    operable: false
   })
 
   const applyingRef = useRef(false)
@@ -190,6 +191,10 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
     (id: string) => charMap.get(id)?.color || '#88c0d0',
     [charMap]
   )
+  const speakerOperable = useCallback(
+    (id: string) => Boolean(charMap.get(id)?.operable),
+    [charMap]
+  )
 
   const pushUndo = useCallback((): void => {
     if (skipUndo.current) return
@@ -203,17 +208,19 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
 
   const applyGraph = useCallback(
     (nextNodes: DialogueFlowNode[], nextEdges: DialogueFlowEdge[], markDirty = true) => {
-      const { lines, openingId } = diskFromGraph(nextNodes, nextEdges)
+      const decorated = decorateDialogueEdges(nextEdges)
+      const { lines, openingId } = diskFromGraph(nextNodes, decorated)
       const presented = refreshNodePresentation(
         nextNodes,
-        nextEdges,
+        decorated,
         openingId,
         speakerName,
-        speakerColor
+        speakerColor,
+        speakerOperable
       )
       skipUndo.current = true
       setNodes(presented)
-      setEdges(nextEdges)
+      setEdges(decorated)
       requestAnimationFrame(() => {
         skipUndo.current = false
       })
@@ -231,7 +238,7 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
         })
       }
     },
-    [setNodes, setEdges, speakerName, speakerColor, tab, tabId, updateTabContent]
+    [setNodes, setEdges, speakerName, speakerColor, speakerOperable, tab, tabId, updateTabContent]
   )
 
   const flushSidecars = useCallback(async () => {
@@ -370,7 +377,8 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
         choices,
         layout,
         speakerName,
-        speakerColor
+        speakerColor,
+        speakerOperable
       })
       skipUndo.current = true
       setNodes(g.nodes)
@@ -398,66 +406,39 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
     if (!cur.some((n) => n.data?.kind === 'line')) return
     const { openingId } = diskFromGraph(cur, edgesRef.current)
     skipUndo.current = true
-    setNodes(refreshNodePresentation(cur, edgesRef.current, openingId, speakerName, speakerColor))
+    setNodes(refreshNodePresentation(cur, edgesRef.current, openingId, speakerName, speakerColor, speakerOperable))
     requestAnimationFrame(() => {
       skipUndo.current = false
     })
-  }, [characters, speakerName, speakerColor, setNodes])
+  }, [characters, speakerName, speakerColor, speakerOperable, setNodes])
 
   const onConnect = useCallback(
     (conn: Connection) => {
       if (!conn.source || !conn.target) return
       if (conn.source === DIALOGUE_END_NODE_ID) return
-      if (conn.target === conn.source) return
+      if (conn.target === conn.source) {
+        showToast(t('dialogue.noSelfLink'), 'error')
+        return
+      }
 
-      const handle = conn.sourceHandle || 'sequence'
-      const kind = handle === 'choice' ? 'choice' : 'sequence'
-
-      if (kind === 'sequence') {
-        if (conn.target === DIALOGUE_END_NODE_ID) {
-          showToast(t('dialogue.sequenceNotToEnd'), 'error')
-          return
-        }
-        if (hasChoiceOut(edgesRef.current, conn.source)) {
-          showToast(t('dialogue.noSeqWithChoice'), 'error')
-          return
-        }
-        if (hasSequenceOut(edgesRef.current, conn.source)) {
-          showToast(t('dialogue.oneSequenceOnly'), 'error')
-          return
-        }
-        if (wouldCreateSequenceCycle(edgesRef.current, conn.source, conn.target)) {
-          showToast(t('dialogue.noCycle'), 'error')
-          return
-        }
-      } else {
-        if (hasSequenceOut(edgesRef.current, conn.source)) {
-          showToast(t('dialogue.noSeqWithChoice'), 'error')
-          return
-        }
+      // v1.3: all outs are options; default empty text (next / end)
+      const label = ''
+      if (wouldCreateMixedEmptyOptions(edgesRef.current, conn.source, label)) {
+        showToast(t('dialogue.noMixedEmptyOptions'), 'error')
+        return
       }
 
       pushUndo()
       const id = `e_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-      const label = kind === 'choice' ? t('dialogue.defaultChoice') : undefined
       const edge: DialogueFlowEdge = {
         id,
         source: conn.source,
         target: conn.target,
-        sourceHandle: kind === 'choice' ? 'choice' : 'sequence',
+        sourceHandle: 'out',
         targetHandle: 'in',
-        type: 'default',
-        label,
-        ...(kind === 'choice'
-          ? {
-              labelStyle: { ...CHOICE_EDGE_LABEL_STYLE },
-              labelBgStyle: { ...CHOICE_EDGE_LABEL_BG_STYLE },
-              labelBgPadding: [4, 6] as [number, number],
-              labelBgBorderRadius: 4
-            }
-          : {}),
-        data: { kind, label },
-        className: kind === 'choice' ? 'dialogue-edge-choice' : 'dialogue-edge-sequence'
+        ...choiceEdgeVisualProps(1),
+        data: { kind: 'choice', label },
+        className: 'dialogue-edge-choice'
       }
       applyGraph(nodesRef.current, [...edgesRef.current, edge])
     },
@@ -575,6 +556,7 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
         line,
         speakerName: speakerName(speaker),
         speakerColor: speakerColor(speaker),
+        speakerOperable: speakerOperable(speaker),
         choiceCount: 0
       }
     }
@@ -592,6 +574,7 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
     applyGraph,
     speakerName,
     speakerColor,
+    speakerOperable,
     showToast,
     t
   ])
@@ -652,6 +635,28 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
     return n?.data?.line || null
   }, [nodes, selectedNodeId])
 
+  const flowingEdgeIds = useMemo(
+    () => (selectedNodeId ? edgesOnPathsTowardEnd(selectedNodeId, edges) : new Set<string>()),
+    [selectedNodeId, edges]
+  )
+
+  const displayEdges = useMemo(
+    () =>
+      edges.map((e) => {
+        const flowing = flowingEdgeIds.has(e.id)
+        const base = e.className || ''
+        const className = flowing
+          ? `${base} dialogue-edge-flow`.trim()
+          : base.replace(/\bdialogue-edge-flow\b/g, '').trim()
+        return {
+          ...e,
+          animated: flowing,
+          className: className || undefined
+        }
+      }),
+    [edges, flowingEdgeIds]
+  )
+
   const updateSelectedLine = (patch: Partial<DialogueLine>): void => {
     if (!selectedNodeId) return
     pushUndo()
@@ -664,16 +669,17 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
 
   const updateEdgeLabel = (label: string): void => {
     if (!selectedEdgeId) return
+    const edge = edgesRef.current.find((e) => e.id === selectedEdgeId)
+    if (!edge) return
+    if (wouldCreateMixedEmptyOptions(edgesRef.current, edge.source, label, selectedEdgeId)) {
+      showToast(t('dialogue.noMixedEmptyOptions'), 'error')
+      return
+    }
     setEditingEdgeLabel(label)
     const nextEdges = edgesRef.current.map((e) =>
       e.id === selectedEdgeId
         ? {
             ...e,
-            label,
-            labelStyle: { ...CHOICE_EDGE_LABEL_STYLE },
-            labelBgStyle: { ...CHOICE_EDGE_LABEL_BG_STYLE },
-            labelBgPadding: [4, 6] as [number, number],
-            labelBgBorderRadius: 4,
             data: { ...e.data, kind: 'choice' as const, label }
           }
         : e
@@ -686,22 +692,21 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
     if (de.data?.kind !== 'choice') return
     setSelectedEdgeId(edge.id)
     setSelectedNodeId(null)
-    const cur = String(de.data.label || de.label || '')
+    const cur = String(de.data.label || '')
     const next = window.prompt(t('dialogue.choiceText'), cur)
     if (next === null) return
+    const label = next.trim()
+    if (wouldCreateMixedEmptyOptions(edgesRef.current, edge.source, label, edge.id)) {
+      showToast(t('dialogue.noMixedEmptyOptions'), 'error')
+      return
+    }
     pushUndo()
-    const label = next.trim() || cur
     applyGraph(
       nodesRef.current,
       edgesRef.current.map((e) =>
         e.id === edge.id
           ? {
               ...e,
-              label,
-              labelStyle: { ...CHOICE_EDGE_LABEL_STYLE },
-              labelBgStyle: { ...CHOICE_EDGE_LABEL_BG_STYLE },
-              labelBgPadding: [4, 6] as [number, number],
-              labelBgBorderRadius: 4,
               data: { ...e.data, kind: 'choice' as const, label }
             }
           : e
@@ -709,6 +714,14 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
     )
     setEditingEdgeLabel(label)
   }
+
+  const runAutoLayout = useCallback((): void => {
+    if (!nodesRef.current.length) return
+    pushUndo()
+    const laid = layoutDialogueFlow(nodesRef.current, edgesRef.current)
+    applyGraph(laid, edgesRef.current)
+    requestAnimationFrame(() => fitView({ padding: 0.2 }))
+  }, [applyGraph, pushUndo, fitView])
 
   const saveCharacters = async (next: Character[]): Promise<void> => {
     if (!workspacePath) return
@@ -733,7 +746,7 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
     }
     await saveCharacters([
       ...characters,
-      { id, name, color: newChar.color, note: newChar.note, model_node: model }
+      { id, name, color: newChar.color, note: newChar.note, model_node: model, operable: Boolean(newChar.operable) }
     ])
     setCreateOpen(false)
     setNewChar({
@@ -741,7 +754,8 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
       name: '',
       color: CHARACTER_COLOR_PRESETS[0],
       note: '',
-      model_node: ''
+      model_node: '',
+      operable: false
     })
   }
 
@@ -801,6 +815,9 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
           <button type="button" onClick={() => fitView({ padding: 0.2 })}>
             {t('dialogue.fitView')}
           </button>
+          <button type="button" onClick={runAutoLayout}>
+            {t('dialogue.autoLayout')}
+          </button>
           <button type="button" onClick={undo}>
             {t('dialogue.undo')}
           </button>
@@ -827,7 +844,7 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
         <div className="dialogue-graph-canvas">
           <ReactFlow
             nodes={nodes}
-            edges={edges}
+            edges={displayEdges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
@@ -840,7 +857,7 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
               if (n.id !== DIALOGUE_END_NODE_ID) setSelectedNodeId(n.id)
             }}
             nodeTypes={dialogueNodeTypes}
-            defaultEdgeOptions={{ type: 'default' }}
+            defaultEdgeOptions={{ type: 'smoothstep' }}
             connectionMode={ConnectionMode.Loose}
             fitView
             deleteKeyCode={null}
@@ -909,6 +926,14 @@ function DialogueGraphInner({ tabId }: { tabId: string }) {
                 onChange={(e) => setNewChar((c) => ({ ...c, model_node: e.target.value }))}
                 required
               />
+            </label>
+            <label className="dialogue-inspector-field character-operable-row" title={t('characters.operableHint')}>
+              <input
+                type="checkbox"
+                checked={Boolean(newChar.operable)}
+                onChange={(e) => setNewChar((c) => ({ ...c, operable: e.target.checked }))}
+              />
+              <span>{t('characters.operable')}</span>
             </label>
             <div className="app-dialog-actions">
               <button type="button" onClick={() => setCreateOpen(false)}>

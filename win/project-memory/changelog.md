@@ -374,6 +374,23 @@
 - 提供方：DuckDuckGo（短超时）失败则**自动回退 Bing**；可直接选 Bing；Brave/Tavily 枚举预留；Electron `net.fetch`
 - 无 Shell、不执行 skill 脚本、无通用 web_fetch
 
+## 47. 台词图 dagre 自动排版
+
+- 编辑器 / AI `layout_dialogue` 统一用 dagre TB + End 收拢；工具栏「自动排版」；无 layout 首开走同算法
+- 选项边标签截断显示，完整文案仍在 `data.label`
+
+## 48. 台词图可读性（End 沉底 + 芯片 + smoothstep）
+
+- End 参与 dagre 沉底（取消右侧横拉）；选项全文进节点芯片，边上仅序号
+- 连线改 smoothstep；短预览 + 开场徽章 i18n；product-decisions 同步
+
+## 49. 台词连线统一为选项（协议 v1.3）
+
+- 废除顺序边 / 右侧选项柄；底边全为 option；禁止空/非空混排
+- 读盘迁移：无 choices 合成空 text 链；有 choices 则补缺行邻接
+- Godot 联动说明书整篇升 **v1.3**；AI / project-memory / win README 去 v1.2 行序语义
+- **可操作角色** `characters.operable`：仅玩家空 text 等确认；NPC 空 text 自动过句；协议速览 / 执行器伪代码 / 自测清单已对齐
+
 ## 其它小修
 
 - 选项卡悬停用 `cursor: pointer`

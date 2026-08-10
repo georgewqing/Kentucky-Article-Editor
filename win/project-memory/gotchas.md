@@ -74,12 +74,13 @@
 - 渲染层只依赖 `getPlatform()`。安卓为独立软件根 `../android/`，勿在本目录混入 Capacitor。
 - 台词：仅 `*.dialogue.csv` 走 DialogueEditor；basename `characters.csv` 走 CharactersEditor；其它 `.csv` 仍 Monaco。`characters.csv` 路径约定工作区根，勿做成可配置。
 - 台词 id 唯一性要扫工作区全部 `.dialogue.csv`（不只当前文件）；改 text/meta 默认不改 id。
-- Godot 热编辑：打开工程内 `dialogue/` 当工作区即可同文件联动；执行器参考 [ai_river_godot](https://github.com/CCFOX12/ai_river_godot)（Kentucky **不**附带插件），契约见 `extras/godot-kentucky-dialogue/README.md`（**v1.2**）。勿把「导出 CSV」当热编辑主路径。
+- Godot 热编辑：打开工程内 `dialogue/` 当工作区即可同文件联动；执行器参考 [ai_river_godot](https://github.com/CCFOX12/ai_river_godot)（Kentucky **不**附带插件），契约见 `extras/godot-kentucky-dialogue/README.md`（**v1.3**）。勿把「导出 CSV」当热编辑主路径。
 - 启动闪屏主题：读 `userData/kentucky-theme.json`；dev 下 splash 走 Vite URL（避免 `out/renderer/boot-theme.js` 过期）；query 里 accent **不带 `#`**；主进程在 `dom-ready`/`did-finish-load` **注入** `--boot-accent*`，不单靠页面脚本。
 - 台词演出列：`focus_node` / `font_size` / `text_color`；`font_size` 空与 `0` 磁盘统一空串；`text_color` 仅 `#RGB`/`#RRGGBB`/`#RRGGBBAA`；Kentucky 不校验节点存在。
 - 台词 sidecar：`foo.dialogue.csv` ↔ `foo.dialogue.meta.json` / `.choices.json` / `.layout.json`（非 `.dialogue.csv.meta.json`）；删/重命名/移动同步三者；树里挂在 csv 下默认收起。
 - 台词保存：画布未就绪时不得 flush 空 CSV；曾出现「保存后重启文件被清空」即因此。异常时应提示 `saveGraphInconsistent` 而非静默覆盖。
-- 台词图：顺序边与选项边不可同出；顺序禁环；选项边标签须自设 `labelBgStyle`（否则 RF 默认白底）。
+- 台词图：底边全为 option（无顺序边）；空 text：可操作角色=下一句（确认），非可操作=自动过；非空=玩家选项；禁止同节点空/非空混排；连线用 smoothstep。乱图用工具栏「自动排版」（dagre TB，End 沉底）；`.layout.json` 仅 Kentucky 画布用。
+- 角色表 `operable` 列：勾选可操作（玩家）；缺列/空=NPC 自动过句；执行器须按当前行 `speaker` 查表，不可一律等确认。
 - 新建台词文件名由场景 stem + 对话标识自动生成；信息卡不提供改名，改名用资源管理器右键。
 - 活动栏：视窗键=`home`（起始页、藏侧栏、不关项目）；文件夹键=`explorer`；勿把视窗键做成 `closeWorkspace`。
 - 应用图标只维护 `build/icon.png`（无 SVG 底稿）。
@@ -94,7 +95,7 @@
 - 系统提示与工具返回禁止写「请点 Apply」——已无确认栏。
 - DeepSeek `fetch failed` 是网络层（代理/防火墙），不是模型名错误（错模型多为 HTTP 4xx）。
 - AI 导图：勿让模型手填密网格坐标；用 `autoLayout` / `layout_kmind`。乱成网时先砍交叉边再建树，单靠布局救不了完全二分图。
-- AI 台词图：整段分支脚本用 `propose_dialogue_graph`（勿手写半截 choices JSON）；乱画布用 `layout_dialogue`；空 choices 提案会**删除** `.dialogue.choices.json`（线性）。choices/layout 与 csv 同轮写入时通常自动落盘，大改 csv 仍可能要 Accept。
+- AI 台词图：整段脚本用 `propose_dialogue_graph`（线性也写空 text options；勿再用「缺 choices=线性」）；乱画布用 `layout_dialogue`；`nodes` 空才删 choices。choices/layout 与 csv 同轮写入时通常自动落盘，大改 csv 仍可能要 Accept。
 - AI Skills：只读 `SKILL.md` / reference / examples；**永不**执行 skill 内 `scripts/`。技能在软件本体 `data/ai-skills/`，不跟工作区走。
 - AI 联网：默认关；DDG 超时自动回退 Bing；搜索结果会抓取前几条页面写入 `excerpt`（天气站可解析预报卡）；需要更深可读 `web_fetch`。Brave/Tavily 未实现。
 

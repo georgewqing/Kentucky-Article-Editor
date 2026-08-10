@@ -26,6 +26,8 @@ export interface Character {
   note: string
   /** Godot model / character node name for plugin linkage. */
   model_node: string
+  /** Player-operable: empty-text options wait for confirm. Non-operable: auto-advance. */
+  operable: boolean
 }
 
 /** File-level Godot binding, stored beside `*.dialogue.csv` as `*.dialogue.meta.json`. */
@@ -59,7 +61,19 @@ export function normalizeTextColor(value: string): { value: string; ok: boolean 
   return { value: '', ok: false }
 }
 
-export const CHARACTERS_HEADER = 'id,name,color,note,model_node' as const
+export const CHARACTERS_HEADER = 'id,name,color,note,model_node,operable' as const
+
+/** Parse operable flag: 1/true/yes/y → true; missing/empty/0/false → false. */
+export function parseOperableFlag(raw: string | undefined | null): boolean {
+  const v = String(raw ?? '')
+    .trim()
+    .toLowerCase()
+  return v === '1' || v === 'true' || v === 'yes' || v === 'y'
+}
+
+export function serializeOperableFlag(operable: boolean): string {
+  return operable ? '1' : ''
+}
 
 export const DIALOGUE_EXT = '.dialogue.csv'
 export const DIALOGUE_META_EXT = '.dialogue.meta.json'
@@ -153,11 +167,12 @@ export function parseDialogueChoices(text: string): DialogueChoicesFile {
         const options: DialogueChoiceOption[] = []
         for (const opt of node.options) {
           if (!opt || typeof opt !== 'object') continue
+          // v1.3: empty text is valid (silent continue / end)
           const textVal = typeof opt.text === 'string' ? opt.text.trim() : ''
-          if (!textVal) continue
           const end = Boolean(opt.end)
           const goto = typeof opt.goto === 'string' ? opt.goto.trim() : ''
-          options.push(end ? { text: textVal, goto: '', end: true } : { text: textVal, goto })
+          if (end) options.push({ text: textVal, goto: '', end: true })
+          else if (goto) options.push({ text: textVal, goto })
         }
         if (options.length) nodes[id] = { options }
       }
@@ -175,9 +190,10 @@ export function serializeDialogueChoices(file: DialogueChoicesFile): string {
     const options = (node?.options || [])
       .map((o) => {
         const text = (o.text || '').trim()
-        if (!text) return null
         if (o.end) return { text, goto: '', end: true as const }
-        return { text, goto: (o.goto || '').trim() }
+        const goto = (o.goto || '').trim()
+        if (!goto) return null
+        return { text, goto }
       })
       .filter(Boolean) as DialogueChoiceOption[]
     if (options.length) nodes[id] = { options }
@@ -498,6 +514,7 @@ export function parseCharactersCsv(text: string): Character[] {
   const colorI = colIndex(header, 'color')
   const noteI = colIndex(header, 'note')
   const modelI = colIndex(header, 'model_node')
+  const operableI = colIndex(header, 'operable')
   if (idI < 0 || nameI < 0) return []
   const out: Character[] = []
   for (let r = 1; r < rows.length; r++) {
@@ -510,16 +527,24 @@ export function parseCharactersCsv(text: string): Character[] {
       name: get(nameI).trim() || id,
       color: get(colorI).trim() || '#88c0d0',
       note: get(noteI),
-      model_node: get(modelI).trim()
+      model_node: get(modelI).trim(),
+      operable: parseOperableFlag(get(operableI))
     })
   }
   return out
 }
 
 export function serializeCharactersCsv(chars: Character[]): string {
-  const rows: string[][] = [['id', 'name', 'color', 'note', 'model_node']]
+  const rows: string[][] = [['id', 'name', 'color', 'note', 'model_node', 'operable']]
   for (const c of chars) {
-    rows.push([c.id, c.name, c.color, c.note, c.model_node ?? ''])
+    rows.push([
+      c.id,
+      c.name,
+      c.color,
+      c.note,
+      c.model_node ?? '',
+      serializeOperableFlag(Boolean(c.operable))
+    ])
   }
   return serializeCsv(rows)
 }

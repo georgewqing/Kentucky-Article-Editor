@@ -2418,7 +2418,7 @@ input[type='color'] {
 }
 .dialogue-flow-node {
   min-width: 180px;
-  max-width: 240px;
+  max-width: 220px;
   padding: 8px 10px 10px;
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -2464,6 +2464,77 @@ input[type='color'] {
   line-height: 1.35;
   white-space: pre-wrap;
   word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-height: 2.7em;
+}
+.dialogue-flow-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.dialogue-flow-choice-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 2px 6px 2px 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev-2));
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--fg);
+}
+.dialogue-flow-choice-chip.is-auto {
+  opacity: 0.75;
+  border-style: dashed;
+}
+.dialogue-flow-choice-idx {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--fg-muted);
+  background: var(--bg-hover);
+}
+.dialogue-flow-choice-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.character-card-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg));
+  color: var(--fg-bright);
+}
+.character-card-badge.muted {
+  background: var(--bg-hover);
+  color: var(--fg-muted);
+}
+.character-operable-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.character-operable-row input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
 }
 .dialogue-flow-end {
   width: 56px;
@@ -2487,16 +2558,32 @@ input[type='color'] {
 .dialogue-handle-seq {
   background: var(--accent) !important;
 }
+.dialogue-handle-out,
 .dialogue-handle-choice {
-  background: color-mix(in srgb, var(--accent) 40%, #e2c08d) !important;
+  background: var(--accent) !important;
 }
-.dialogue-edge-sequence .react-flow__edge-path {
-  stroke: var(--fg-muted);
-  stroke-width: 1.5;
-}
+.dialogue-edge-sequence .react-flow__edge-path,
 .dialogue-edge-choice .react-flow__edge-path {
-  stroke: var(--accent);
-  stroke-width: 2;
+  stroke: color-mix(in srgb, var(--accent) 72%, transparent);
+  stroke-width: 1.75;
+}
+/* Selection path: dashed flow from selected node toward End (forks included) */
+.dialogue-graph-canvas .dialogue-edge-flow .react-flow__edge-path {
+  stroke: var(--accent) !important;
+  stroke-width: 2.25 !important;
+  stroke-dasharray: 6 8 !important;
+  stroke-linecap: round;
+  animation: dialogue-edge-flow-dash 0.7s linear infinite;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 45%, transparent));
+}
+.dialogue-graph-canvas .react-flow__edge.animated path {
+  stroke-dasharray: 6 8;
+  animation: dialogue-edge-flow-dash 0.7s linear infinite;
+}
+@keyframes dialogue-edge-flow-dash {
+  to {
+    stroke-dashoffset: -28;
+  }
 }
 /* Edge label: RF defaults to white rect + dark text — restyle for dark/light theme */
 .dialogue-graph-canvas .react-flow__edge-textbg {
@@ -2504,20 +2591,20 @@ input[type='color'] {
   stroke: var(--border) !important;
 }
 .dialogue-graph-canvas .react-flow__edge-text {
-  fill: var(--fg-bright) !important;
-  font-size: 10px;
+  fill: var(--fg-muted) !important;
+  font-size: 9px;
 }
 .dialogue-graph-canvas .react-flow__edge-label {
   background: var(--bg-elev-3) !important;
-  color: var(--fg-bright) !important;
+  color: var(--fg-muted) !important;
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 1px 6px;
-  font-size: 10px;
+  padding: 0 4px;
+  font-size: 9px;
 }
 .dialogue-edge-choice .react-flow__edge-text {
-  fill: var(--fg-bright);
-  font-size: 10px;
+  fill: var(--fg-muted);
+  font-size: 9px;
 }
 .dialogue-inspector {
   width: 100%;

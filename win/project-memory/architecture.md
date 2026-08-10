@@ -142,13 +142,13 @@ AiPanel / aiStore
 
 ## 台词 CSV
 
-- **台词文件** `*.dialogue.csv`：列 `id,speaker,text,note,emotion,scene,condition,audio,focus_node,font_size,text_color`（写回始终 11 列；旧 8 列可读）；行序=无选项时的播放序；`speaker`=角色 id
-- **分支** 可选 `*.dialogue.choices.json`；**布局** `*.dialogue.layout.json`（仅 Kentucky）
-- **角色表** 工作区根 `characters.csv`：`id,name,color,note,model_node`（路径固定不可配）
+- **台词文件** `*.dialogue.csv`：列 `id,speaker,text,note,emotion,scene,condition,audio,focus_node,font_size,text_color`（写回始终 11 列；旧 8 列可读）；CSV 首行=开场；播放序看 choices；`speaker`=角色 id
+- **播放图** `*.dialogue.choices.json`（空 text=确认续句/NPC 自动，取决于 `characters.operable`；非空=选项 UI）；**布局** `*.dialogue.layout.json`（仅 Kentucky）
+- **角色表** 工作区根 `characters.csv`：`id,name,color,note,model_node,operable`（路径固定不可配）
 - 解析/序列化：`dialogueCsv.ts` + `dialogueGraphMap.ts`；落盘 flush：`dialogueSidecarFlush.ts`（须 `graphReady`，防空覆盖）
 - UI：`DialogueEditor` 节点画布 + `DialogueLineNode` / `DialogueInspector` / `DialogueMiniMap`
 - 稳定 id：`allocateDialogueId` 在工作区所有 `.dialogue.csv` 内查重顺延
-- Godot 契约：`extras/godot-kentucky-dialogue/README.md`（协议 **v1.2**）；执行器：[ai_river_godot](https://github.com/CCFOX12/ai_river_godot)
+- Godot 契约：`extras/godot-kentucky-dialogue/README.md`（协议 **v1.3**）；执行器：[ai_river_godot](https://github.com/CCFOX12/ai_river_godot)
 
 ## `.kmind` 格式（v2）
 

@@ -37,10 +37,11 @@ function handleAnchor(
     return { x: cx, y: cy }
   }
   switch (handleId) {
+    case 'out':
     case 'sequence':
       return { x: cx, y: y + h }
     case 'choice':
-      return { x: x + w, y: cy }
+      return { x: cx, y: y + h }
     case 'in':
       return { x: cx, y }
     default:

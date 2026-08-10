@@ -26,10 +26,10 @@
 | 分发 | Windows：**目录版** `release/KENTUCKY-<version>/`（内含 `KENTUCKY.exe`）；可选 `npm run dist:portable` 单文件。图标 `build/icon.png`（灰白 K，圆角） |
 | 拼写检查 | 正文关闭浏览器拼写检查（无红波浪线） |
 | 帮助链接 | 「了解 KENTUCKY」→ https://github.com/CCFOX12/Kentucky-Article-Editor |
-| 台词对话 | **独立功能**；磁盘真相 = `*.dialogue.csv`（11 列）+ 可选 `*.dialogue.choices.json` + 工作区根 `characters.csv`；**节点图画布**（顺序边/选项边/End；贝塞尔连线；可调宽检视器；思维导图式小地图）；`speaker` 存角色 **id**；布局 `*.dialogue.layout.json` 仅 Kentucky；保存须防未就绪写空 CSV |
-| 台词角色 | 顶栏创建；检视器选 speaker；列：`id,name,color,note,model_node`（创建时 `model_node` 必填）；打开 `characters.csv` 用 CharactersEditor |
+| 台词对话 | **独立功能**；磁盘真相 = `*.dialogue.csv`（11 列）+ `*.dialogue.choices.json`（播放图；空 text 由 `characters.operable` 决定确认或自动）+ 工作区根 `characters.csv`；**节点图画布**（底边 option / End 沉底；smoothstep；选项芯片；可调宽检视器；小地图）；`speaker` 存角色 **id**；布局 `*.dialogue.layout.json` 仅 Kentucky；保存须防未就绪写空 CSV |
+| 台词角色 | 顶栏创建；检视器选 speaker；列：`id,name,color,note,model_node,operable`（创建时 `model_node` 必填；`operable=1` 为可操作玩家，空文案需确认；否则 NPC 自动过句）；打开 `characters.csv` 用 CharactersEditor |
 | 台词导出 | 完整管线 CSV + 本地化 `keys,<lang>`；挂画布工具栏 |
-| Godot 热编辑 | **同路径磁盘**；协议 **v1.2**。执行器读 csv/meta/characters/**choices**（忽略 layout）。参考 [ai_river_godot](https://github.com/CCFOX12/ai_river_godot) Louisville Station。完整说明书：`extras/godot-kentucky-dialogue/README.md`。不做 IPC / 表达式引擎 / 图格式替代 CSV |
+| Godot 热编辑 | **同路径磁盘**；协议 **v1.3**。执行器读 csv/meta/characters（含 **operable**）/**choices**（忽略 layout）；空 text 按 speaker 可操作确认 / NPC 自动。参考 [ai_river_godot](https://github.com/CCFOX12/ai_river_godot) Louisville Station。完整说明书：`extras/godot-kentucky-dialogue/README.md`。不做 IPC / 表达式引擎 / 图格式替代 CSV |
 | 活动栏 | 视窗键=起始页（`home`，不关工作区、隐藏侧栏）；**工程徽章列表**（可多开）+ 末尾「+」开文件夹；**AI 对话键**=右侧 Agent 栏（`Ctrl+L`）；齿轮=设置 |
 | 多工程 | 同窗口多文件夹；切换保留各工程标签/树；聊天与面板记忆按路径隔离 |
 | 工作区布局 | Cursor 工作区容器含两个软件根：`win/`（本 Electron 应用）与 `android/`（独立 Capacitor）；互不共享源码树 |
@@ -54,7 +54,7 @@
 | 上下文 | **L5**：当前文件/选区/`@` + 自动角色表摘要；上下文占用进度条；接近满时禁止静默丢弃历史 |
 | 工具 | 只读 list/read；**L1** continuity_check；**L2** 角色驱动；**L3** scene↔kmind；**L4** 台词图；`.kmind` + dagre；**Skills**（`data/ai-skills/`）；可选 **联网搜索**（默认关，DuckDuckGo；Brave/Tavily 预留）；无 Shell/Git |
 | 导图可读性 | AI 须建树/分层 DAG（非角色↔场景全连接网）；缺省 Sugiyama/LR；乱图可 `layout_kmind` |
-| 台词图能力 | AI 按协议 **v1.2** 读写：`read_dialogue` 看链/分支；`propose_dialogue_graph` 整图（csv+choices+layout）；`propose_set_dialogue_choices` / `layout_dialogue` / 行级增改排；speaker=角色 id |
+| 台词图能力 | AI 按协议 **v1.3** 读写：`read_dialogue` 看 options / 空 text 链；角色 `operable`；`propose_dialogue_graph` 整图（csv+choices+layout，线性也写空 text options）；`propose_set_dialogue_choices` / `layout_dialogue` / 行级增改排；speaker=角色 id；`propose_upsert_character` 可写 operable |
 | Skills | 全局 `data/ai-skills/<id>/SKILL.md`；设置开关/导入；catalog 注入提示；`list_skills` / `read_skill`；**不**执行 scripts |
 | 联网搜索 | 设置 `webSearchEnabled`（默认关）；`web_search` + `web_research`；DuckDuckGo 失败自动回退 Bing；可直选 Bing |
 
@@ -101,6 +101,6 @@
 - 导图批注：多条评论、作者时间戳、Markdown/富文本、全局展开/折叠、批注搜索
 - 多窗口：精简窗内换文件、跨窗同步光标/选区、主窗标签列表镜像
 - 台词：分支/条件可视化、表达式编辑器、Godot **双向实时协议**、多语言对照编辑、音频播放/资源库、Markdown 内嵌台词、`characters.csv` 路径可配置、全工作区台词一键导出、Kentucky 内预览对焦/校验节点、在本仓附带/打包 Godot 插件  
-  （执行器参考：[ai_river_godot](https://github.com/CCFOX12/ai_river_godot)；同目录磁盘联动 ≠ Kentucky 内嵌引擎；协议 v1.1 见 extras）
+  （执行器参考：[ai_river_godot](https://github.com/CCFOX12/ai_river_godot)；同目录磁盘联动 ≠ Kentucky 内嵌引擎；协议 v1.3 见 extras）
 - AI：命令面板式入口、扩展市场、Shell/Git 工具、费用账单、云同步 Key、正文↔导图自动双向同步、Composer 整页多文件编辑器、Cursor Tab 补全、工作区 skills、执行 skill 脚本、通用网页 fetch/浏览器自动化
   （联网搜索：设置可选开启；Brave/Tavily 真实请求尚未实现）

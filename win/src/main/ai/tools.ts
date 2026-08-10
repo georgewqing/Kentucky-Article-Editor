@@ -115,7 +115,7 @@ export function getWritingTools(): ToolDef[] {
       function: {
         name: 'read_dialogue',
         description:
-          'Parse a *.dialogue.csv as a Godot v1.2 dialogue graph: lines, choices sidecar, sequence chains, layout presence, warnings. Prefer this before editing branching.',
+          'Parse a *.dialogue.csv as a Godot v1.3 dialogue graph: lines, choices options (empty text = confirm-to-continue), empty-text chains, layout presence, warnings. Prefer this before editing.',
         parameters: {
           type: 'object',
           properties: { path: { type: 'string' } },
@@ -249,7 +249,7 @@ export function getWritingTools(): ToolDef[] {
       function: {
         name: 'propose_set_dialogue_choices',
         description:
-          'Write sibling *.dialogue.choices.json (Godot branching). options: { text, goto } or { text, end: true }. Empty nodes deletes the file. Prefer propose_dialogue_graph for full scripts.',
+          'Write sibling *.dialogue.choices.json (v1.3 play graph). options: { text, goto } (text:\"\" = confirm-to-continue), or { text, end: true }. Do not mix empty and labeled text on one line. Empty nodes deletes the file.',
         parameters: {
           type: 'object',
           properties: {
@@ -287,7 +287,7 @@ export function getWritingTools(): ToolDef[] {
       function: {
         name: 'propose_dialogue_graph',
         description:
-          'Build/replace a full Godot v1.2 dialogue graph: CSV lines + choices.json + layout.json. Prefer for new branching scripts. speaker = character id. A line with choices pauses CSV row-order advance.',
+          'Build/replace a full Godot v1.3 dialogue graph: CSV lines + choices.json + layout.json. Every continue is an option (text:\"\" for silent next; labeled text for player choices; end:true for End). speaker = character id. Do not omit choices for linear scripts.',
         parameters: {
           type: 'object',
           properties: {
@@ -398,6 +398,11 @@ export function getWritingTools(): ToolDef[] {
             color: { type: 'string' },
             note: { type: 'string' },
             model_node: { type: 'string' },
+            operable: {
+              type: 'boolean',
+              description:
+                'true = player-operable (empty-text waits confirm); false/omit on create = NPC auto-advance. On update, omit keeps previous.'
+            },
             summary: { type: 'string' }
           },
           required: ['id', 'name', 'model_node']
@@ -778,15 +783,31 @@ function normalizeChoiceOptions(
   for (const raw of options) {
     if (!raw || typeof raw !== 'object') continue
     const o = raw as Record<string, unknown>
-    const text = String(o.text || '').trim()
-    if (!text) continue
+    // v1.3: empty text is valid (confirm-to-continue / end)
+    const text = typeof o.text === 'string' ? o.text.trim() : String(o.text || '').trim()
     if (o.end === true) {
       out.push({ text, goto: '', end: true })
-    } else {
-      out.push({ text, goto: String(o.goto || '').trim() })
+      continue
     }
+    const goto = String(o.goto || '').trim()
+    if (!goto) continue
+    out.push({ text, goto })
   }
   return out
+}
+
+/** Fill missing outs with empty-text continue to next CSV row (v1.3 linear). */
+function fillEmptyTextContinues(
+  lines: DialogueLine[],
+  choiceFile: DialogueChoicesFile
+): void {
+  for (let i = 0; i < lines.length - 1; i++) {
+    const a = lines[i]?.id
+    const b = lines[i + 1]?.id
+    if (!a || !b) continue
+    if ((choiceFile.nodes[a]?.options || []).length > 0) continue
+    choiceFile.nodes[a] = { options: [{ text: '', goto: b }] }
+  }
 }
 
 function choicesFromNodesArg(nodesArg: unknown): DialogueChoicesFile {
@@ -940,7 +961,7 @@ export async function runTool(
         const graph = summarizeDialogueGraph(parsed.lines, choices)
         return JSON.stringify({
           path,
-          protocol: 'v1.2',
+          protocol: 'v1.3',
           count: parsed.lines.length,
           openingId: graph.openingId,
           lines: parsed.lines.map((l) => ({
@@ -953,7 +974,7 @@ export async function runTool(
           hasLayout,
           warnings: graph.warnings,
           note:
-            'Disk truth = CSV + optional choices.json. layout.json is Kentucky-only. A line with choices pauses CSV row-order advance; goto jumps by id.'
+            'Disk truth = CSV + choices.json (play graph). layout.json is Kentucky-only. Empty option text = confirm-to-continue; labeled options = UI; end:true ends. CSV row order is not play order (opening = first CSV row).'
         })
       }
       case 'propose_update_dialogue_lines': {
@@ -1211,6 +1232,7 @@ export async function runTool(
           if (!after || !options.length) continue
           choiceFile.nodes[after] = { options }
         }
+        fillEmptyTextContinues(lines, choiceFile)
 
         const results: Record<string, unknown>[] = []
         const csvProposal: FileProposal = {
@@ -1327,15 +1349,24 @@ export async function runTool(
       }
       case 'propose_upsert_character': {
         const abs = join(ctx.workspaceRoot, 'characters.csv')
-        const before = existsSync(abs) ? readFileSync(abs, 'utf-8') : 'id,name,color,note,model_node\n'
+        const before = existsSync(abs) ? readFileSync(abs, 'utf-8') : 'id,name,color,note,model_node,operable\n'
         const list = parseCharactersCsv(before)
         const id = String(args.id)
+        const prev = list.find((c) => c.id === id)
+        const operableArg = args.operable
+        const operable =
+          typeof operableArg === 'boolean'
+            ? operableArg
+            : typeof operableArg === 'string'
+              ? ['1', 'true', 'yes', 'y'].includes(operableArg.trim().toLowerCase())
+              : Boolean(prev?.operable)
         const row: Character = {
           id,
           name: String(args.name || id),
           color: String(args.color || '#88c0d0'),
           note: String(args.note || ''),
-          model_node: String(args.model_node || '')
+          model_node: String(args.model_node || ''),
+          operable
         }
         const idx = list.findIndex((c) => c.id === id)
         if (idx >= 0) list[idx] = row
@@ -1858,14 +1889,15 @@ export function LITERARY_SYSTEM_PROMPT(
     '- Continuity / 人设 / contradiction checks → continuity_check (read-only report first). Only write after the user asks to apply fixes.',
     '- Prose → mind map: scene_to_kmind. Mind map → outline md: kmind_to_scene_outline. Prefer these over dumping raw kmind JSON.',
     '',
-    'Dialogue graph (Godot protocol v1.2 — CRITICAL):',
-    '- Disk truth: *.dialogue.csv (11 cols) + optional sibling *.dialogue.choices.json + Kentucky-only *.dialogue.layout.json. speaker = character id.',
-    '- Always call read_dialogue before branching edits (returns sequenceChains, choices, warnings).',
-    '- New / full branching scripts → propose_dialogue_graph (writes csv + choices + layout). Pass stable line ids in choices.after / options.goto; use end:true for leave/end options (do not invent a separate leave field).',
-    '- Patch lines only → propose_update_dialogue_lines / propose_append_dialogue_lines (afterId inserts in sequence) / propose_reorder_dialogue_lines.',
-    '- Patch branches only → propose_set_dialogue_choices. Clear all branches with empty nodes (deletes choices file = linear play).',
+    'Dialogue graph (Godot protocol v1.3 — CRITICAL):',
+    '- Disk truth: *.dialogue.csv (11 cols) + sibling *.dialogue.choices.json (play graph) + Kentucky-only *.dialogue.layout.json. speaker = character id.',
+    '- Always call read_dialogue before graph edits (returns choices, empty-text chains as sequenceChains, warnings).',
+    '- New / full scripts → propose_dialogue_graph (csv + choices + layout). Linear continues MUST be options with text:\"\". Labeled text = player choices. end:true = End. Never omit choices to mean “linear CSV order”.',
+    '- Do not mix empty-text and labeled options on the same line.',
+    '- Patch lines only → propose_update_dialogue_lines / propose_append_dialogue_lines (afterId inserts near that id in CSV) / propose_reorder_dialogue_lines.',
+    '- Patch options only → propose_set_dialogue_choices. Empty nodes deletes choices file (isolated lines with no outs).',
     '- After structural edits, call layout_dialogue if layout was not already written (canvas coordinates; Godot ignores).',
-    '- A line with choices pauses CSV row-order advance; goto jumps by line id. Never put both “next sequence” and choices on the same line in the author’s intent.',
+    '- Playback follows options.goto / end only; CSV first row = opening.',
     '- Performance fields → propose_dialogue_performance. Cast orphans → dialogue_cast_check.',
     '',
     'When editing .kmind, prefer scene_to_kmind or propose_kmind_edit. To fix a tangled map, call layout_kmind.',

@@ -1,5 +1,12 @@
 # 改动时间线（Android）
 
+## 文档 — Agent 工具反馈对齐 OPEN（2026-08-11）
+
+- 新增 [OPEN-agent-tool-feedback-parity.md](./OPEN-agent-tool-feedback-parity.md)：Win Round A–D 工具反馈须移植到 `ai-runtime`
+- 权威总清单在 Win：[`../win/project-memory/AGENT-TOOL-FEEDBACK.md`](../win/project-memory/AGENT-TOOL-FEEDBACK.md)
+- [PORTING-WIN-TO-ANDROID.md](./PORTING-WIN-TO-ANDROID.md) 阶段 G 增加第 9 条对照总清单
+- **代码尚未移植**；状态 OPEN
+
 ## 0.2.0+ — 状态栏绑错 id 纠正 + 台词 SAF/Accept（2026-08-10）
 
 - **状态栏**：确认 Capacitor 不用 app `main_content`；`configureSystemBars` 直接给 Bridge `@id/webview` 加 margin，状态栏/导航栏纯黑

@@ -412,6 +412,84 @@
 - Chrome：tab / activity / toolbar / dialog 按钮短 hover + `:active scale(0.97)`；菜单/ctx/mention/mode 微入场；character-card / kmind-handle opacity 对齐 bubble-actions
 - A11y：`prefers-reduced-motion` 停 edge-flow / ai-spin / blink / boot-slide；覆盖层 duration→0；`index.html` + `public/splash.html`
 
+## 53. Plan 模式：工作区 `plans/*.plan.md`（Cursor 对齐）
+
+- `create_plan` 写入工作区根 `plans/<slug>.plan.md`（同 slug 覆盖）；自动打开编辑器；会话记 `planFileRel` + Mirror `plan[]`
+- `update_plan_step` Soft 更新勾选（保留 Overview/Plan 正文）；Agent InjectPath
+- **移除** AI 面板消息区上方常驻计划列表；计划真相 = md（可随项目提交；作者要私有自行 ignore）
+- Plan 模式仅允许 `create_plan` / `update_plan_step` 写计划文件；其余写工具仍禁用
+- 涉及：`planFiles.ts`、`tools.ts`、`agentLoop.ts`、`chatSessions.ts`、`AiPanel.tsx`、`documentHub.docApplyExternalWrite`
+
+## 54. Agent 工作区 FS + 计划一键执行
+
+- 新工具：`workspace_mkdir` / `workspace_copy` / `workspace_move` / `workspace_delete`（Agent 模式；Node FS，禁止 shell）
+- move/delete 同步 `*.dialogue` sidecar；move `.kmind` 时尽量带 `.assets`
+- `ai:workspaceOp`：`refreshTree` / `fsMoved` / `fsDeleted` / `fsCopied` 刷新树并处理打开中的标签
+- `plans/*.plan.md` 编辑器顶栏 **Build / 开始执行** → `executePlanFile`（切 Agent、开面板、绑定 plan、发执行提示）
+- 系统提示：归档优先 `workspace_move`，勿再声称「无法移动/删除」
+
+## 55. 工具反馈修复（创作长会话）
+
+来源：`tool_feedback.md`（随笔→三部曲→归档→雾港）
+
+- **写入门禁**：`characters` upsert **始终 auto**（即使同轮已改正文）；结果带 `reviewHint`；系统提示 `WRITE_GATE_SUMMARY`
+- **continuity_check**：返回结构化 `issues[]`（含 `ghost_character` / `empty_cast`），**不再** dump 章节全文
+- **计划勾选**：去掉按序号误伤 `## Plan` checkbox；按 `id:` / 同文案同步；`update_plan_step` 返回 `fileWritten`/`contentChanged`/`steps`（弃用误导的交替 `fileUpdated`）
+- **dialogue append**：文件不存在时自动建 11 列表头；返回 `columnOrder` / `headerNote`
+- **FS 可发现性**：copy/move 描述强调归档勿读后重写
+
+## 56. 工具反馈 Round B（diff / 批量 / search / CSV）
+
+- Pending/Applied 卡片：`formatProposalDiff`（−/+ hunk），不再只贴 after 截断
+- 批量：底部全部接受/拒绝；每轮消息「接受/拒绝本轮全部」
+- `web_search` / `web_research`：enrich 开；空 snippet 用 excerpt 回填
+- `sanitizeCsvCell`：清理 `""人""` 类转义残迹（characters + dialogue parse/serialize）
+- 交接长文：[`SESSION-TOOL-FEEDBACK.md`](./SESSION-TOOL-FEEDBACK.md)
+
+## 57. 工具反馈 Round C（「已修未部署」根因 + 幽灵）
+
+- **根因**：默认「改完标黄」时，characters upsert 曾标 applied **却不写盘** → 批量/continuity 仍见旧 cast。现 `shouldPersistAutoToDisk`：characters / ≤5 行台词 / layout / choices **强制落盘**
+- continuity：删除 `excerpts`；`registeredCast` + `castNote` 标明仅磁盘已登记
+- prose 提案可附 `ghostCharacterWarnings`
+- create_plan：剥掉 `## Plan` 里无 id 的裸 checkbox
+- web_search：snippet 保证非空；upsert 入参 sanitize
+- SESSION 顶栏强调：**必须完整重启 Electron 主进程** 才能验证
+
+## 58. 工具反馈 Round D（feedback v2：伪「5 张阈值」）
+
+- **结论**：不存在「≥5 张角色 → pending」门禁；`≤5` 只约束 **dialogue 行数**。v2 观测更像「同轮多文件 + 旧主进程」
+- `decideAutoApply` / `gateDetail` / `toolApi:"2026-08-11-d"`（部署指纹）
+- 多文件判定改为「本轮其它路径」（先判定再登记 turnPath）
+- 新工具 `propose_upsert_characters`（一批一写）
+- `read_characters` 注明 6 列含 operable；`""…""` 为 RFC 4180 非缺陷
+- characters 始终 auto（含与正文同轮）
+- **权威总清单**（含 Android 待对齐）：[`AGENT-TOOL-FEEDBACK.md`](./AGENT-TOOL-FEEDBACK.md)
+
+## 59. 工具反馈 Round E（幽灵误报）
+
+- 新模块 `ghostNames.ts`：不再用 CJK `{2,4}` 滑窗
+- 排除已登记名、第一章类章节、*楼地名、*号船名、把字结构；召回老陈/阿X/姓+名/管事职衔/X说
+- `toolApi` → `2026-08-11-e`
+- W9/W10 仍标「需人工 UI 复核」；B1 kmind 坐标仍 backlog
+
+## 60. 测试基线入库 + Round F（幽灵残留）
+
+- 干净结论基线：[`AGENT-TOOL-TEST-BASELINE.md`](./AGENT-TOOL-TEST-BASELINE.md)（9 项实证通过）
+- 幽灵再收紧：挡「钟楼会/张船票/管收件/水泡得/老规/老人/小字」；姓表去掉易误伤的「管/水」
+- 提案结果增加 `uiReview`（说明面板有 diff/批量，勿重复报缺）
+- `toolApi` → `2026-08-11-f`
+
+## 61. Round G — propose_text_patch 破坏 Markdown 表格/引用
+
+- **根因**：AI 同步进 TipTap 时无 Table 扩展，`setContent`→`getMarkdown` 丢掉 `|`、折叠 `>`、加倍 `**`
+- **修**：`@tiptap/extension-table*`；`emitUpdate:false`；`applyProposalToDisk`→`docApplyExternalWrite`；`read_file`/`propose_text_patch` 对齐脏编辑缓冲
+- `toolApi` → `2026-08-11-g`；总清单 W19；Android OPEN 待同步编辑器 Table
+
+## 62. 打开 MD 误标脏
+
+- TipTap 打开/切换源码时 `getMarkdown` 规范化写回 → 无编辑也 dirty
+- 修：hydration 门闩 + 忽略 `addToHistory:false`；干净 tab 切源码不序列化回写；`contentIsDirty` 忽略纯 CRLF/LF 差异
+
 ## 其它小修
 
 - 选项卡悬停用 `cursor: pointer`

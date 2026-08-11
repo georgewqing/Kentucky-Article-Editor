@@ -81,7 +81,9 @@ AiPanel / aiStore
 ```
 
 - 本体路径：`appBodyPaths.ts` → 开发 `win/dev-data/data/`，打包为 exe 旁 `data/`
-- 会话：`data/ai-chats/*.json`；设置：`data/ai-settings.json`；密钥：`data/ai-key.bin`
+- 会话：`data/ai-chats/*.json`（含 Mirror `plan[]` + `planFileRel`）；设置：`data/ai-settings.json`；密钥：`data/ai-key.bin`
+- Plan：`create_plan` → 工作区 `plans/<slug>.plan.md`（`planFiles.ts`）；对话栏无常驻计划列表；Agent InjectPath；md 顶栏 Build
+- 工作区结构：`workspace_mkdir` / `copy` / `move` / `delete`（`tools.ts` + `ai:workspaceOp`）
 - `.kmind`：`kmindLayout.ts`（dagre Sugiyama）；`propose_kmind_edit` / `layout_kmind`
 - `.dialogue.csv`：`formats.ts`（choices/layout 解析 + `layoutDialogueGraph`）；`propose_dialogue_graph` / `layout_dialogue` / `propose_set_dialogue_choices` 等
 - Skills：`skills.ts` → `data/ai-skills/`；catalog 注入系统提示；`list_skills` / `read_skill`

@@ -103,6 +103,13 @@
 - AI 台词图：整段脚本用 `propose_dialogue_graph`（线性也写空 text options；勿再用「缺 choices=线性」）；乱画布用 `layout_dialogue`；`nodes` 空才删 choices。choices/layout 与 csv 同轮写入时通常自动落盘，大改 csv 仍可能要 Accept。
 - AI Skills：只读 `SKILL.md` / reference / examples；**永不**执行 skill 内 `scripts/`。技能在软件本体 `data/ai-skills/`，不跟工作区走。
 - AI 联网：默认关；DDG 超时自动回退 Bing；搜索结果会抓取前几条页面写入 `excerpt`（天气站可解析预报卡）；需要更深可读 `web_fetch`。Brave/Tavily 未实现。
+- Plan 模式：计划真相是工作区 `plans/<slug>.plan.md`（同 slug 覆盖），**不是**会话 JSON  alone；AI 面板**不**再挂常驻计划列表。`update_plan_step` 只改 Todos 勾选，勿整文件覆盖冲掉用户改的正文。`plans/` 可随项目提交。
+- Agent 归档/迁移：用 `workspace_mkdir` / `workspace_copy` / `workspace_move` / `workspace_delete`，**不要**说「没有 shell / 不能移动删除」。删除须用户明确要求。勿对归档读全文再 `propose_write_file` 抄写。
+- 写入门禁：角色 upsert **始终自动落盘**（即使设置是「改完标黄」、即使本轮已改正文）；**没有「5 张卡阈值」**——`≤5` 只约束台词行数。看 `written`/`pending`/`reviewHint`/`gateDetail`/`toolApi`。
+- 打开 `.md` 无编辑却变脏：TipTap `getMarkdown` 规范化误写回；已用 hydration 门闩挡住（changelog §62）。
+- Markdown AI 写入曾因 TipTap 无 Table 扩展毁掉 `|` 表格（W19）；已修。
+- Diff / 批量 Accept 只在 AiPanel；agent 看 `uiReview`。
+- 总清单：[`AGENT-TOOL-FEEDBACK.md`](./AGENT-TOOL-FEEDBACK.md)。
 
 ## package.json / F5
 

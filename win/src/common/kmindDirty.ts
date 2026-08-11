@@ -63,5 +63,8 @@ export function kmindContentDirty(content: string, originalContent: string): boo
 export function contentIsDirty(filePath: string, content: string, originalContent: string): boolean {
   if (content === originalContent) return false
   if (isKmindPath(filePath)) return kmindContentDirty(content, originalContent)
-  return true
+  // Prose/text: ignore CRLF vs LF alone (open/save across tools must not false-dirty).
+  const a = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const b = originalContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  return a !== b
 }

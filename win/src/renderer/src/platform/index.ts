@@ -103,6 +103,8 @@ export interface Platform {
     sessionId: string
     text: string
     mode?: string
+    planFileRel?: string | null
+    turnSystemHint?: string
     editor: {
       workspacePath: string | null
       activeFilePath: string | null

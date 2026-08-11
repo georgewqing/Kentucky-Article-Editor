@@ -229,16 +229,22 @@ export async function fetchPageExcerpt(
 }
 
 /** Fetch top result pages so the agent gets facts, not only SERP blurbs. */
-async function enrichResults(hits: SearchHit[], topN = 2): Promise<SearchHit[]> {
+async function enrichResults(hits: SearchHit[], topN = 3): Promise<SearchHit[]> {
   const out = hits.map((h) => ({ ...h }))
   const n = Math.min(topN, out.length)
   for (let i = 0; i < n; i++) {
     const hit = out[i]
-    // Skip if snippet already looks fact-dense (temps etc.)
-    if (/\d+\s*℃|\d+\s*°[CF]|\d{1,2}[/～~-]\d{1,2}\s*℃/i.test(hit.snippet || '')) continue
+    // Skip fetch only when snippet already looks fact-dense (temps etc.)
+    if (hit.snippet && /\d+\s*℃|\d+\s*°[CF]|\d{1,2}[/～~-]\d{1,2}\s*℃/i.test(hit.snippet)) {
+      continue
+    }
+    // Always enrich empty/thin snippets
     const page = await fetchPageExcerpt(hit.url, 2000)
     if (page.text) hit.excerpt = page.text
     else if (page.error) hit.excerpt = `(fetch failed: ${page.error})`
+    if (!hit.snippet && hit.excerpt && !hit.excerpt.startsWith('(fetch failed')) {
+      hit.snippet = hit.excerpt.replace(/\s+/g, ' ').trim().slice(0, 400)
+    }
   }
   return out
 }
@@ -406,7 +412,7 @@ export async function runWebResearch(opts: {
   const queries = expandResearchQueries(opts.question, opts.queries, opts.maxQueries || 3)
   const byQuery: SearchQueryResult[] = []
   for (const query of queries) {
-    byQuery.push(await runWebSearch(opts.provider, query, maxResults, { enrich: false }))
+    byQuery.push(await runWebSearch(opts.provider, query, maxResults, { enrich: true }))
     await new Promise((r) => setTimeout(r, 250))
   }
 

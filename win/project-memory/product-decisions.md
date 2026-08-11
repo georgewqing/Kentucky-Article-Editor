@@ -44,8 +44,9 @@
 |----|------|
 | 协议 | OpenAI 兼容；**多配置档**（label/baseUrl/model/contextWindow + 每档加密 Key），输入栏切换 |
 | UI | 编辑区右侧面板；**Cursor 风格 composer**（模式 / 配置档 / 参考文件芯片 / 上传 / 发送）；主题色变量 |
-| 模式 | **Ask** 无工具；**Plan** 只读+计划；**Outline** 结构/导图；**Agent** 全工具+G3 可审 |
-| 写文件 | **G3 按类型可审**：已有内容的正文 md/txt、导图内容编辑、多文件同轮 → Accept/Reject；**新建文件 / 往空文件写入**、角色单条 upsert、台词 ≤5 行、纯 `layout_kmind` → 自动。Accept 后按设置写盘或标黄（**R1**：Accept 前不改打开中的 tab） |
+| 模式 | **Ask** 无工具；**Plan** 只读调研 + `create_plan` 写入工作区 `plans/<slug>.plan.md`（同 slug 覆盖、自动打开）；**Outline** 结构/导图；**Agent** 全工具+G3 可审。计划真相 = md 文件；**对话栏上方不挂常驻计划列表**。计划 md 顶栏 **开始执行 / Build**：切 Agent、绑定 `planFileRel`、发执行提示。Agent 若会话有 `planFileRel` 则 InjectPath；`update_plan_step` Soft 勾选 md（保留正文） |
+| 工作区文件结构 | Agent 可用 **`workspace_mkdir` / `workspace_copy` / `workspace_move` / `workspace_delete`**（主进程 Node FS，**非** Shell）。用于归档/迁移；move/delete 同步台词 sidecar 与 `.kmind` assets；UI 刷新树并关闭受影响标签 |
+| 写文件 | **G3 按类型可审**：已有内容的正文 md/txt、导图内容编辑、多文件同轮内容改 → Accept/Reject；**新建 / 空文件**、**角色 upsert（始终 auto，含批量）**、台词 ≤5 行、纯 layout → 自动。结果含 `written`/`pending`/`reviewHint`。Accept 后按设置写盘或标黄（**R1**：Accept 前不改打开中的 tab） |
 | 脏/新建色 | 改过未保存 = **黄 ●**；新建 = **蓝 ●**（标签栏 + 资源管理器同步）；保存后清除 |
 | 焦点 | AI 改多文件时**不切换**当前标签（不闪页）；后台挂标签并刷新树 |
 | 数据 | 软件本体 `data/`（打包后与 exe 同目录；开发态 `win/dev-data/data/`）；**不**进项目、**不**用 `%APPDATA%` |

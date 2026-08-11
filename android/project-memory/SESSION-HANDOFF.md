@@ -1,6 +1,6 @@
 # Session handoff — Android 0.2.0 + 平板原生体验 + 触控板 UX
 
-> 供清空上下文后下一轮对话直接接着干。最后更新：2026-08-10。
+> 供清空上下文后下一轮对话直接接着干。最后更新：2026-08-11。
 
 ## 当前状态
 
@@ -14,6 +14,7 @@
   - SAF 写入防 `.csv.txt` / 编号副本；Accept 真机强制落盘
   - 详情：[OPEN-dialogue-saf-corruption.md](./OPEN-dialogue-saf-corruption.md)
   - test2 里已损坏的 night_cafe 文件需**人工恢复一次**（代码不会自动改历史副本内容）
+- **OPEN — Agent 工具反馈对齐（2026-08-11）**：Win Round A–D（写入门禁、characters 落盘、continuity、Plan、append、FS、snippet、批量 upsert 等）**尚未**移植到 `ai-runtime`。权威清单 [`../win/project-memory/AGENT-TOOL-FEEDBACK.md`](../win/project-memory/AGENT-TOOL-FEEDBACK.md)；Android 进度板 [OPEN-agent-tool-feedback-parity.md](./OPEN-agent-tool-feedback-parity.md)
 - **后续同步 Win 正式功能**：必须先读
   [PORTING-WIN-TO-ANDROID.md](./PORTING-WIN-TO-ANDROID.md)。禁止整目录覆盖
   `android/src`；按 renderer / Platform / Electron / Node / 协议 / Android UX 分类移植
@@ -61,6 +62,7 @@ import androidx.activity.result.ActivityResult;          // 不是 com.getcapaci
 | Settings 触控板不滚 | 原生消费 `ACTION_SCROLL` 后合成 wheel 无默认滚动 | `useSpatialWheelScroll` 通用 overflow ancestor fallback |
 | tab 关闭无效 | 顶部重叠 + pointer 冒泡 | 修正 inset；close 独立 pointer |
 | MD↔AI 触控板互斥 | TipTap 焦点 / latching（纯 JS 无效） | 原生 `ACTION_SCROLL` 重派发 — [OPEN-trackpad-md-ai-scroll.md](./OPEN-trackpad-md-ai-scroll.md) **待验收** |
+| Agent 工具反馈未对齐 | Win Round A–D 门禁/落盘/continuity/Plan/FS 等 | **OPEN** — [OPEN-agent-tool-feedback-parity.md](./OPEN-agent-tool-feedback-parity.md)；总清单 [`../win/project-memory/AGENT-TOOL-FEEDBACK.md`](../win/project-memory/AGENT-TOOL-FEEDBACK.md) |
 
 ### D. 触控板对齐 Mac（仅 `android/`）
 

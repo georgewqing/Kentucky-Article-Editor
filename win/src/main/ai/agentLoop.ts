@@ -18,7 +18,12 @@ import {
 } from './openaiCompatClient'
 import { getWritingToolsForMode, runTool, LITERARY_SYSTEM_PROMPT, applyProposalToDisk, type AgentToolMode } from './tools'
 import { parseCharactersCsv } from './formats'
-import { shouldAutoApply, type FileProposalEx } from './proposalGate'
+import {
+  decideAutoApply,
+  shouldPersistAutoToDisk,
+  type FileProposalEx,
+  type GateDecision
+} from './proposalGate'
 import { skillsCatalogText } from './skills'
 
 const activeAborts = new Map<number, AbortController>()
@@ -112,7 +117,8 @@ function buildCharacterSummary(workspaceRoot: string | null): string | null {
 function toApiMessagesWithTools(
   session: ChatSession,
   editor: EditorContextPayload,
-  mode: AgentToolMode
+  mode: AgentToolMode,
+  turnSystemHint?: string
 ): ChatCompletionMessage[] {
   const settings = loadAiSettings()
   const msgs: ChatCompletionMessage[] = [
@@ -143,7 +149,16 @@ function toApiMessagesWithTools(
       if (body) ctxParts.push(`@${rel}:\n"""\n${body}\n"""`)
     }
   }
+  if (session.planFileRel) {
+    ctxParts.push(
+      `Active plan file: ${session.planFileRel}`,
+      'If executing work from a prior Plan mode, call read_file on that path first, then follow its todos. Soft: update_plan_step when completing steps.'
+    )
+  }
   if (ctxParts.length) msgs.push({ role: 'system', content: `Editor context:\n${ctxParts.join('\n')}` })
+  if (turnSystemHint?.trim()) {
+    msgs.push({ role: 'system', content: turnSystemHint.trim() })
+  }
 
   for (const m of session.messages) {
     const extra = m as ChatMessage & {
@@ -179,14 +194,17 @@ function commitProposal(
   assistantId: string,
   turnPaths: Set<string>,
   settings: ReturnType<typeof loadAiSettings>
-): { autoApplied: boolean } {
+): { autoApplied: boolean; gate: GateDecision; writeDisk: boolean } {
   p.messageId = assistantId
+  // Decide BEFORE registering this path so multi-file means "other paths already in turn".
+  const gate = decideAutoApply(p, turnPaths, settings)
   turnPaths.add(p.absPath.replace(/\//g, '\\').toLowerCase())
-  const auto = shouldAutoApply(p, turnPaths, settings)
+  const auto = gate.auto
   const isNewFile = !p.before
+  let wroteDisk = false
   if (auto) {
-    const persistDisk = settings.applyWritesToDisk || isNewFile
-    if (persistDisk) applyProposalToDisk(p)
+    wroteDisk = shouldPersistAutoToDisk(p, settings)
+    if (wroteDisk) applyProposalToDisk(p)
     p.status = 'applied'
   } else {
     p.status = 'pending'
@@ -201,10 +219,11 @@ function commitProposal(
     sessionId: session.id,
     proposal: p,
     autoApplied: auto,
-    writeDisk: auto ? settings.applyWritesToDisk : false,
-    isNew: isNewFile
+    writeDisk: wroteDisk,
+    isNew: isNewFile,
+    gateReason: gate.reason
   })
-  return { autoApplied: auto }
+  return { autoApplied: auto, gate, writeDisk: wroteDisk }
 }
 
 export function abortAiForWebContents(wcId: number): void {
@@ -221,6 +240,10 @@ export async function runAgentTurn(opts: {
   userText: string
   editor: EditorContextPayload
   mode?: AgentToolMode
+  /** Bind / refresh active plan file for InjectPath (e.g. Build button). */
+  planFileRel?: string | null
+  /** Hidden system nudge for this turn only (not shown as a user bubble). */
+  turnSystemHint?: string
 }): Promise<void> {
   const mode: AgentToolMode = opts.mode || loadAiSettings().agentMode || 'agent'
   const wcId = opts.win.webContents.id
@@ -232,6 +255,10 @@ export async function runAgentTurn(opts: {
   if (!session) {
     send(opts.win, 'ai:error', { message: 'Session not found' })
     return
+  }
+
+  if (opts.planFileRel !== undefined && opts.planFileRel !== null) {
+    session.planFileRel = opts.planFileRel
   }
 
   const settings = loadAiSettings()
@@ -278,7 +305,7 @@ export async function runAgentTurn(opts: {
 
       await new Promise<void>((resolve) => {
         void streamChatCompletion({
-          messages: toApiMessagesWithTools(session, opts.editor, mode),
+          messages: toApiMessagesWithTools(session, opts.editor, mode, opts.turnSystemHint),
           tools,
           signal: ac.signal,
           onEvent: (ev) => {
@@ -349,7 +376,7 @@ export async function runAgentTurn(opts: {
         const result = await runTool(tc.name, tc.arguments, {
           workspaceRoot,
           onProposal: (p) => {
-            return commitProposal(
+            const r = commitProposal(
               opts.win,
               session,
               p as FileProposalEx,
@@ -357,10 +384,24 @@ export async function runAgentTurn(opts: {
               turnPaths,
               loadAiSettings()
             )
+            return {
+              autoApplied: r.autoApplied,
+              writeDisk: r.writeDisk,
+              gate: {
+                reason: r.gate.reason,
+                kind: r.gate.kind,
+                otherTurnPaths: r.gate.otherTurnPaths
+              }
+            }
           },
-          onPlan: (stepsIn) => {
+          onPlan: (stepsIn, planFileRel) => {
             session.plan = stepsIn
-            send(opts.win, 'ai:plan', { sessionId: session.id, plan: session.plan })
+            if (planFileRel) session.planFileRel = planFileRel
+            send(opts.win, 'ai:plan', {
+              sessionId: session.id,
+              plan: session.plan,
+              planFileRel: session.planFileRel ?? null
+            })
           },
           onPlanUpdate: (patch) => {
             let step: PlanStep | undefined
@@ -375,12 +416,20 @@ export async function runAgentTurn(opts: {
               step.status = patch.status
             }
             if (patch.text) step.text = patch.text
-            send(opts.win, 'ai:plan', { sessionId: session.id, plan: session.plan })
+            send(opts.win, 'ai:plan', {
+              sessionId: session.id,
+              plan: session.plan,
+              planFileRel: session.planFileRel ?? null
+            })
           },
           onOpenFile: (relPath, line) => {
             send(opts.win, 'ai:workspaceOp', { op: 'openFile', path: relPath, line })
           },
+          onWorkspaceFs: (payload) => {
+            send(opts.win, 'ai:workspaceOp', payload)
+          },
           getPlan: () => session.plan,
+          getPlanFileRel: () => session.planFileRel,
           webSearchEnabled: settings.webSearchEnabled,
           webSearchProvider: settings.webSearchProvider,
           webSearchMaxResults: settings.webSearchMaxResults
@@ -419,7 +468,9 @@ export function applyProposal(sessionId: string, proposalId: string): FilePropos
   if (!p || p.status !== 'pending') return null
   const settings = loadAiSettings()
   const isNewFile = !p.before
-  if (settings.applyWritesToDisk || isNewFile) applyProposalToDisk(p)
+  if (shouldPersistAutoToDisk(p, settings) || settings.applyWritesToDisk || isNewFile) {
+    applyProposalToDisk(p)
+  }
   p.status = 'applied'
   saveSession(session)
   return p
@@ -443,7 +494,9 @@ export function applyAllPending(sessionId: string): FileProposal[] {
   for (const p of session.proposals) {
     if (p.status !== 'pending') continue
     const isNewFile = !p.before
-    if (settings.applyWritesToDisk || isNewFile) applyProposalToDisk(p)
+    if (shouldPersistAutoToDisk(p, settings) || settings.applyWritesToDisk || isNewFile) {
+      applyProposalToDisk(p)
+    }
     p.status = 'applied'
     applied.push(p)
   }

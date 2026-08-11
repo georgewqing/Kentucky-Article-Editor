@@ -136,6 +136,8 @@ export function registerAiIpc(): void {
         text: string
         editor: EditorContextPayload
         mode?: AgentMode
+        planFileRel?: string | null
+        turnSystemHint?: string
       }
     ) => {
       const win = winFromEvent(e)
@@ -145,7 +147,9 @@ export function registerAiIpc(): void {
         sessionId: payload.sessionId,
         userText: payload.text,
         editor: payload.editor,
-        mode: payload.mode
+        mode: payload.mode,
+        planFileRel: payload.planFileRel,
+        turnSystemHint: payload.turnSystemHint
       })
       return { ok: true }
     }

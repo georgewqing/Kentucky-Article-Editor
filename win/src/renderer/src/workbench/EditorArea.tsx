@@ -30,9 +30,9 @@ function EditorPane({ tabId }: { tabId: string | null }) {
       ) : tab.kind === 'characters' ? (
         <CharactersEditor tabId={tab.id} />
       ) : isMarkdown ? (
-        <MarkdownArticleEditor tabId={tab.id} />
+        <MarkdownArticleEditor key={tab.id} tabId={tab.id} />
       ) : (
-        <MonacoTextEditor tabId={tab.id} />
+        <MonacoTextEditor key={tab.id} tabId={tab.id} />
       )}
     </div>
   )

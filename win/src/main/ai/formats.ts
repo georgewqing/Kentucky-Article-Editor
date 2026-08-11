@@ -51,9 +51,25 @@ function parseCsvLine(line: string): string[] {
   return out
 }
 
+/** Undo leaked CSV quote artifacts from older round-trips / model dumps (e.g. ""人""). */
+export function sanitizeCsvCell(raw: string): string {
+  let t = String(raw ?? '')
+  for (let i = 0; i < 4; i++) {
+    const hadDoubled = t.includes('""')
+    if (hadDoubled) t = t.replace(/""/g, '"')
+    if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) {
+      t = t.slice(1, -1)
+      continue
+    }
+    if (!hadDoubled) break
+  }
+  return t
+}
+
 function escapeCsv(v: string): string {
-  if (/[",\n\r]/.test(v)) return `"${v.replace(/"/g, '""')}"`
-  return v
+  const s = sanitizeCsvCell(v)
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+  return s
 }
 
 export function parseDialogueCsv(text: string): { lines: DialogueLine[] } {
@@ -66,7 +82,7 @@ export function parseDialogueCsv(text: string): { lines: DialogueLine[] } {
     const cols = parseCsvLine(rows[r])
     const get = (name: string): string => {
       const i = idx(name)
-      return i >= 0 ? (cols[i] ?? '') : ''
+      return i >= 0 ? sanitizeCsvCell(cols[i] ?? '') : ''
     }
     lines.push({
       id: get('id'),
@@ -507,7 +523,7 @@ export function parseCharactersCsv(text: string): Character[] {
     const cols = parseCsvLine(rows[r])
     const get = (name: string): string => {
       const i = idx(name)
-      return i >= 0 ? (cols[i] ?? '') : ''
+      return i >= 0 ? sanitizeCsvCell(cols[i] ?? '') : ''
     }
     const id = get('id')
     if (!id) continue

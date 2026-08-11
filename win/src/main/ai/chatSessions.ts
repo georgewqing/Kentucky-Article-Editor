@@ -56,6 +56,8 @@ export interface ChatSession {
   updatedAt: number
   messages: ChatMessage[]
   plan: PlanStep[]
+  /** Workspace-relative path to active plans/*.plan.md (Mirror companion). */
+  planFileRel?: string | null
   proposals: FileProposal[]
 }
 

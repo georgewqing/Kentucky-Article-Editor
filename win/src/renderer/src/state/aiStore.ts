@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { getPlatform } from '@/platform'
 import { useAppStore } from '@/state/appStore'
+import i18n from '@/i18n'
 
 export type AgentMode = 'ask' | 'plan' | 'outline' | 'agent'
 
@@ -74,6 +75,7 @@ export interface AiSession {
   updatedAt: number
   messages: AiChatMessage[]
   plan: AiPlanStep[]
+  planFileRel?: string | null
   proposals: AiProposal[]
 }
 
@@ -126,12 +128,15 @@ interface AiState {
   setSkillEnabled: (id: string, enabled: boolean) => Promise<AiSkillView[]>
   revealSkillsDir: () => Promise<void>
   importSkillFolder: () => Promise<{ ok: boolean; id?: string; error?: string }>
-  send: (text?: string) => Promise<void>
+  send: (text?: string, opts?: { turnSystemHint?: string }) => Promise<void>
+  /** Switch to Agent, bind plan file, open AI panel, and start executing the plan. */
+  executePlanFile: (absPath: string) => Promise<void>
   abort: () => Promise<void>
   retryLast: () => Promise<void>
   applyProposal: (id: string) => Promise<void>
   rejectProposal: (id: string) => Promise<void>
   applyAll: (messageId?: string) => Promise<void>
+  rejectAll: (messageId?: string) => Promise<void>
   syncAppliedFile: (p: AiProposal, writeDisk: boolean, isNew?: boolean) => Promise<void>
   bindEvents: () => () => void
   refreshContextUsage: () => Promise<void>
@@ -337,20 +342,59 @@ export const useAiStore = create<AiState>((set, get) => ({
   pickComposerAttachments: async () => {
     const ws = useAppStore.getState().workspacePath
     if (!ws) {
-      set({ error: 'Open a workspace to attach files.' })
+      set({ error: i18n.t('ai.attachNeedWorkspace') })
       return
     }
     const platform = getPlatform()
     const absPaths = await platform.openContextFiles(ws)
+    if (!absPaths.length) return
     const rootNorm = ws.replace(/[/\\]+$/, '').replace(/\\/g, '/').toLowerCase()
+    const refsDir = platform.joinPath(ws, '.kentucky', 'refs')
+    let imported = 0
+    let failed = 0
     for (const abs of absPaths) {
       const absNorm = abs.replace(/\\/g, '/')
-      if (!absNorm.toLowerCase().startsWith(rootNorm + '/') && absNorm.toLowerCase() !== rootNorm) {
-        set({ error: 'Reference files must be inside the workspace.' })
+      const inside =
+        absNorm.toLowerCase().startsWith(rootNorm + '/') || absNorm.toLowerCase() === rootNorm
+      if (inside) {
+        const rel = platform.relativeTo(ws, abs)
+        if (rel) get().addComposerAttachment(rel)
         continue
       }
-      const rel = platform.relativeTo(ws, abs)
-      if (rel) get().addComposerAttachment(rel)
+      // Outside workspace: copy into .kentucky/refs/ so agent tools stay sandboxed.
+      try {
+        await platform.mkdir(refsDir)
+        const base = platform.basename(abs)
+        let dest = platform.joinPath(refsDir, base)
+        let n = 1
+        while (await platform.exists(dest)) {
+          const dot = base.lastIndexOf('.')
+          const stem = dot > 0 ? base.slice(0, dot) : base
+          const ext = dot > 0 ? base.slice(dot) : ''
+          dest = platform.joinPath(refsDir, `${stem}-${n}${ext}`)
+          n += 1
+        }
+        await platform.copyFile(abs, dest)
+        const rel = platform.relativeTo(ws, dest)
+        if (rel) {
+          get().addComposerAttachment(rel)
+          imported += 1
+        }
+      } catch {
+        failed += 1
+      }
+    }
+    if (imported > 0) {
+      await useAppStore.getState().refreshTree()
+      useAppStore.getState().showToast(
+        i18n.t('ai.attachImported', { count: imported }),
+        'info'
+      )
+    }
+    if (failed > 0) {
+      set({ error: i18n.t('ai.attachImportFailed') })
+    } else {
+      set({ error: null })
     }
   },
 
@@ -449,7 +493,7 @@ export const useAiStore = create<AiState>((set, get) => ({
     set({ contextUsed: usage.used, contextLimit: usage.limit })
   },
 
-  send: async (text) => {
+  send: async (text, opts) => {
     const content = (text ?? get().draft).trim()
     if (!content || get().streaming) return
     let session = get().session
@@ -487,8 +531,44 @@ export const useAiStore = create<AiState>((set, get) => ({
       sessionId: session.id,
       text: content,
       mode: get().agentMode,
+      planFileRel: get().session?.planFileRel ?? undefined,
+      turnSystemHint: opts?.turnSystemHint,
       editor: getEditorContext(mentions)
     })
+  },
+
+  executePlanFile: async (absPath) => {
+    const ws = useAppStore.getState().workspacePath
+    if (!ws) return
+    const wsNorm = ws.replace(/\\/g, '/').replace(/\/+$/, '')
+    const absNorm = absPath.replace(/\\/g, '/')
+    let planRel = absNorm
+    const prefix = wsNorm.toLowerCase()
+    if (absNorm.toLowerCase().startsWith(prefix + '/')) {
+      planRel = absNorm.slice(wsNorm.length).replace(/^\/+/, '')
+    }
+
+    let session = get().session
+    if (!session) {
+      await get().newChat()
+      session = get().session
+    }
+    if (!session) return
+
+    get().setAgentMode('agent')
+    get().setPanelVisible(true)
+    set((s) => ({
+      session: s.session ? { ...s.session, planFileRel: planRel } : s.session
+    }))
+
+    const display = i18n.t('ai.executePlanUserMsg', { path: planRel })
+    const hint = [
+      `The user clicked Build to execute the plan file: ${planRel}`,
+      'Call read_file on that path first, then implement remaining unchecked todos.',
+      'Use workspace_mkdir / workspace_copy / workspace_move / workspace_delete for archival or file moves (no shell).',
+      'Call update_plan_step as you finish each todo. Do not dump these instructions back to the user.'
+    ].join('\n')
+    await get().send(display, { turnSystemHint: hint })
   },
 
   abort: async () => {
@@ -536,6 +616,21 @@ export const useAiStore = create<AiState>((set, get) => ({
     })
     for (const p of pending) {
       await get().applyProposal(p.id)
+    }
+  },
+
+  rejectAll: async (messageId?: string) => {
+    const session = get().session
+    if (!session) return
+    const lastAssistantId = [...session.messages].reverse().find((m) => m.role === 'assistant')?.id
+    const pending = session.proposals.filter((p) => {
+      if (p.status !== 'pending') return false
+      if (!messageId) return true
+      if (p.messageId === messageId) return true
+      return !p.messageId && messageId === lastAssistantId
+    })
+    for (const p of pending) {
+      await get().rejectProposal(p.id)
     }
   },
 
@@ -617,20 +712,84 @@ export const useAiStore = create<AiState>((set, get) => ({
         }
       }),
       p.onAiEvent('ai:plan', (payload) => {
-        const data = payload as { sessionId: string; plan: AiPlanStep[] }
+        const data = payload as {
+          sessionId: string
+          plan: AiPlanStep[]
+          planFileRel?: string | null
+        }
         const cur = get().session
         if (cur && cur.id === data.sessionId) {
-          set({ session: { ...cur, plan: data.plan } })
+          set({
+            session: {
+              ...cur,
+              plan: data.plan,
+              planFileRel:
+                data.planFileRel !== undefined ? data.planFileRel : cur.planFileRel
+            }
+          })
         }
       }),
       p.onAiEvent('ai:workspaceOp', (payload) => {
-        const data = payload as { op: string; path: string; line?: number }
-        if (data.op === 'openFile') {
-          const ws = useAppStore.getState().workspacePath
-          if (!ws) return
-          const abs = getPlatform().joinPath(ws, data.path)
-          void useAppStore.getState().openFile(abs, data.line ? { line: data.line } : undefined)
+        const data = payload as {
+          op: string
+          path?: string
+          line?: number
+          from?: string
+          to?: string
         }
+        const app = useAppStore.getState()
+        const ws = app.workspacePath
+        const platform = getPlatform()
+
+        const absFromRel = (rel: string) => (ws ? platform.joinPath(ws, rel) : rel)
+
+        void (async () => {
+          if (data.op === 'openFile' && data.path) {
+            if (!ws) return
+            await app.openFile(absFromRel(data.path), data.line ? { line: data.line } : undefined)
+            await app.refreshTree()
+            return
+          }
+
+          if (data.op === 'fsDeleted' && data.path) {
+            const abs = absFromRel(data.path)
+            const absLower = abs.replace(/\\/g, '/').toLowerCase()
+            const tabs = useAppStore.getState().tabs.filter((t) => {
+              const p = t.path.replace(/\\/g, '/').toLowerCase()
+              return p === absLower || p.startsWith(absLower + '/')
+            })
+            for (const tab of tabs) {
+              await useAppStore.getState().closeTab(tab.id, true)
+            }
+            await useAppStore.getState().refreshTree()
+            return
+          }
+
+          if (data.op === 'fsMoved' && data.from && data.to) {
+            const fromAbs = absFromRel(data.from)
+            const toAbs = absFromRel(data.to)
+            const fromLower = fromAbs.replace(/\\/g, '/').toLowerCase()
+            const tabs = useAppStore.getState().tabs.filter((t) => {
+              const p = t.path.replace(/\\/g, '/').toLowerCase()
+              return p === fromLower || p.startsWith(fromLower + '/')
+            })
+            const reopen =
+              tabs.length === 1 &&
+              tabs[0].path.replace(/\\/g, '/').toLowerCase() === fromLower
+                ? toAbs
+                : null
+            for (const tab of tabs) {
+              await useAppStore.getState().closeTab(tab.id, true)
+            }
+            await useAppStore.getState().refreshTree()
+            if (reopen) await useAppStore.getState().openFile(reopen)
+            return
+          }
+
+          if (data.op === 'refreshTree' || data.op === 'fsCopied') {
+            await useAppStore.getState().refreshTree()
+          }
+        })()
       })
     ]
     return () => offs.forEach((off) => off())

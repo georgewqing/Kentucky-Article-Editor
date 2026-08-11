@@ -5,6 +5,7 @@ import { useAiStore, type AiProposal } from '@/state/aiStore'
 import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 import { AiComposer } from './AiComposer'
 import { SimpleMarkdown } from './simpleMarkdown'
+import { formatProposalDiff } from './proposalDiff'
 
 function ContextBar() {
   const { t } = useTranslation()
@@ -72,8 +73,7 @@ function AppliedChangeCard({ proposal }: { proposal: AiProposal }) {
         <>
           <p className="ai-proposal-summary">{proposal.summary}</p>
           <pre className="ai-proposal-diff">
-            {proposal.after.slice(0, 400)}
-            {proposal.after.length > 400 ? '\n…' : ''}
+            {formatProposalDiff(proposal.before, proposal.after, 32)}
           </pre>
         </>
       ) : proposal.summary ? (
@@ -90,6 +90,10 @@ function PendingChangeCard({ proposal }: { proposal: AiProposal }) {
   const [expanded, setExpanded] = useState(true)
   const base = proposal.path.split(/[/\\]/).pop() || proposal.path
   const isNew = !proposal.before
+  const diff = useMemo(
+    () => formatProposalDiff(proposal.before, proposal.after),
+    [proposal.before, proposal.after]
+  )
 
   return (
     <div className={`ai-proposal pending ${isNew ? 'is-new' : 'is-modified'} is-expanded`}>
@@ -110,12 +114,7 @@ function PendingChangeCard({ proposal }: { proposal: AiProposal }) {
         <span className="ai-proposal-status">{t('ai.statusPending')}</span>
       </button>
       {proposal.summary ? <p className="ai-proposal-summary">{proposal.summary}</p> : null}
-      {expanded ? (
-        <pre className="ai-proposal-diff">
-          {proposal.after.slice(0, 800)}
-          {proposal.after.length > 800 ? '\n…' : ''}
-        </pre>
-      ) : null}
+      {expanded ? <pre className="ai-proposal-diff">{diff}</pre> : null}
       <div className="ai-proposal-actions">
         <button type="button" className="ai-btn-apply" onClick={() => void applyProposal(proposal.id)}>
           {t('ai.apply')}
@@ -160,8 +159,6 @@ export function AiPanel() {
   const setPanelVisible = useAiStore((s) => s.setPanelVisible)
   const listRef = useRef<HTMLDivElement>(null)
   const historyRef = useRef<HTMLDivElement>(null)
-  /** Plan blocks chat when long — start collapsed. */
-  const [planExpanded, setPlanExpanded] = useState(false)
   useOverlayScroll(listRef)
   useOverlayScroll(historyRef)
 
@@ -179,6 +176,7 @@ export function AiPanel() {
     [messages]
   )
   const applyAll = useAiStore((s) => s.applyAll)
+  const rejectAll = useAiStore((s) => s.rejectAll)
   const proposals = session?.proposals || []
   const pendingCount = proposals.filter((p) => p.status === 'pending').length
 
@@ -254,37 +252,6 @@ export function AiPanel() {
         </div>
       ) : null}
 
-      {session?.plan && session.plan.length > 0 ? (
-        <div className={`ai-plan${planExpanded ? ' is-expanded' : ' is-collapsed'}`}>
-          <button
-            type="button"
-            className="ai-plan-toggle"
-            onClick={() => setPlanExpanded((v) => !v)}
-            aria-expanded={planExpanded}
-          >
-            {planExpanded ? (
-              <ChevronDown size={14} aria-hidden />
-            ) : (
-              <ChevronRight size={14} aria-hidden />
-            )}
-            <span className="ai-plan-title">{t('ai.plan')}</span>
-            <span className="ai-plan-meta">
-              {session.plan.filter((s) => s.status === 'done').length}/{session.plan.length}
-            </span>
-          </button>
-          {planExpanded ? (
-            <ul className="ai-plan-list kentucky-overlay-scroll">
-              {session.plan.map((step) => (
-                <li key={step.id} className={step.status}>
-                  <span className="ai-plan-check">{step.status === 'done' ? '✓' : '○'}</span>
-                  {step.text}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
-
       <div className="ai-messages-wrap">
         <div className="ai-messages kentucky-overlay-scroll" ref={listRef}>
           {messages.map((m) => {
@@ -298,6 +265,24 @@ export function AiPanel() {
                 </div>
                 {turnProposals.length > 0 ? (
                   <div className="ai-msg-proposals">
+                    {turnProposals.some((p) => p.status === 'pending') ? (
+                      <div className="ai-msg-proposals-bar">
+                        <button
+                          type="button"
+                          className="ai-btn-apply"
+                          onClick={() => void applyAll(m.id)}
+                        >
+                          {t('ai.applyAllTurn')}
+                        </button>
+                        <button
+                          type="button"
+                          className="ai-btn-reject"
+                          onClick={() => void rejectAll(m.id)}
+                        >
+                          {t('ai.rejectAllTurn')}
+                        </button>
+                      </div>
+                    ) : null}
                     {turnProposals.map((p) =>
                       p.status === 'pending' ? (
                         <PendingChangeCard key={p.id} proposal={p} />
@@ -347,9 +332,14 @@ export function AiPanel() {
       {pendingCount > 0 && !streaming ? (
         <div className="ai-pending-bar">
           <span>{t('ai.pendingProposals', { count: pendingCount })}</span>
-          <button type="button" onClick={() => void applyAll()}>
-            {t('ai.applyAll')}
-          </button>
+          <div className="ai-pending-bar-actions">
+            <button type="button" className="ai-btn-apply" onClick={() => void applyAll()}>
+              {t('ai.applyAll')}
+            </button>
+            <button type="button" className="ai-btn-reject" onClick={() => void rejectAll()}>
+              {t('ai.rejectAll')}
+            </button>
+          </div>
         </div>
       ) : null}
 

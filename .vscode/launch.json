@@ -6,15 +6,21 @@
       "type": "node",
       "request": "launch",
       "cwd": "${workspaceFolder}/win",
-      "runtimeExecutable": "${workspaceFolder}/win/node_modules/.bin/electron-vite",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--sourcemap"],
       "windows": {
-        "runtimeExecutable": "${workspaceFolder}/win/node_modules/.bin/electron-vite.cmd"
+        "runtimeExecutable": "npm.cmd"
       },
-      "runtimeArgs": ["--sourcemap"],
       "env": {
         "REMOTE_DEBUGGING_PORT": "9222"
       },
-      "console": "integratedTerminal"
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true,
+      "skipFiles": ["<node_internals>/**"],
+      "presentation": {
+        "group": "Kentucky",
+        "order": 2
+      }
     },
     {
       "name": "Win: Debug Renderer Process",
@@ -24,7 +30,9 @@
       "webRoot": "${workspaceFolder}/win/src/renderer",
       "timeout": 60000,
       "presentation": {
-        "hidden": true
+        "hidden": true,
+        "group": "Kentucky",
+        "order": 3
       }
     },
     {
@@ -32,19 +40,27 @@
       "type": "node-terminal",
       "request": "launch",
       "command": "npm run dev",
-      "cwd": "${workspaceFolder}/win"
+      "cwd": "${workspaceFolder}/win",
+      "presentation": {
+        "group": "Kentucky",
+        "order": 4
+      }
     },
     {
       "name": "Android: Vite Dev",
       "type": "node-terminal",
       "request": "launch",
       "command": "npm run dev",
-      "cwd": "${workspaceFolder}/android"
+      "cwd": "${workspaceFolder}/android",
+      "presentation": {
+        "group": "Kentucky",
+        "order": 5
+      }
     }
   ],
   "compounds": [
     {
-      "name": "Debug All (Win)",
+      "name": "Debug All",
       "configurations": ["Win: Debug Main Process", "Win: Debug Renderer Process"],
       "stopAll": true,
       "presentation": {

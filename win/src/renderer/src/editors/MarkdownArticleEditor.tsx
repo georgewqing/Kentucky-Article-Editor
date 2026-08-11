@@ -7,10 +7,15 @@ import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Markdown } from 'tiptap-markdown'
+import { Table } from '@tiptap/extension-table'
+import { TableRow } from '@tiptap/extension-table-row'
+import { TableCell } from '@tiptap/extension-table-cell'
+import { TableHeader } from '@tiptap/extension-table-header'
 import { useTranslation } from 'react-i18next'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { useAppStore } from '@/state/appStore'
 import { useSettingsStore } from '@/state/settingsStore'
+import { useAiStore } from '@/state/aiStore'
 import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 import { MarkdownToolbar } from './MarkdownToolbar'
 import { countArticleWords } from './wordCount'
@@ -24,6 +29,20 @@ function getMarkdownFromEditor(ed: { storage: object }): string {
 
 function pathsEqual(a: string, b: string): boolean {
   return a.replace(/\\/g, '/').toLowerCase() === b.replace(/\\/g, '/').toLowerCase()
+}
+
+/** Workspace plans/*.plan.md produced by Plan mode. */
+function isWorkspacePlanFile(filePath: string): boolean {
+  const n = filePath.replace(/\\/g, '/').toLowerCase()
+  return n.includes('/plans/') && n.endsWith('.plan.md')
+}
+
+/** True when the plan has checklist items and every one is checked. */
+function planTodosAllDone(md: string): boolean {
+  const lines = md.split(/\r?\n/)
+  const todos = lines.filter((l) => /^\s*-\s+\[[ xX]\]/.test(l))
+  if (todos.length === 0) return false
+  return todos.every((l) => /^\s*-\s+\[[xX]\]/.test(l))
 }
 
 type Mode = 'wysiwyg' | 'source'
@@ -40,6 +59,8 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
   const linePickSession = useAppStore((s) => s.linePickSession)
   const confirmLinePick = useAppStore((s) => s.confirmLinePick)
   const cancelLinePick = useAppStore((s) => s.cancelLinePick)
+  const executePlanFile = useAiStore((s) => s.executePlanFile)
+  const aiStreaming = useAiStore((s) => s.streaming)
   const fontSize = useSettingsStore((s) => s.fontSize)
   const themeMode = useSettingsStore((s) => s.themeMode)
 
@@ -53,6 +74,8 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
   const [flashOverlay, setFlashOverlay] = useState<FlashOverlay | null>(null)
   const lastMdRef = useRef('')
   const applyingRef = useRef(false)
+  /** After open/AI sync, TipTap may reparse; only serialize back after real user edits. */
+  const hydratedRef = useRef(false)
   const monacoRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   useOverlayScroll(scrollerRef)
@@ -74,6 +97,15 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
       TaskList,
       TaskItem.configure({ nested: true }),
       Placeholder.configure({ placeholder }),
+      // GFM tables — without these, tiptap-markdown drops `|` on setContent→getMarkdown
+      // (AI propose_text_patch / write sync was corrupting tables & doubling **).
+      Table.configure({
+        resizable: false,
+        HTMLAttributes: { class: 'article-table' }
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
       Markdown.configure({
         html: false,
         tightLists: true,
@@ -89,7 +121,8 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
 
   const editor = useEditor({
     extensions,
-    content: tab?.content ?? '',
+    // Load via onCreate + emitUpdate:false so open never false-dirties via getMarkdown.
+    content: '',
     immediatelyRender: false,
     editorProps: {
       attributes: {
@@ -97,9 +130,24 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
         spellcheck: 'false'
       }
     },
-    onUpdate: ({ editor: ed }) => {
-      if (applyingRef.current) return
+    onCreate: ({ editor: ed }) => {
+      applyingRef.current = true
+      hydratedRef.current = false
+      const initial = tab?.content ?? ''
+      ed.commands.setContent(initial, { emitUpdate: false })
+      lastMdRef.current = initial
+      queueMicrotask(() => {
+        applyingRef.current = false
+        hydratedRef.current = true
+      })
+    },
+    onUpdate: ({ editor: ed, transaction }) => {
+      if (applyingRef.current || !hydratedRef.current) return
+      if (!transaction.docChanged) return
+      // setContent / hydration uses addToHistory: false — never treat as user edit.
+      if (transaction.getMeta('addToHistory') === false) return
       const md = getMarkdownFromEditor(ed)
+      if (md === lastMdRef.current) return
       lastMdRef.current = md
       updateTabContent(tabId, md)
     }
@@ -113,9 +161,12 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
   useEffect(() => {
     if (!picking || !tab || !editor) return
     if (mode === 'source') return
-    const md = getMarkdownFromEditor(editor)
-    lastMdRef.current = md
-    if (md !== tab.content) updateTabContent(tabId, md)
+    // Line-pick needs source mode; do not push TipTap serialization into a clean tab.
+    if (tab.dirty) {
+      const md = getMarkdownFromEditor(editor)
+      lastMdRef.current = md
+      if (md !== tab.content) updateTabContent(tabId, md)
+    }
     setMode('source')
     setLinkOpen(false)
   }, [picking, mode, tab, editor, tabId, updateTabContent])
@@ -125,14 +176,17 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
     if (mode !== 'wysiwyg') return
     if (tab.content === lastMdRef.current) return
     applyingRef.current = true
-    editor.commands.setContent(tab.content || '')
+    hydratedRef.current = false
+    editor.commands.setContent(tab.content || '', { emitUpdate: false })
     lastMdRef.current = tab.content
     queueMicrotask(() => {
       applyingRef.current = false
+      hydratedRef.current = true
     })
   }, [tab?.id, tab?.content, editor, mode, tab])
 
   useEffect(() => {
+    hydratedRef.current = false
     if (tab) lastMdRef.current = tab.content
   }, [tab?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -259,16 +313,22 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
       if (!tab || picking) return
       if (next === mode) return
       if (next === 'source' && editor) {
-        const md = getMarkdownFromEditor(editor)
-        lastMdRef.current = md
-        if (md !== tab.content) updateTabContent(tabId, md)
+        // Only serialize TipTap → store when already dirty; otherwise open/mode-flip
+        // false-dirties from getMarkdown normalization.
+        if (tab.dirty) {
+          const md = getMarkdownFromEditor(editor)
+          lastMdRef.current = md
+          if (md !== tab.content) updateTabContent(tabId, md)
+        }
       }
       if (next === 'wysiwyg' && editor) {
         applyingRef.current = true
-        editor.commands.setContent(tab.content || '')
+        hydratedRef.current = false
+        editor.commands.setContent(tab.content || '', { emitUpdate: false })
         lastMdRef.current = tab.content
         queueMicrotask(() => {
           applyingRef.current = false
+          hydratedRef.current = true
         })
       }
       setMode(next)
@@ -297,8 +357,30 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
 
   if (!tab) return null
 
+  const planDone = isWorkspacePlanFile(tab.path) && planTodosAllDone(tab.content || '')
+  const planBtnDisabled = aiStreaming || planDone
+
   return (
     <div className={`article-host ${picking ? 'line-pick-active' : ''}`}>
+      {tab && isWorkspacePlanFile(tab.path) && !picking ? (
+        <div className={`plan-build-banner${planDone ? ' is-done' : ''}`}>
+          <div className="plan-build-banner-text">
+            <strong>{t('ai.planFileBannerTitle')}</strong>
+            <span>
+              {planDone ? t('ai.planFileBannerDoneHint') : t('ai.planFileBannerHint')}
+            </span>
+          </div>
+          <button
+            type="button"
+            className={`btn-primary plan-build-btn${planDone ? ' is-done' : ''}`}
+            disabled={planBtnDisabled}
+            onClick={() => void executePlanFile(tab.path)}
+          >
+            {planDone ? t('ai.executePlanDone') : t('ai.executePlan')}
+          </button>
+        </div>
+      ) : null}
+
       {!picking ? (
         <MarkdownToolbar
           editor={editor}

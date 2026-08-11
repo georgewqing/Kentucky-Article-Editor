@@ -221,6 +221,24 @@ export function getDoc(filePath: string): DocSnapshot | null {
   }
 }
 
+/** Sync hub after an external disk write (e.g. AI plan file). Marks clean + broadcasts. */
+export function docApplyExternalWrite(filePath: string, content: string): DocSnapshot | null {
+  const entry = findEntry(filePath)
+  if (!entry) return null
+  entry.content = content
+  entry.originalContent = content
+  entry.dirty = false
+  entry.rev += 1
+  broadcast(entry)
+  return {
+    path: entry.path,
+    content: entry.content,
+    originalContent: entry.originalContent,
+    dirty: entry.dirty,
+    rev: entry.rev
+  }
+}
+
 /** Seed hub from an already-open renderer tab before spawning a float. */
 export function docSeedFromRenderer(
   filePath: string,

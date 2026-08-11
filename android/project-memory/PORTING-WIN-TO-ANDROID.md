@@ -456,6 +456,7 @@ Win AI 位于 `win/src/main/ai/`，Android 位于 `android/src/ai-runtime/`。�
 6. 检查会话与 profile 升级，不得丢失旧 Preferences 数据。
 7. 真机用真实兼容 API 发一轮消息，不能只测试 mock。
 8. 网络失败、无 Key、Abort、App 切后台后恢复都要有可理解结果。
+9. **对照** [`../win/project-memory/AGENT-TOOL-FEEDBACK.md`](../win/project-memory/AGENT-TOOL-FEEDBACK.md) 与 OPEN 工单 [`OPEN-agent-tool-feedback-parity.md`](./OPEN-agent-tool-feedback-parity.md)：写入门禁、`toolApi`/`gateDetail`、characters 强制落盘、continuity 无全文、Plan 返回值、append 建表、FS 工具、`propose_upsert_characters`、web snippet、diff/批量 UI。缺一项不得标「AI 已对齐」。
 
 #### 网络与安全
 

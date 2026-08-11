@@ -15,6 +15,7 @@
 | [changelog.md](./changelog.md) | 改动时间线 |
 | [OPEN-trackpad-md-ai-scroll.md](./OPEN-trackpad-md-ai-scroll.md) | **OPEN**：MD↔AI 触控板滚动（待真机验收原生分流） |
 | [OPEN-dialogue-saf-corruption.md](./OPEN-dialogue-saf-corruption.md) | **OPEN/部分修复**：台词 SAF 脏名、Accept 落盘、状态栏 insets |
+| [OPEN-agent-tool-feedback-parity.md](./OPEN-agent-tool-feedback-parity.md) | **OPEN**：Win Agent 工具反馈 Round A–D → Android 对齐（总清单在 win） |
 
 ## 2026-08-10 会话摘要（已实现 / 待验收）
 

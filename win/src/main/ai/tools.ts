@@ -64,9 +64,19 @@ import {
   type PlanTodoInput
 } from './planFiles'
 import { docApplyExternalWrite, getDoc } from '../documentHub'
+import {
+  getLiteraryToolDefs,
+  isLiteraryTool,
+  runLiteraryTool,
+  extendContinuityCheck,
+  type LiteraryEmitCtx
+} from './literaryTools'
+import { loadAiSettings } from './aiSettings'
+import { memoryToolsDisciplinePrompt, proseMemoryHint } from './memoryNudge'
 
 export function getWritingTools(): ToolDef[] {
   return [
+    ...getLiteraryToolDefs(),
     {
       type: 'function',
       function: {
@@ -186,7 +196,7 @@ export function getWritingTools(): ToolDef[] {
       function: {
         name: 'propose_append_dialogue_lines',
         description:
-          'Insert new dialogue lines (speaker = character id). Creates *.dialogue.csv with standard 11-col header if missing. Default append; pass afterId to insert after that line. ≤5 lines may auto-apply. Generates stable ids. Does not edit choices.',
+          'Insert new dialogue lines (speaker = character id). Creates *.dialogue.csv with standard 11-col header if missing. Default append; pass afterId to insert after that line. ≤5 lines may auto-apply. Generates stable ids. Does not edit choices. CALL read_voice_bank first for multi-speaker tone.',
         parameters: {
           type: 'object',
           properties: {
@@ -471,7 +481,7 @@ export function getWritingTools(): ToolDef[] {
       function: {
         name: 'continuity_check',
         description:
-          'Read-only continuity scan. Returns structured issues (severity, kind, path, quote, suggestion) + registeredCast — does NOT dump full chapter text. Flags ghost names missing from characters.csv.',
+          'CALL for continuity / cast / props / foreshadow / voice / glossary / proof passes. Returns issues[] (no full-text dump). Aspects: character, timeline, prop, foreshadow, scene, voice, glossary, proof. Optional chapterId + assertions[] (empty ignored). WARN-only — does not block writes. After chapter writes, prefer aspects including prop+timeline+foreshadow.',
         parameters: {
           type: 'object',
           properties: {
@@ -482,7 +492,34 @@ export function getWritingTools(): ToolDef[] {
             },
             aspects: {
               type: 'array',
-              items: { type: 'string', enum: ['character', 'timeline', 'prop'] }
+              items: {
+                type: 'string',
+                enum: [
+                  'character',
+                  'timeline',
+                  'prop',
+                  'foreshadow',
+                  'scene',
+                  'voice',
+                  'glossary',
+                  'proof'
+                ]
+              }
+            },
+            chapterId: { type: 'string' },
+            assertions: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  prop: { type: 'string' },
+                  holder: { type: 'string' },
+                  location: { type: 'string' },
+                  character: { type: 'string' },
+                  characterStatus: { type: 'string' }
+                }
+              },
+              description: 'Optional model-proposed assertions checked against story_state table only. [] ignored.'
             }
           }
         }
@@ -1005,6 +1042,8 @@ function emitProposal(ctx: ToolContext, proposal: FileProposal): Record<string, 
       String(out.note) +
       ' WARN: prose may reference names missing from characters.csv (see ghostCharacterWarnings). Upsert cast or Accept pending cast first.'
   }
+  const mem = proseMemoryHint(ctx.workspaceRoot, proposal.path)
+  if (mem) out.memoryHint = mem
   return out
 }
 
@@ -1137,6 +1176,27 @@ export async function runTool(
   }
 
   try {
+    if (isLiteraryTool(name)) {
+      const settings = loadAiSettings()
+      const litCtx: LiteraryEmitCtx = {
+        workspaceRoot: ctx.workspaceRoot,
+        emitProposal: (p) => emitProposal(ctx, { status: 'pending', ...p }),
+        resolveWorkspacePath,
+        readFocusText: (rel) => {
+          try {
+            const abs = resolveWorkspacePath(ctx.workspaceRoot, rel)
+            if (!existsSync(abs)) return null
+            return readWorkspaceText(abs, 120_000).text
+          } catch {
+            return null
+          }
+        },
+        maxRevisionSnaps: settings.maxRevisionSnaps
+      }
+      const out = runLiteraryTool(name, args, litCtx)
+      if (out != null) return out
+    }
+
     switch (name) {
       case 'list_dir': {
         const rel = typeof args.path === 'string' ? args.path : '.'
@@ -1833,9 +1893,24 @@ export async function runTool(
           }
         }
 
-        return JSON.stringify({
+        const settings = loadAiSettings()
+        const litCtx: LiteraryEmitCtx = {
+          workspaceRoot: ctx.workspaceRoot,
+          emitProposal: (p) => emitProposal(ctx, { status: 'pending', ...p }),
+          resolveWorkspacePath,
+          readFocusText: (rel) => {
+            try {
+              const abs = resolveWorkspacePath(ctx.workspaceRoot, rel)
+              if (!existsSync(abs)) return null
+              return readWorkspaceText(abs, 120_000).text
+            } catch {
+              return null
+            }
+          },
+          maxRevisionSnaps: settings.maxRevisionSnaps
+        }
+        return extendContinuityCheck(litCtx, args, issues, {
           readOnly: true,
-          aspects,
           castCount: characters.length,
           registeredCast: characters.map((c) => ({
             id: c.id,
@@ -1847,12 +1922,8 @@ export async function runTool(
               ? 'characters.csv empty/missing — cast list below is empty; any names in prose are unregistered.'
               : 'registeredCast is ONLY what is on disk now. Names you planned but did not upsert (or only marked dirty without disk write) will NOT appear here.',
           filesScanned,
-          issues,
           ghostHeuristic:
-            'Person-like patterns only (老/小/阿、姓+名、职衔、X说/道). Excludes registered cast, chapters (第一章), places (*楼), vessels (*号), function compounds. Not a POS tagger.',
-          toolApi: TOOL_API_VERSION,
-          instruction:
-            'Present issues[] to the user (severity / path / quote / suggestion). Never dump chapter bodies. If empty_cast or ghost_character, upsert cast to disk before more prose.'
+            'Person-like patterns only (老/小/阿、姓+名、职衔、X说/道). Excludes registered cast, chapters (第一章), places (*楼), vessels (*号), function compounds. Not a POS tagger.'
         })
       }
       case 'read_kmind': {
@@ -2410,7 +2481,19 @@ const PLAN_TOOLS = new Set([
   'web_search',
   'web_research',
   'web_fetch',
-  'open_in_editor'
+  'open_in_editor',
+  'read_story_state',
+  'read_foreshadow',
+  'read_voice_anchor',
+  'read_voice_bank',
+  'compare_voice',
+  'read_glossary',
+  'list_materials',
+  'search_materials',
+  'list_revisions',
+  'reader_critique',
+  'proofread_check',
+  'read_scene_state'
 ])
 
 const OUTLINE_TOOLS = new Set([
@@ -2432,7 +2515,16 @@ const OUTLINE_TOOLS = new Set([
   'dialogue_cast_check',
   'list_skills',
   'read_skill',
-  'open_in_editor'
+  'open_in_editor',
+  'read_story_state',
+  'read_foreshadow',
+  'read_voice_anchor',
+  'read_voice_bank',
+  'compare_voice',
+  'read_glossary',
+  'list_materials',
+  'search_materials',
+  'read_scene_state'
 ])
 
 export type WritingToolsOpts = {
@@ -2517,12 +2609,15 @@ export function LITERARY_SYSTEM_PROMPT(
     '- Existing prose/kmind, dialogue performance batches, and multi-file content turns need Accept.',
     '- If pending: tell the user to Accept/Reject on the card. If written: say it was written. Never invent an Apply step outside the card.',
     '- Do not mass-delete prose unless the user explicitly asks.',
+    '- Prose write/patch results may include memoryHint — follow it in the same turn when present (upsert story state / foreshadow).',
+    '',
+    memoryToolsDisciplinePrompt(),
     '',
     'Literary workflow:',
     '- Cast: characters.csv is 6 columns (id,name,color,note,model_node,operable). read_characters returns decoded fields; raw ""quotes"" in the CSV file are RFC 4180 escaping, not corruption.',
     '- Before renaming voices/appearance, call read_characters or lookup_character; explain conflicts before proposing prose edits.',
     '- Continuity / 人设 / contradiction checks → continuity_check (structured issues, not full-text dump). Only write after the user asks to apply fixes.',
-    '- Watch for ghost characters: prose names missing from characters.csv (often pending Accept on cast cards).',
+    '- Watch for ghost characters: prose names missing from characters.csv (often pending Accept on cast cards). See also memoryHint / ghostCharacterWarnings on prose writes.',
     '- Prose → mind map: scene_to_kmind. Mind map → outline md: kmind_to_scene_outline. Prefer these over dumping raw kmind JSON.',
     '',
     'Dialogue graph (Godot protocol v1.3 — CRITICAL):',

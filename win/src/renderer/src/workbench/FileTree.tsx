@@ -24,8 +24,22 @@ import {
 } from '@/editors/dialogueCsv'
 import { applyStemKeepExt, displayEntryName, splitKnownExt } from './explorerNames'
 import { ChevronRight, Folder, FolderOpen } from 'lucide-react'
+import { KENTUCKY_PATH_MIME } from './dnd'
+import {
+  loadExplorerExpandPrefs,
+  pathExpandKey,
+  saveExplorerExpandPrefs
+} from './explorerExpandPrefs'
 
-const DND_MIME = 'application/x-kentucky-path'
+const DND_MIME = KENTUCKY_PATH_MIME
+
+type TreeExpand = {
+  isExpanded: (absPath: string) => boolean
+  setExpanded: (absPath: string, open: boolean) => void
+  toggle: (absPath: string) => void
+}
+
+const TreeExpandCtx = createContext<TreeExpand | null>(null)
 
 type MenuState = {
   x: number
@@ -163,7 +177,19 @@ function TreeNode({
   depth: number
   onContext: (e: MouseEvent, entry: FileEntry) => void
 }) {
-  const [open, setOpen] = useState(entry.isDirectory ? depth <= 1 : false)
+  const expand = useContext(TreeExpandCtx)
+  const open = expand?.isExpanded(entry.path) ?? false
+  const setOpen = useCallback(
+    (next: boolean | ((v: boolean) => boolean)) => {
+      if (!expand) return
+      const resolved = typeof next === 'function' ? next(expand.isExpanded(entry.path)) : next
+      expand.setExpanded(entry.path, resolved)
+    },
+    [expand, entry.path]
+  )
+  const toggleOpen = useCallback(() => {
+    expand?.toggle(entry.path)
+  }, [expand, entry.path])
   const activeTabId = useAppStore((s) => s.activeTabId)
   const openFile = useAppStore((s) => s.openFile)
   const dnd = useContext(TreeDnDCtx)
@@ -198,7 +224,7 @@ function TreeNode({
           style={{ paddingLeft: 8 + depth * 12 }}
           onClick={() => {
             if (suppressClickRef.current) return
-            setOpen((v) => !v)
+            toggleOpen()
           }}
           onContextMenu={(e) => onContext(e, entry)}
           onDragOver={folderDrop.onDragOver}
@@ -236,7 +262,7 @@ function TreeNode({
             open={open}
             onClick={(e) => {
               e.stopPropagation()
-              setOpen((v) => !v)
+              toggleOpen()
             }}
           />
           <button
@@ -303,13 +329,56 @@ export function FileTree({
   const renameRef = useRef<HTMLInputElement>(null)
   const displayEntries = useMemo(() => nestDialogueSidecarsInTree(entries), [entries])
   const [rootOpen, setRootOpen] = useState(true)
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set())
+  const expandReady = useRef(false)
   const rootName = workspacePath ? getPlatform().basename(workspacePath) : ''
   const [dragPath, setDragPath] = useState<string | null>(null)
   const [dropDir, setDropDir] = useState<string | null>(null)
 
   useEffect(() => {
-    setRootOpen(true)
+    expandReady.current = false
+    const prefs = loadExplorerExpandPrefs(workspacePath)
+    setRootOpen(prefs.rootOpen)
+    setExpandedKeys(new Set(prefs.expanded))
+    // Avoid writing the just-loaded prefs back immediately.
+    queueMicrotask(() => {
+      expandReady.current = true
+    })
   }, [workspacePath])
+
+  useEffect(() => {
+    if (!workspacePath || !expandReady.current) return
+    saveExplorerExpandPrefs(workspacePath, {
+      rootOpen,
+      expanded: Array.from(expandedKeys)
+    })
+  }, [workspacePath, rootOpen, expandedKeys])
+
+  const expandApi = useMemo<TreeExpand>(() => {
+    const toKey = (absPath: string): string =>
+      workspacePath ? pathExpandKey(workspacePath, absPath) : absPath.replace(/\\/g, '/').toLowerCase()
+    return {
+      isExpanded: (absPath) => expandedKeys.has(toKey(absPath)),
+      setExpanded: (absPath, open) => {
+        const key = toKey(absPath)
+        setExpandedKeys((prev) => {
+          const next = new Set(prev)
+          if (open) next.add(key)
+          else next.delete(key)
+          return next
+        })
+      },
+      toggle: (absPath) => {
+        const key = toKey(absPath)
+        setExpandedKeys((prev) => {
+          const next = new Set(prev)
+          if (next.has(key)) next.delete(key)
+          else next.add(key)
+          return next
+        })
+      }
+    }
+  }, [workspacePath, expandedKeys])
 
   useEffect(() => {
     const close = () => setMenu(null)
@@ -353,7 +422,7 @@ export function FileTree({
         setDropDir(null)
         e.dataTransfer.setData(DND_MIME, path)
         e.dataTransfer.setData('text/plain', path)
-        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.effectAllowed = 'copyMove'
       },
       endDrag: () => {
         setDragPath(null)
@@ -444,6 +513,7 @@ export function FileTree({
   }
 
   return (
+    <TreeExpandCtx.Provider value={expandApi}>
     <TreeDnDCtx.Provider value={dndValue}>
       <div
         className="file-tree-wrap"
@@ -621,5 +691,6 @@ export function FileTree({
         ) : null}
       </div>
     </TreeDnDCtx.Provider>
+    </TreeExpandCtx.Provider>
   )
 }

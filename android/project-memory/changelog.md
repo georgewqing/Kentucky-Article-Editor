@@ -1,5 +1,29 @@
 # 改动时间线（Android）
 
+## 文档 — Agent UI + 滚动条契约补全（2026-08-11）
+
+- [OPEN-agent-ui-parity.md](./OPEN-agent-ui-parity.md) 增补：
+  - slash 菜单可滑无滑块
+  - `.ai-messages` 禁横向滑块；`pre` 内部横滚
+  - 色条按 limit；冷色板 hex 表
+  - 验收第 8 条
+- Win SESSION / changelog §67–69 已对齐（voice_anchor j、色条、滑块）
+- **代码尚未移植**；状态 OPEN
+
+## 文档 — Agent UI + 文学记忆增量移植详约（2026-08-11）
+
+- 新增 [OPEN-agent-ui-parity.md](./OPEN-agent-ui-parity.md)：Win `/` Skills+Commands 预览、`contextEstimate` buckets、ContextBar 弹层（**按 limit 比例**、冷灰蓝色板）、send→`read_skill` hint
+- 更新 [OPEN-literary-memory-parity.md](./OPEN-literary-memory-parity.md)：指纹 → `2026-08-11-j`；§4.7.1 `voice_anchor` 合法键 + `narrator`→notes + `schemaHint`
+- [OPEN-agent-tool-feedback-parity.md](./OPEN-agent-tool-feedback-parity.md) 增 U1–U3；[PORTING-WIN-TO-ANDROID.md](./PORTING-WIN-TO-ANDROID.md) 阶段 G 第 11 条
+- **代码尚未移植**；状态 OPEN
+
+## 文档 — 文学记忆 Round H 移植详约（2026-08-11）
+
+- 新增 [OPEN-literary-memory-parity.md](./OPEN-literary-memory-parity.md)：Win M1–M4（初版指纹 `2026-08-11-h`，现以 Win `TOOL_API_VERSION` 为准）
+  - 文件映射、工具/门禁、启用态/stale/L5、issue kinds、Grill 定稿、真机验收、Android SAF/落盘风险
+- [OPEN-agent-tool-feedback-parity.md](./OPEN-agent-tool-feedback-parity.md) H1–H4 链到详约；[PORTING-WIN-TO-ANDROID.md](./PORTING-WIN-TO-ANDROID.md) 阶段 G 第 10 条
+- **代码尚未移植**；状态 OPEN
+
 ## 文档 — Agent 工具反馈对齐 OPEN（2026-08-11）
 
 - 新增 [OPEN-agent-tool-feedback-parity.md](./OPEN-agent-tool-feedback-parity.md)：Win Round A–D 工具反馈须移植到 `ai-runtime`

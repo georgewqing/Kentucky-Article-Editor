@@ -11,6 +11,13 @@ export type ProposalKind =
   | 'dialogue_layout'
   | 'kmind'
   | 'kmind_layout'
+  | 'story_state'
+  | 'foreshadow'
+  | 'voice_anchor'
+  | 'voice_bank'
+  | 'glossary'
+  | 'materials_index'
+  | 'revision_meta'
   | 'other'
 
 export type FileProposalEx = FileProposal & {
@@ -20,7 +27,17 @@ export type FileProposalEx = FileProposal & {
 }
 
 /** Bump when write-gate / tool result shape changes — agents can detect stale main process. */
-export const TOOL_API_VERSION = '2026-08-11-g'
+export const TOOL_API_VERSION = '2026-08-11-j'
+
+const MEMORY_KINDS = new Set<ProposalKind>([
+  'story_state',
+  'foreshadow',
+  'voice_anchor',
+  'voice_bank',
+  'glossary',
+  'materials_index',
+  'revision_meta'
+])
 
 function extOf(path: string): string {
   const base = path.replace(/\\/g, '/').split('/').pop() || ''
@@ -32,6 +49,14 @@ function inferKind(p: FileProposalEx): ProposalKind {
   if (p.kind) return p.kind
   const rel = p.path.replace(/\\/g, '/').toLowerCase()
   if (rel === 'characters.csv' || rel.endsWith('/characters.csv')) return 'characters'
+  if (rel === 'story_state.yaml' || rel.endsWith('/story_state.yaml')) return 'story_state'
+  if (rel === 'foreshadow.yaml' || rel.endsWith('/foreshadow.yaml')) return 'foreshadow'
+  if (rel === 'voice_anchor.yaml' || rel.endsWith('/voice_anchor.yaml')) return 'voice_anchor'
+  if (rel === 'voice_bank.yaml' || rel.endsWith('/voice_bank.yaml')) return 'voice_bank'
+  if (rel === 'glossary.yaml' || rel.endsWith('/glossary.yaml')) return 'glossary'
+  if (rel === 'materials/index.yaml' || rel.endsWith('/materials/index.yaml')) return 'materials_index'
+  if (rel === 'revisions/manifest.yaml' || rel.endsWith('/revisions/manifest.yaml'))
+    return 'revision_meta'
   if (rel.endsWith('.dialogue.choices.json')) return 'dialogue_choices'
   if (rel.endsWith('.dialogue.layout.json')) return 'dialogue_layout'
   if (rel.endsWith('.dialogue.csv')) return 'dialogue'
@@ -41,7 +66,7 @@ function inferKind(p: FileProposalEx): ProposalKind {
   return 'other'
 }
 
-export { inferKind }
+export { inferKind, MEMORY_KINDS }
 
 function pathKey(abs: string): string {
   return abs.replace(/\//g, '\\').toLowerCase()
@@ -58,8 +83,7 @@ export function turnHasOtherPath(turnPaths: Set<string>, absPath: string): boole
 
 /**
  * When auto-applied, whether to write disk immediately.
- * Cast / small dialogue / layouts must hit disk even if user setting is "mark dirty only",
- * otherwise continuity_check and Godot see stale files (ghost cast).
+ * Cast / memory YAML / small dialogue / layouts must hit disk even if user setting is "mark dirty only".
  */
 export function shouldPersistAutoToDisk(
   proposal: FileProposalEx,
@@ -68,7 +92,7 @@ export function shouldPersistAutoToDisk(
   if (settings.applyWritesToDisk) return true
   if (!proposal.before.trim()) return true
   const kind = inferKind(proposal)
-  if (kind === 'characters') return true
+  if (kind === 'characters' || MEMORY_KINDS.has(kind)) return true
   if (kind === 'kmind_layout' || kind === 'dialogue_layout') return true
   if (kind === 'dialogue_choices') return true
   if (kind === 'dialogue') {
@@ -89,10 +113,8 @@ export type GateDecision = {
 
 /**
  * G3 gate: whether this proposal may auto-apply (no Accept).
- * `turnPaths` = absolute paths already committed earlier in this user turn (NOT including current).
- *
- * There is NO "N character cards → pending" threshold. The only `≤5` rule is dialogue LINE count.
- * Character upserts always auto (unless forceReviewAllWrites).
+ * Memory YAML (story_state / foreshadow / voice / glossary / materials index / revision meta)
+ * always auto like characters — story continuity must see disk truth.
  */
 export function decideAutoApply(
   proposal: FileProposalEx,
@@ -112,9 +134,11 @@ export function decideAutoApply(
   if (kind === 'kmind_layout' || kind === 'dialogue_layout') {
     return { auto: true, reason: 'layout_only', kind, otherTurnPaths }
   }
-  // Cast ALWAYS auto — not blocked by multi-file turns or batch size.
   if (kind === 'characters') {
     return { auto: true, reason: 'character_upsert', kind, otherTurnPaths }
+  }
+  if (MEMORY_KINDS.has(kind)) {
+    return { auto: true, reason: 'memory_yaml_upsert', kind, otherTurnPaths }
   }
 
   if (kind === 'dialogue_choices') {
@@ -163,6 +187,7 @@ export function proposalReviewHint(proposal: FileProposalEx, autoApplied: boolea
     const kind = inferKind(proposal)
     if (!proposal.before.trim()) return 'auto: new_or_empty_file'
     if (kind === 'characters') return 'auto: character_upsert'
+    if (MEMORY_KINDS.has(kind)) return 'auto: memory_yaml_upsert'
     if (kind === 'kmind_layout' || kind === 'dialogue_layout') return 'auto: layout_only'
     if (kind === 'dialogue') return 'auto: small_dialogue_edit'
     return 'auto'
@@ -185,7 +210,7 @@ export function proposalToolNote(autoApplied: boolean): string {
 
 /** One-line rules for tool descriptions / system prompt. */
 export const WRITE_GATE_SUMMARY =
-  'Write gate: new/empty auto; character upserts ALWAYS auto (any batch size, even with other files this turn); dialogue ≤5 LINES auto; layout auto; existing prose/kmind/performance/multi-file → Accept. Results include written/pending/reviewHint/gateDetail/toolApi. No "5 character cards" threshold — ≤5 is dialogue lines only. UI: change cards show text diff (−/+) and Apply-all / Reject-all — agents cannot see the panel; do not re-report missing diff/batch as tool bugs.'
+  'Write gate: new/empty auto; character + memory YAML (story_state/foreshadow/voice/glossary/materials index/revision meta) ALWAYS auto; dialogue ≤5 LINES auto; layout auto; existing prose/kmind/performance/multi-file → Accept. Results include written/pending/reviewHint/gateDetail/toolApi. No "5 character cards" threshold — ≤5 is dialogue lines only. Story conflicts are WARN-only (never block writes). UI: change cards show text diff (−/+) and Apply-all / Reject-all — agents cannot see the panel; do not re-report missing diff/batch as tool bugs.'
 
 
 export const CHARACTERS_CSV_FORMAT =

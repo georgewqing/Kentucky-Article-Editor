@@ -20,6 +20,9 @@
 | [SESSION-TOOL-FEEDBACK.md](./SESSION-TOOL-FEEDBACK.md) | 工具反馈**多轮会话交接**（短；重启验证清单） |
 | [AGENT-TOOL-FEEDBACK.md](./AGENT-TOOL-FEEDBACK.md) | **Agent 工具反馈总清单**（缺陷表 / 契约 / Win 已修 / Android 待对齐） |
 | [AGENT-TOOL-TEST-BASELINE.md](./AGENT-TOOL-TEST-BASELINE.md) | **干净测试结论基线**（9 项实证通过 + P1/P2 残留） |
+| [REQ-literary-agent-capability-upgrade.md](./REQ-literary-agent-capability-upgrade.md) | 文学 Agent 能力升级需求提案归档（M1–M4） |
+| [../../android/project-memory/OPEN-literary-memory-parity.md](../../android/project-memory/OPEN-literary-memory-parity.md) | **Android OPEN**：Round H 移植详约（文件映射 / 门禁 / 验收） |
+| [../../android/project-memory/OPEN-agent-ui-parity.md](../../android/project-memory/OPEN-agent-ui-parity.md) | **Android OPEN**：`/` skills + 上下文分项用量 UI |
 | [extras/godot-kentucky-dialogue](../extras/godot-kentucky-dialogue/README.md) | **Godot 接入协议 v1.3**（choices、`operable`、显式开场→CSV 首行、§4.2 作者注意；本仓不含插件） |
 | [ai_river_godot](https://github.com/CCFOX12/ai_river_godot) | Godot 执行器参考实现（AI River；独立仓库） |
 

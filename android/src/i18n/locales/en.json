@@ -15,6 +15,7 @@
     "copy": "Copy",
     "paste": "Paste",
     "selectAll": "Select All",
+    "searchWithGoogle": "Search with Google",
     "view": "View",
     "reload": "Reload",
     "toggleDevtools": "Toggle Developer Tools",

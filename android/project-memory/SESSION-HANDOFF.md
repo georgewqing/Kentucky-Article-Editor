@@ -15,6 +15,9 @@
   - 详情：[OPEN-dialogue-saf-corruption.md](./OPEN-dialogue-saf-corruption.md)
   - test2 里已损坏的 night_cafe 文件需**人工恢复一次**（代码不会自动改历史副本内容）
 - **OPEN — Agent 工具反馈对齐（2026-08-11）**：Win Round A–D（写入门禁、characters 落盘、continuity、Plan、append、FS、snippet、批量 upsert 等）**尚未**移植到 `ai-runtime`。权威清单 [`../win/project-memory/AGENT-TOOL-FEEDBACK.md`](../win/project-memory/AGENT-TOOL-FEEDBACK.md)；Android 进度板 [OPEN-agent-tool-feedback-parity.md](./OPEN-agent-tool-feedback-parity.md)
+- **OPEN — 文学记忆 Round H**：详约 [OPEN-literary-memory-parity.md](./OPEN-literary-memory-parity.md)；Win 指纹至少 `2026-08-11-j`（含 memoryHint / voice_anchor schema）
+- **OPEN — Agent UI**：`/` skills 预览 + 上下文分项用量 + 滚动条契约 → [OPEN-agent-ui-parity.md](./OPEN-agent-ui-parity.md)（U1–U3；slash 无滑块、消息无横向滑块）
+- **OPEN — Workbench Chrome（2026-08-11）**：挂载 chip / Skill 胶囊+正文注入 / 选区右键 / 文件夹展开记忆 → [OPEN-workbench-chrome-parity.md](./OPEN-workbench-chrome-parity.md)（**U4–U7**；移植主入口）
 - **后续同步 Win 正式功能**：必须先读
   [PORTING-WIN-TO-ANDROID.md](./PORTING-WIN-TO-ANDROID.md)。禁止整目录覆盖
   `android/src`；按 renderer / Platform / Electron / Node / 协议 / Android UX 分类移植

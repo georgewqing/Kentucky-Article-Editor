@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron'
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
 import { isAbsolute, join } from 'path'
 import { randomUUID } from 'crypto'
 import {
@@ -16,7 +16,14 @@ import {
   streamChatCompletion,
   type ChatCompletionMessage
 } from './openaiCompatClient'
-import { getWritingToolsForMode, runTool, LITERARY_SYSTEM_PROMPT, applyProposalToDisk, type AgentToolMode } from './tools'
+import { buildStoryStateL5Summary } from './literaryContinuity'
+import {
+  getWritingToolsForMode,
+  runTool,
+  LITERARY_SYSTEM_PROMPT,
+  applyProposalToDisk,
+  type AgentToolMode
+} from './tools'
 import { parseCharactersCsv } from './formats'
 import {
   decideAutoApply,
@@ -24,7 +31,7 @@ import {
   type FileProposalEx,
   type GateDecision
 } from './proposalGate'
-import { skillsCatalogText } from './skills'
+import { skillsCatalogText, loadSkill } from './skills'
 
 const activeAborts = new Map<number, AbortController>()
 const MAX_CTX_FILE_CHARS = 24000
@@ -35,6 +42,8 @@ export interface EditorContextPayload {
   activeFilePath: string | null
   selection: string | null
   mentionedPaths: string[]
+  /** Composer paperclip mounts (subset of mentions); used for bubble UI + previews. */
+  attachedPaths?: string[]
 }
 
 function send(win: BrowserWindow, channel: string, payload: unknown): void {
@@ -44,7 +53,8 @@ function send(win: BrowserWindow, channel: string, payload: unknown): void {
 function readAbsSafe(workspaceRoot: string | null, filePath: string): string | null {
   if (!workspaceRoot || !filePath) return null
   try {
-    const abs = isAbsolute(filePath) ? filePath : join(workspaceRoot, filePath)
+    const cleaned = filePath.replace(/[/\\]+$/, '')
+    const abs = isAbsolute(cleaned) ? cleaned : join(workspaceRoot, cleaned)
     const rootNorm = workspaceRoot.replace(/[/\\]+$/, '').toLowerCase()
     if (!abs.toLowerCase().startsWith(rootNorm)) return null
     if (!existsSync(abs)) return null
@@ -52,6 +62,28 @@ function readAbsSafe(workspaceRoot: string | null, filePath: string): string | n
   } catch {
     return null
   }
+}
+
+/** File body, or shallow directory listing for mounted folders. */
+function readWorkspaceMention(workspaceRoot: string | null, filePath: string): string | null {
+  const abs = readAbsSafe(workspaceRoot, filePath)
+  if (!abs) return null
+  try {
+    const st = statSync(abs)
+    if (st.isDirectory()) {
+      const all = readdirSync(abs, { withFileTypes: true }).filter(
+        (e) => e.name !== '.git' && e.name !== 'node_modules'
+      )
+      const entries = all.slice(0, 48)
+      const lines = entries.map((e) => `${e.isDirectory() ? '[dir]' : '[file]'} ${e.name}`)
+      const label = filePath.replace(/\\/g, '/').replace(/\/+$/, '') + '/'
+      const more = all.length > entries.length ? '\n…[truncated]' : ''
+      return `Mounted directory ${label}\n${lines.join('\n')}${more}`
+    }
+  } catch {
+    return null
+  }
+  return readWorkspaceText(workspaceRoot, filePath.replace(/[/\\]+$/, ''), null)
 }
 
 /** L5: head + selection neighborhood + tail when file is large. */
@@ -136,6 +168,11 @@ function toApiMessagesWithTools(
   const cast = buildCharacterSummary(editor.workspacePath)
   if (cast) ctxParts.push(cast)
 
+  if (editor.workspacePath) {
+    const storyL5 = buildStoryStateL5Summary(editor.workspacePath)
+    if (storyL5) ctxParts.push(storyL5)
+  }
+
   if (editor.activeFilePath) {
     ctxParts.push(`Active file: ${editor.activeFilePath}`)
     const body = readWorkspaceText(editor.workspacePath, editor.activeFilePath, editor.selection)
@@ -145,7 +182,7 @@ function toApiMessagesWithTools(
   if (editor.mentionedPaths?.length) {
     ctxParts.push(`@mentions: ${editor.mentionedPaths.join(', ')}`)
     for (const rel of editor.mentionedPaths.slice(0, 8)) {
-      const body = readWorkspaceText(editor.workspacePath, rel, null)
+      const body = readWorkspaceMention(editor.workspacePath, rel)
       if (body) ctxParts.push(`@${rel}:\n"""\n${body}\n"""`)
     }
   }
@@ -244,6 +281,8 @@ export async function runAgentTurn(opts: {
   planFileRel?: string | null
   /** Hidden system nudge for this turn only (not shown as a user bubble). */
   turnSystemHint?: string
+  /** Composer skill chip id (persisted on the user message). */
+  skillId?: string
 }): Promise<void> {
   const mode: AgentToolMode = opts.mode || loadAiSettings().agentMode || 'agent'
   const wcId = opts.win.webContents.id
@@ -272,17 +311,64 @@ export async function runAgentTurn(opts: {
     return
   }
 
+  const attachedPaths = Array.from(
+    new Set(
+      (opts.editor.attachedPaths || [])
+        .map((p) => p.replace(/\\/g, '/').trim())
+        .filter(Boolean)
+    )
+  )
+  const skillId =
+    typeof opts.skillId === 'string' && /^[A-Za-z0-9._-]+$/.test(opts.skillId.trim())
+      ? opts.skillId.trim()
+      : undefined
   session.messages.push({
     id: randomUUID(),
     role: 'user',
     content: opts.userText,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    ...(attachedPaths.length ? { attachedPaths } : {}),
+    ...(skillId ? { skillId } : {})
   })
-  if (session.title === 'New chat' && opts.userText.trim()) {
-    session.title = opts.userText.trim().slice(0, 48)
+  if (session.title === 'New chat') {
+    const titleSrc = skillId
+      ? `/${skillId}${opts.userText.trim() ? ` ${opts.userText.trim()}` : ''}`
+      : opts.userText.trim()
+    if (titleSrc) session.title = titleSrc.slice(0, 48)
   }
   saveSession(session)
   send(opts.win, 'ai:session', session)
+
+  let turnHint = opts.turnSystemHint?.trim() || ''
+  if (skillId) {
+    const loaded = loadSkill(skillId)
+    if ('error' in loaded) {
+      turnHint = [
+        `CRITICAL: User mounted skill /${skillId}, but it could not be loaded (${loaded.error}).`,
+        'Tell the user the skill failed to load; do not invent its instructions.',
+        turnHint
+      ]
+        .filter(Boolean)
+        .join('\n')
+    } else {
+      turnHint = [
+        `CRITICAL: User mounted skill /${skillId} via the composer chip.`,
+        'Follow the skill instructions below for this entire turn.',
+        'Plain "/…" text inside the user message is literal text, not a slash command.',
+        `You may still call read_skill("${skillId}") if you need extraFiles.`,
+        '',
+        `# Skill /${skillId} (${loaded.name})`,
+        loaded.description ? `Description: ${loaded.description}` : '',
+        '',
+        loaded.body
+      ]
+        .filter((line) => line !== '')
+        .join('\n')
+      if (opts.turnSystemHint?.trim()) {
+        turnHint += `\n\n${opts.turnSystemHint.trim()}`
+      }
+    }
+  }
 
   const workspaceRoot = opts.editor.workspacePath
   let steps = 0
@@ -305,7 +391,7 @@ export async function runAgentTurn(opts: {
 
       await new Promise<void>((resolve) => {
         void streamChatCompletion({
-          messages: toApiMessagesWithTools(session, opts.editor, mode, opts.turnSystemHint),
+          messages: toApiMessagesWithTools(session, opts.editor, mode, turnHint || undefined),
           tools,
           signal: ac.signal,
           onEvent: (ev) => {

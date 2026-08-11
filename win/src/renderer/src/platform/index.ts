@@ -38,6 +38,8 @@ export interface Platform {
   toMediaUrl(filePath: string): Promise<string>
   /** Reveal path in the OS file manager (Explorer / Finder). */
   showItemInFolder(targetPath: string): Promise<void>
+  /** Open http(s) URL in the system browser. */
+  openExternal(url: string): Promise<void>
   joinPath(...parts: string[]): string
   basename(filePath: string): string
   dirname(filePath: string): string
@@ -98,18 +100,27 @@ export interface Platform {
   ): Promise<{ panelVisible: boolean }>
   aiLoadSession(id: string): Promise<unknown>
   aiDeleteSession(id: string): Promise<boolean>
-  aiContextUsage(sessionId: string): Promise<{ used: number; limit: number }>
+  aiContextUsage(
+    sessionId: string,
+    mode?: string
+  ): Promise<{
+    used: number
+    limit: number
+    buckets: Array<{ id: string; tokens: number }>
+  }>
   aiSend(payload: {
     sessionId: string
     text: string
     mode?: string
     planFileRel?: string | null
     turnSystemHint?: string
+    skillId?: string
     editor: {
       workspacePath: string | null
       activeFilePath: string | null
       selection: string | null
       mentionedPaths: string[]
+      attachedPaths?: string[]
     }
   }): Promise<{ ok: boolean }>
   aiAbort(): Promise<boolean>
@@ -198,6 +209,9 @@ export function createElectronPlatform(): Platform {
     showItemInFolder: async (targetPath) => {
       await api.showItemInFolder(targetPath)
     },
+    openExternal: async (url) => {
+      await api.openExternal(url)
+    },
     joinPath,
     basename,
     dirname,
@@ -262,7 +276,7 @@ export function createElectronPlatform(): Platform {
       api.aiSetWorkspacePrefs(workspacePath, partial),
     aiLoadSession: (id) => api.aiLoadSession(id),
     aiDeleteSession: (id) => api.aiDeleteSession(id),
-    aiContextUsage: (sessionId) => api.aiContextUsage(sessionId),
+    aiContextUsage: (sessionId, mode) => api.aiContextUsage(sessionId, mode),
     aiSend: (payload) => api.aiSend(payload),
     aiAbort: () => api.aiAbort(),
     aiApplyProposal: (payload) => api.aiApplyProposal(payload),
@@ -294,6 +308,9 @@ export function createBrowserStubPlatform(): Platform {
     copyFile: async () => undefined,
     toMediaUrl: async (filePath) => filePath,
     showItemInFolder: async () => undefined,
+    openExternal: async (url) => {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    },
     joinPath,
     basename,
     dirname,
@@ -378,7 +395,7 @@ export function createBrowserStubPlatform(): Platform {
     aiSetWorkspacePrefs: async () => ({ panelVisible: false }),
     aiLoadSession: async () => null,
     aiDeleteSession: async () => true,
-    aiContextUsage: async () => ({ used: 0, limit: 128000 }),
+    aiContextUsage: async () => ({ used: 0, limit: 128000, buckets: [] }),
     aiSend: async () => ({ ok: false }),
     aiAbort: async () => true,
     aiApplyProposal: async () => null,

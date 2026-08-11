@@ -20,6 +20,7 @@ export function Workbench() {
   const aiVisible = useAiStore((s) => s.panelVisible)
   const aiWidth = useAiStore((s) => s.panelWidth)
   const setAiWidth = useAiStore((s) => s.setPanelWidth)
+  const aiStreaming = useAiStore((s) => s.streaming)
   const [customMenu, setCustomMenu] = useState(false)
   const [bootReady, setBootReady] = useState(false)
   const [aiDragging, setAiDragging] = useState(false)
@@ -77,6 +78,36 @@ export function Workbench() {
       window.removeEventListener('mouseup', onUp)
     }
   }, [aiDragging, setAiWidth])
+
+  // Keep layout filling the Electron client area after maximize / DPI / fullscreen.
+  // Also re-kick when agent streaming starts/stops — heavy IPC can leave a letterboxed frame.
+  useEffect(() => {
+    const kick = (): void => {
+      const root = document.documentElement
+      root.style.width = '100%'
+      root.style.height = '100%'
+      document.body.style.width = '100%'
+      document.body.style.height = '100%'
+      // Force a layout pass so flex children re-measure against the real viewport.
+      void document.body.offsetHeight
+    }
+    kick()
+    window.addEventListener('resize', kick)
+    window.visualViewport?.addEventListener('resize', kick)
+    return () => {
+      window.removeEventListener('resize', kick)
+      window.visualViewport?.removeEventListener('resize', kick)
+    }
+  }, [])
+
+  useEffect(() => {
+    const root = document.documentElement
+    root.style.width = '100%'
+    root.style.height = '100%'
+    document.body.style.width = '100%'
+    document.body.style.height = '100%'
+    void document.body.offsetHeight
+  }, [aiStreaming])
 
   if (!bootReady) {
     return <div className="app-root" />

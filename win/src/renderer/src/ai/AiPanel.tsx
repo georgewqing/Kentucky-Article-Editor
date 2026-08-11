@@ -1,29 +1,168 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { useAiStore, type AiProposal } from '@/state/aiStore'
+import { useAiStore, type AiProposal, type AiChatMessage } from '@/state/aiStore'
 import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 import { AiComposer } from './AiComposer'
+import { FileMountChip } from './FileMountChip'
 import { SimpleMarkdown } from './simpleMarkdown'
 import { formatProposalDiff } from './proposalDiff'
 
+/** Low-saturation cool slate ramp (light → deep). */
+const BUCKET_COLORS: Record<string, string> = {
+  system: '#8a9aa8',
+  tools: '#6f8798',
+  skills: '#5a7d8c',
+  rules: '#4a6e80',
+  conversation: '#3d5a6c'
+}
+
+function formatTokens(n: number): string {
+  if (n >= 10000) return `${Math.round(n / 1000)}K`
+  if (n >= 1000) {
+    const k = n / 1000
+    return `${k.toFixed(1).replace(/\.0$/, '')}K`
+  }
+  return n.toLocaleString()
+}
+
+function UserMessageBody({ message }: { message: AiChatMessage }) {
+  const paths = message.attachedPaths || []
+  const skillId = message.skillId
+  const boilerplate =
+    skillId &&
+    message.content.trim() === `Follow skill /${skillId} for this request.`
+  const text = boilerplate ? '' : message.content
+  const hasChips = Boolean(skillId) || paths.length > 0
+
+  return (
+    <div className="ai-msg-user-content">
+      {hasChips ? (
+        <div className="ai-msg-user-chips">
+          {skillId ? (
+            <span className="ai-skill-chip ai-skill-chip-msg">/{skillId}</span>
+          ) : null}
+          {paths.map((path) => (
+            <FileMountChip key={path} path={path} variant="message" />
+          ))}
+        </div>
+      ) : null}
+      {text ? <div className="ai-msg-user-text">{text}</div> : null}
+    </div>
+  )
+}
+
 function ContextBar() {
   const { t } = useTranslation()
-  const used = useAiStore((s) => s.contextUsed)
+  const usedStore = useAiStore((s) => s.contextUsed)
   const limit = useAiStore((s) => s.contextLimit)
-  const pct = Math.min(100, Math.round((used / Math.max(1, limit)) * 100))
+  const buckets = useAiStore((s) => s.contextBuckets)
+  const refreshContextUsage = useAiStore((s) => s.refreshContextUsage)
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  // Prefer sum of buckets so header and legend never disagree.
+  const used = useMemo(() => {
+    if (!buckets.length) return usedStore
+    return buckets.reduce((n, b) => n + b.tokens, 0)
+  }, [buckets, usedStore])
+
+  const limitSafe = Math.max(1, limit)
+  const pct = Math.min(100, Math.round((used / limitSafe) * 100))
   const level = pct >= 95 ? 'critical' : pct >= 80 ? 'warn' : ''
+
+  useEffect(() => {
+    if (!open) return
+    void refreshContextUsage()
+    const onDoc = (e: MouseEvent): void => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [open, refreshContextUsage])
+
+  // Segment widths are % of the FULL window (limit), not % of used —
+  // leftover track = free capacity (matches Cursor / user expectation).
+  const stacked = useMemo(() => {
+    return buckets.map((b) => ({
+      ...b,
+      color: BUCKET_COLORS[b.id] || '#64748b',
+      pctOfLimit: Math.max(0, (b.tokens / limitSafe) * 100)
+    }))
+  }, [buckets, limitSafe])
+
   return (
-    <div className={`ai-context-bar ${level}`}>
-      <div className="ai-context-meta">
-        <span>{t('ai.context')}</span>
-        <span>
-          {used.toLocaleString()} / {limit.toLocaleString()} ({pct}%)
-        </span>
-      </div>
-      <div className="ai-context-track">
-        <div className="ai-context-fill" style={{ width: `${pct}%` }} />
-      </div>
+    <div className={`ai-context-bar ${level}`} ref={rootRef}>
+      <button
+        type="button"
+        className="ai-context-trigger"
+        aria-expanded={open}
+        title={t('ai.contextUsageTitle')}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <div className="ai-context-meta">
+          <span>{t('ai.context')}</span>
+          <span>
+            {used.toLocaleString()} / {limit.toLocaleString()} ({pct}%)
+          </span>
+        </div>
+        <div className="ai-context-track" aria-hidden>
+          {stacked.length > 0 ? (
+            stacked.map((b) => (
+              <div
+                key={b.id}
+                className="ai-context-seg"
+                style={{ width: `${b.pctOfLimit}%`, background: b.color }}
+                title={`${b.id}: ${b.tokens.toLocaleString()}`}
+              />
+            ))
+          ) : (
+            <div className="ai-context-fill" style={{ width: `${pct}%` }} />
+          )}
+        </div>
+      </button>
+
+      {open ? (
+        <div className="ai-context-popover" role="dialog" aria-label={t('ai.contextUsageTitle')}>
+          <div className="ai-context-popover-head">
+            <strong>{t('ai.contextUsageTitle')}</strong>
+            <span>
+              {t('ai.contextUsageFull', { pct })} · {used.toLocaleString()} / {limit.toLocaleString()}{' '}
+              {t('ai.contextTokens')}
+            </span>
+          </div>
+          <div className="ai-context-popover-track" aria-hidden>
+            {stacked.map((b) => (
+              <div
+                key={b.id}
+                className="ai-context-seg"
+                style={{ width: `${b.pctOfLimit}%`, background: b.color }}
+              />
+            ))}
+          </div>
+          <ul className="ai-context-legend">
+            {stacked.map((b) => (
+              <li key={b.id}>
+                <span className="ai-context-dot" style={{ background: b.color }} />
+                <span className="ai-context-legend-label">
+                  {t(`ai.contextBucket.${b.id}`, { defaultValue: b.id })}
+                </span>
+                <span className="ai-context-legend-tokens" title={b.tokens.toLocaleString()}>
+                  {formatTokens(b.tokens)}
+                </span>
+              </li>
+            ))}
+            <li className="ai-context-legend-free">
+              <span className="ai-context-dot is-free" />
+              <span className="ai-context-legend-label">{t('ai.contextBucket.free')}</span>
+              <span className="ai-context-legend-tokens">
+                {formatTokens(Math.max(0, limit - used))}
+              </span>
+            </li>
+          </ul>
+          <p className="ai-context-hint">{t('ai.contextUsageHint')}</p>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -261,7 +400,11 @@ export function AiPanel() {
               <div key={m.id} className={`ai-msg ai-msg-${m.role}`}>
                 <div className="ai-msg-role">{m.role === 'user' ? t('ai.you') : t('ai.agent')}</div>
                 <div className="ai-msg-body">
-                  {m.role === 'assistant' ? <SimpleMarkdown text={m.content} /> : m.content}
+                  {m.role === 'assistant' ? (
+                    <SimpleMarkdown text={m.content} />
+                  ) : (
+                    <UserMessageBody message={m} />
+                  )}
                 </div>
                 {turnProposals.length > 0 ? (
                   <div className="ai-msg-proposals">

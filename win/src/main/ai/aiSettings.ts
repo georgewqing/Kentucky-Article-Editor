@@ -39,6 +39,8 @@ export interface AiPublicSettings {
    * Empty array = none enabled.
    */
   enabledSkillIds: string[] | null
+  /** Max file snapshots under revisions/snaps (default 20). Full → create fails. */
+  maxRevisionSnaps: number
 }
 
 const DEFAULTS: Omit<AiPublicSettings, 'baseUrl' | 'model' | 'contextWindow' | 'activeProfileId'> & {
@@ -60,7 +62,8 @@ const DEFAULTS: Omit<AiPublicSettings, 'baseUrl' | 'model' | 'contextWindow' | '
   webSearchEnabled: false,
   webSearchProvider: 'duckduckgo',
   webSearchMaxResults: 5,
-  enabledSkillIds: null
+  enabledSkillIds: null,
+  maxRevisionSnaps: 20
 }
 
 function loadGlobalRaw(): Partial<AiPublicSettings> {
@@ -125,7 +128,11 @@ export function loadAiSettings(): AiPublicSettings {
       typeof raw.webSearchMaxResults === 'number'
         ? Math.min(10, Math.max(1, raw.webSearchMaxResults))
         : DEFAULTS.webSearchMaxResults,
-    enabledSkillIds
+    enabledSkillIds,
+    maxRevisionSnaps:
+      typeof raw.maxRevisionSnaps === 'number'
+        ? Math.min(100, Math.max(1, Math.floor(raw.maxRevisionSnaps)))
+        : DEFAULTS.maxRevisionSnaps
   }
 }
 
@@ -143,7 +150,8 @@ export function saveAiSettings(partial: Partial<AiPublicSettings>): AiPublicSett
     'webSearchEnabled',
     'webSearchProvider',
     'webSearchMaxResults',
-    'enabledSkillIds'
+    'enabledSkillIds',
+    'maxRevisionSnaps'
   ]
   const globalPatch: Record<string, unknown> = {}
   for (const k of globalKeys) {

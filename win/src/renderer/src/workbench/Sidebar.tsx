@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { FilePlus, FolderPlus, MessagesSquare, RefreshCw, Waypoints } from 'lucide-react'
 import { useAppStore } from '@/state/appStore'
 import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 import { FileTree } from './FileTree'
@@ -10,6 +11,8 @@ import {
 } from './explorerNames'
 
 type CreateKind = 'file' | 'folder' | 'mindmap' | 'dialogue' | null
+
+const actionIcon = { size: 14, strokeWidth: 2, absoluteStrokeWidth: false } as const
 
 export function Sidebar() {
   const { t } = useTranslation()
@@ -147,42 +150,47 @@ export function Sidebar() {
             <button
               type="button"
               title={t('explorer.newFile')}
+              aria-label={t('explorer.newFile')}
               disabled={!workspacePath}
               onClick={() => openCreate('file')}
             >
-              +
+              <FilePlus {...actionIcon} />
             </button>
             <button
               type="button"
               title={t('explorer.newFolder')}
+              aria-label={t('explorer.newFolder')}
               disabled={!workspacePath}
               onClick={() => openCreate('folder')}
             >
-              ⌁
+              <FolderPlus {...actionIcon} />
             </button>
             <button
               type="button"
               title={t('explorer.newMindMap')}
+              aria-label={t('explorer.newMindMap')}
               disabled={!workspacePath}
               onClick={() => openCreate('mindmap')}
             >
-              ◉
+              <Waypoints {...actionIcon} />
             </button>
             <button
               type="button"
               title={t('explorer.newDialogue')}
+              aria-label={t('explorer.newDialogue')}
               disabled={!workspacePath}
               onClick={() => openCreate('dialogue')}
             >
-              ◈
+              <MessagesSquare {...actionIcon} />
             </button>
             <button
               type="button"
               title={t('explorer.refresh')}
+              aria-label={t('explorer.refresh')}
               disabled={!workspacePath}
               onClick={() => void refreshTree()}
             >
-              ↻
+              <RefreshCw {...actionIcon} />
             </button>
           </div>
         </div>

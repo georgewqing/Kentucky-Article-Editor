@@ -41,6 +41,8 @@ const api = {
   toMediaUrl: (filePath: string): Promise<string> => ipcRenderer.invoke('fs:toMediaUrl', filePath),
   showItemInFolder: (targetPath: string): Promise<boolean> =>
     ipcRenderer.invoke('shell:showItemInFolder', targetPath),
+  openExternal: (url: string): Promise<boolean> =>
+    ipcRenderer.invoke('shell:openExternal', url),
   setMenuLocale: (locale: 'zh-CN' | 'en'): Promise<boolean> =>
     ipcRenderer.invoke('app:setMenuLocale', locale),
   getOsPlatform: (): Promise<NodeJS.Platform> => ipcRenderer.invoke('app:getOsPlatform'),
@@ -142,19 +144,27 @@ const api = {
     ipcRenderer.invoke('ai:setWorkspacePrefs', workspacePath, partial),
   aiLoadSession: (id: string): Promise<unknown> => ipcRenderer.invoke('ai:loadSession', id),
   aiDeleteSession: (id: string): Promise<boolean> => ipcRenderer.invoke('ai:deleteSession', id),
-  aiContextUsage: (sessionId: string): Promise<{ used: number; limit: number }> =>
-    ipcRenderer.invoke('ai:contextUsage', sessionId),
+  aiContextUsage: (
+    sessionId: string,
+    mode?: string
+  ): Promise<{
+    used: number
+    limit: number
+    buckets: Array<{ id: string; tokens: number }>
+  }> => ipcRenderer.invoke('ai:contextUsage', sessionId, mode),
   aiSend: (payload: {
     sessionId: string
     text: string
     mode?: string
     planFileRel?: string | null
     turnSystemHint?: string
+    skillId?: string
     editor: {
       workspacePath: string | null
       activeFilePath: string | null
       selection: string | null
       mentionedPaths: string[]
+      attachedPaths?: string[]
     }
   }): Promise<{ ok: boolean }> => ipcRenderer.invoke('ai:send', payload),
   aiAbort: (): Promise<boolean> => ipcRenderer.invoke('ai:abort'),

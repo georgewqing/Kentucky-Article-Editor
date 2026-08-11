@@ -5,6 +5,12 @@ import { getAiChatsDir } from './appBodyPaths'
 
 export type ChatRole = 'user' | 'assistant' | 'system' | 'tool'
 
+export interface AttachmentPreview {
+  path: string
+  /** First lines of the file for the sent-message “page” thumbnail. */
+  lines: string[]
+}
+
 export interface ChatMessage {
   id: string
   role: ChatRole
@@ -14,6 +20,11 @@ export interface ChatMessage {
   toolCallId?: string
   proposalIds?: string[]
   error?: string
+  /** Paperclip / composer mounts for this user turn (workspace-relative). */
+  attachedPaths?: string[]
+  attachmentPreviews?: AttachmentPreview[]
+  /** Slash skill id invoked for this user turn (composer chip). */
+  skillId?: string
 }
 
 export interface PlanStep {
@@ -43,6 +54,13 @@ export interface FileProposal {
     | 'dialogue_layout'
     | 'kmind'
     | 'kmind_layout'
+    | 'story_state'
+    | 'foreshadow'
+    | 'voice_anchor'
+    | 'voice_bank'
+    | 'glossary'
+    | 'materials_index'
+    | 'revision_meta'
     | 'other'
   /** Lines touched (dialogue) */
   changeCount?: number

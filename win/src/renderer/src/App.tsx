@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Workbench } from '@/workbench/Workbench'
+import { SelectionContextMenu } from '@/workbench/SelectionContextMenu'
 import { UnsavedChangesDialog } from '@/workbench/UnsavedChangesDialog'
 import { ConfirmDialog } from '@/workbench/ConfirmDialog'
 import { useKeyboardShortcuts } from '@/workbench/useKeyboardShortcuts'
@@ -72,6 +73,7 @@ export default function App() {
   return (
     <>
       <Workbench />
+      <SelectionContextMenu />
       <UnsavedChangesDialog />
       <ConfirmDialog />
     </>

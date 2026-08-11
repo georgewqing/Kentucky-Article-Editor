@@ -457,6 +457,20 @@ Win AI 位于 `win/src/main/ai/`，Android 位于 `android/src/ai-runtime/`。�
 7. 真机用真实兼容 API 发一轮消息，不能只测试 mock。
 8. 网络失败、无 Key、Abort、App 切后台后恢复都要有可理解结果。
 9. **对照** [`../win/project-memory/AGENT-TOOL-FEEDBACK.md`](../win/project-memory/AGENT-TOOL-FEEDBACK.md) 与 OPEN 工单 [`OPEN-agent-tool-feedback-parity.md`](./OPEN-agent-tool-feedback-parity.md)：写入门禁、`toolApi`/`gateDetail`、characters 强制落盘、continuity 无全文、Plan 返回值、append 建表、FS 工具、`propose_upsert_characters`、web snippet、diff/批量 UI。缺一项不得标「AI 已对齐」。
+10. **Round H 文学记忆**：对照 [`OPEN-literary-memory-parity.md`](./OPEN-literary-memory-parity.md)（M1–M4）。同步 `proposalGate` 的 `MEMORY_KINDS`、整套 `literary*` 模块（`WorkspaceIo` 化）、`continuity_check` aspects、`maxRevisionSnaps`、L5 摘要、`reader-critique` skill、`memoryNudge`/`memoryHint`、`voice_anchor` schemaHint。H1–H4 未 ✅ 不得标「AI 已对齐」。
+11. **Agent UI（`/` + 上下文用量 + 滚动条）**：对照 [`OPEN-agent-ui-parity.md`](./OPEN-agent-ui-parity.md)。同步 `contextEstimate`、`aiContextUsage` buckets、AiComposer slash（**可滑无滑块**）、ContextBar（色条按 **limit**、冷色板）、消息区 `overflow-x:hidden`。U1–U3 未 ✅ 不得标「Agent UI 已对齐」。  
+    **Skill 选中行为以 chrome OPEN 为准**：暖色胶囊 + `skillId` 注入 SKILL 正文（见下条），不是只写 `/id ` 进 draft。
+12. **Workbench Chrome（§70–73）**：对照 [`OPEN-workbench-chrome-parity.md`](./OPEN-workbench-chrome-parity.md)。挂载 chip / 拖入文件夹、`attachedPaths`、Skill 胶囊与正文注入、选区右键、`explorerExpandPrefs`。U4–U7 未 ✅ 不得标「Workbench chrome 已对齐」。
+
+#### Round H 通常可同步的逻辑文件（仍须 WorkspaceIo 包装 IO）
+
+- `yamlUtil.ts` / `storyState.ts` / `foreshadow.ts` / `voiceFiles.ts` / `proofread.ts` / `literaryContinuity.ts` / `memoryNudge.ts`（纯逻辑为主）
+- `glossaryMaterials.ts` / `revisions.ts` / `literaryTools.ts`（目录与拷贝必须 Android 化）
+- `contextEstimate.ts`（依赖 tools/skills 提示文案；无 Node fs）
+
+#### Round H 工作区契约（两端同一文件夹可互换）
+
+按需创建、不脚手架：`story_state.yaml`、`foreshadow.yaml`、`voice_*.yaml`、`glossary.yaml`、`materials/`、`revisions/`。启用态 = 状态表存在且 `chapters.length≥1`。记忆 YAML auto+强制落盘；语义冲突只警告。
 
 #### 网络与安全
 

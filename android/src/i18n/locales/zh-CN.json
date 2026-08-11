@@ -15,6 +15,7 @@
     "copy": "复制",
     "paste": "粘贴",
     "selectAll": "全选",
+    "searchWithGoogle": "使用 Google 搜索",
     "view": "查看",
     "reload": "重新加载",
     "toggleDevtools": "切换开发者工具",

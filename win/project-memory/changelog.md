@@ -490,6 +490,77 @@
 - TipTap 打开/切换源码时 `getMarkdown` 规范化写回 → 无编辑也 dirty
 - 修：hydration 门闩 + 忽略 `addToHistory:false`；干净 tab 切源码不序列化回写；`contentIsDirty` 忽略纯 CRLF/LF 差异
 
+## 63. Round H — 文学 Agent 记忆能力（M1–M4）
+
+- 工作区按需：`story_state.yaml` / `foreshadow.yaml` / `voice_anchor|bank.yaml` / `glossary.yaml` / `materials/` / `revisions/`（非 Git）
+- 工具：`read_*` / `propose_upsert_*` / `compare_voice` / `proofread_check` / `reader_critique`（骨架）/ 快照 create·restore
+- `continuity_check` 填 timeline/prop/foreshadow/scene/voice/glossary/proof；表内一致性 + 可选 `assertions[]`；冲突只警告
+- 启用态 = 状态表存在且 ≥1 章；L5 ~200 字计数摘要；记忆 YAML auto+强制落盘
+- `toolApi` → `2026-08-11-h`；Android OPEN：[`../../android/project-memory/OPEN-literary-memory-parity.md`](../../android/project-memory/OPEN-literary-memory-parity.md)（H1–H4）
+
+## 64. 文学记忆防遗忘（toolApi i）
+
+- 新增 `memoryNudge.ts`：系统提示 CRITICAL 清单；散文写入结果 `memoryHint`；L5 附 Before/After 调用 CTA（优先保留 CTA）
+- literary 工具 description 统一 `CALL WHEN/BEFORE/AFTER…`；`continuity_check` 强调写后 aspects
+- `toolApi` → `2026-08-11-i`；Android OPEN 同步 `memoryNudge` / `memoryHint` 契约
+
+## 65. 全屏/最大化时工作台 letterbox
+
+- 现象：窗口边框已全屏，但 UI 挤在左上，右侧/底部露出 `#141414` 底色（agent 流式时更易触发）
+- 修：`html/#root/.app-root/.workbench` 强制 `width/height:100%`；Win `bindClientAreaFill` 在 maximize/resize/fullscreen 时重申 contentSize；流式起停时再 kick 一次 layout
+
+## 66. Agent `/` skills 预览 + 上下文结构预览
+
+- Composer 输入 `/`：弹出 Skills（启用 skill）+ Commands（`/agent|/plan|/outline|/ask|/new`）；选 skill 写入 `/id`，发送时强制 `read_skill`
+- 上下文条可点：分段色条 + 分项（system / tools / skills / rules / conversation）估算弹层
+- 主进程 `contextEstimate.ts`；`ai:contextUsage` 返回 `buckets`
+- Android OPEN：[`../../android/project-memory/OPEN-agent-ui-parity.md`](../../android/project-memory/OPEN-agent-ui-parity.md)
+
+## 67. voice_anchor schema 修正（toolApi j）
+
+- 合法键 person/tense/sentence/metaphorDensity/lexicon/notes；`narrator` 写入 alias→notes
+- `schemaHint` 出现在 read/set 结果；工具 parameters 写明嵌套键
+- `TOOL_API_VERSION` → `2026-08-11-j`
+
+## 68. 上下文色条比例 + 冷色板
+
+- 色条按 `tokens/limit`（非 used 拉满）；头数字 = 分项之和；图例「剩余容量」
+- 色板低饱和冷灰蓝：`#8a9aa8` … `#3d5a6c`
+
+## 69. Agent 面板多余滑块
+
+- 消息列表：`overflow-x: hidden`（去掉底部横向滑块）；`pre` 内部可横滚
+- `/` skills 菜单：保留竖滚，隐藏滑块（`scrollbar-width: none`）
+- `.ai-pane` / `.ai-messages-wrap`：`overflow: hidden` + `min-width: 0`
+
+## 70. 选中文段右键菜单
+
+- 有非空选区时右键：Copy / Select All / Search with Google（暗色圆角，快捷键右对齐）
+- 跳过文件树 / 导图 / 活动栏等已有菜单区域
+- `shell:openExternal`（仅 http/https）供 Google 搜索
+- Win：`SelectionContextMenu.tsx`；Android CSS 同步 `.ctx-menu-item`（组件待移植）
+
+## 71. Composer 文件挂载样式（行内 chip + 示意页）
+
+- 输入区：挂载文件以冷青蓝 **行内 chip**（FileDown 图标）出现在文案前，可 × 移除
+- 发出后：用户气泡保留 chip（**无**示意页缩略图）
+- 会话字段：`attachedPaths`；`editor.attachedPaths` 随 `ai:send`
+- 可从资源管理器 **拖文件/文件夹到 Composer** 挂载；文件夹路径以 `/` 结尾，上下文注入浅层目录列表
+- Win：`FileMountChip.tsx` / `AiComposer` / `AiPanel` / `workbench/dnd.ts` / `agentLoop.readWorkspaceMention`
+
+## 72. Composer Skill 胶囊
+
+- `/` 选 skill 后变为暖色胶囊（如 `/grill-me`），可 × 清除；正文另写
+- 发送：`skillId` 落会话；**主进程注入 SKILL.md 正文**到本轮系统提示（不依赖模型先调 `read_skill`）
+- 气泡：skill/文件 chip 单独一行，正文在下
+- 仅 skill、无正文也可发送
+
+## 73. 资源管理器文件夹展开记忆
+
+- 按工作区记住展开的文件夹（`localStorage`：`kentucky:explorer-expand:<ws>`）
+- 默认：项目根展开以显示顶层条目，**子文件夹默认收起**（不再 `depth<=1` 全开）
+- Win / Android：`explorerExpandPrefs.ts` + `FileTree` ExpandCtx
+
 ## 其它小修
 
 - 选项卡悬停用 `cursor: pointer`

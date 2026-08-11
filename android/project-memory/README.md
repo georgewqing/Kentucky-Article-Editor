@@ -15,7 +15,10 @@
 | [changelog.md](./changelog.md) | 改动时间线 |
 | [OPEN-trackpad-md-ai-scroll.md](./OPEN-trackpad-md-ai-scroll.md) | **OPEN**：MD↔AI 触控板滚动（待真机验收原生分流） |
 | [OPEN-dialogue-saf-corruption.md](./OPEN-dialogue-saf-corruption.md) | **OPEN/部分修复**：台词 SAF 脏名、Accept 落盘、状态栏 insets |
-| [OPEN-agent-tool-feedback-parity.md](./OPEN-agent-tool-feedback-parity.md) | **OPEN**：Win Agent 工具反馈 Round A–D → Android 对齐（总清单在 win） |
+| [OPEN-agent-tool-feedback-parity.md](./OPEN-agent-tool-feedback-parity.md) | **OPEN**：Win Agent 工具反馈 Round A–G → Android 对齐（总清单在 win） |
+| [OPEN-literary-memory-parity.md](./OPEN-literary-memory-parity.md) | **OPEN**：文学记忆 M1–M4（Round H）详细移植契约 |
+| [OPEN-agent-ui-parity.md](./OPEN-agent-ui-parity.md) | **OPEN**：Agent `/` skills 预览 + 上下文分项用量（含色板/limit 比例） |
+| [OPEN-workbench-chrome-parity.md](./OPEN-workbench-chrome-parity.md) | **OPEN**：挂载 chip / Skill 胶囊 / 选区菜单 / 文件夹展开记忆（§70–73） |
 
 ## 2026-08-10 会话摘要（已实现 / 待验收）
 

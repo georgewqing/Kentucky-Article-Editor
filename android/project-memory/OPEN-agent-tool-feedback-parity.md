@@ -1,12 +1,13 @@
-# OPEN: Agent 工具反馈对齐（Win Round A–D → Android）
+# OPEN: Agent 工具反馈对齐（Win Round A–G + Round H → Android）
 
 > **状态：OPEN / 未开始对齐**  
 > **创建**：2026-08-11  
 > **权威总清单（含完整缺陷表与契约）**：[`../../win/project-memory/AGENT-TOOL-FEEDBACK.md`](../../win/project-memory/AGENT-TOOL-FEEDBACK.md)  
 > **Win 会话交接**：[`../../win/project-memory/SESSION-TOOL-FEEDBACK.md`](../../win/project-memory/SESSION-TOOL-FEEDBACK.md)  
+> **文学记忆详细契约（Round H / M1–M4）**：[`OPEN-literary-memory-parity.md`](./OPEN-literary-memory-parity.md)  
 > **移植手册**：[`PORTING-WIN-TO-ANDROID.md`](./PORTING-WIN-TO-ANDROID.md) §阶段 G
 
-用户在真实创作流（随笔 → 长篇 → 归档 → 计划）中暴露的 agent 工具缺陷，Win 已按 Round A–D 修复。Android `ai-runtime` **尚未按同一契约对齐**；后续移植必须按总清单逐项完成，避免只同步部分 schema。
+用户在真实创作流（随笔 → 长篇 → 归档 → 计划）中暴露的 agent 工具缺陷，Win 已按 Round A–G 修复；**Round H** 另增文学记忆层（状态表/伏笔/声线/场景快照/素材译名）。Android `ai-runtime` **尚未按同一契约对齐**；后续移植必须按总清单 + 文学记忆 OPEN **逐项**完成，避免只同步部分 schema。
 
 ---
 
@@ -41,8 +42,47 @@
 | W18 | `propose_upsert_characters` | ❌ | |
 | B1 | kmind 坐标 | ⏳ 两端 backlog | |
 | B2 | 幽灵硬门禁 | ⏳ 两端 backlog | |
+| H1 | 文学记忆 M1：story_state / foreshadow + continuity timeline/prop/foreshadow + assertions[] + L5 + 防遗忘（memoryHint / 系统提示） | ❌ | **详约** → [`OPEN-literary-memory-parity.md`](./OPEN-literary-memory-parity.md)；指纹 `2026-08-11-j` |
+| H2 | M2 voice_anchor / voice_bank / compare_voice（含 schemaHint、`narrator`→notes） | ❌ | 同上 §4.7.1 |
+| H3 | M3 scenes[] + revisions/ 快照（非 Git） | ❌ | `maxRevisionSnaps`；restore Accept |
+| H4 | M4 materials / glossary / proofread / reader_critique | ❌ | materials 正文 prose；glossary auto |
+| U1 | Composer `/` Skills+Commands 预览 + send 时 `read_skill` hint；菜单可滑无滑块 | ❌ | **详约** → [`OPEN-agent-ui-parity.md`](./OPEN-agent-ui-parity.md) |
+| U2 | 上下文分项用量弹层（buckets；色条按 limit；冷色板） | ❌ | 同上；`contextEstimate.ts` |
+| U3 | 工作台 CSS 铺满 + Agent 消息区无横向滑块 | ❌ | Electron letterbox 专属逻辑不移植；消息 `overflow-x:hidden` 要同步 |
+| U4 | Composer 挂载 chip + 拖入文件/文件夹；`attachedPaths`（无缩略图） | ❌ | **详约** → [`OPEN-workbench-chrome-parity.md`](./OPEN-workbench-chrome-parity.md) §2；CSS 已部分同步 |
+| U5 | Skill 暖色胶囊 + 发送注入 SKILL 正文（`skillId`） | ❌ | 同上 §3；覆盖旧「仅 turnSystemHint」 |
+| U6 | 选中文段右键：Copy / Select All / Google | ❌ | 同上 §4；`openExternal` |
+| U7 | 资源树文件夹展开记忆（默认子夹收起） | ⏳ | 同上 §5；`explorerExpandPrefs` 已拷贝，FileTree ExpandCtx 待验 |
 
-验收指纹：工具结果出现 `toolApi`（与 Win 当前版本字符串一致，见总清单）。
+验收指纹：工具结果出现 `toolApi`（与 Win 当前版本字符串一致，见总清单 / 文学记忆 OPEN / Agent UI OPEN）。
+
+---
+
+## Round H 移植入口（勿只改进度板）
+
+完整契约、文件映射、issue kinds、Grill 定稿、真机验收 8 条：
+
+→ [`OPEN-literary-memory-parity.md`](./OPEN-literary-memory-parity.md)
+
+建议顺序：先 W1/W1b/W3（门禁 + continuity 结构），再按该文 §7 做 H1→H4。
+
+---
+
+## Agent UI 移植入口（`/` + 上下文用量）
+
+完整契约、色板、验收：
+
+→ [`OPEN-agent-ui-parity.md`](./OPEN-agent-ui-parity.md)
+
+可与 H1 并行做 U2（估算不依赖记忆 YAML）；U1 依赖 `list_skills` / `read_skill` 已可用。
+
+## Workbench Chrome 移植入口（挂载 · Skill 胶囊 · 选区菜单 · 展开记忆）
+
+changelog §70–73 完整契约与验收：
+
+→ [`OPEN-workbench-chrome-parity.md`](./OPEN-workbench-chrome-parity.md)
+
+U4–U7；U5 含 skill **正文注入**（勿只搬旧 turnSystemHint）。
 
 ---
 

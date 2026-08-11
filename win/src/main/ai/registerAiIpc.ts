@@ -22,10 +22,10 @@ import { getWorkspaceAiPrefs, setWorkspaceAiPrefs } from './aiWorkspacePrefs'
 import {
   createSession,
   deleteSession,
-  estimateSessionTokens,
   listSessions,
   loadSession
 } from './chatSessions'
+import { estimateContextBreakdown } from './contextEstimate'
 import {
   abortAiForWebContents,
   applyAllPending,
@@ -120,11 +120,10 @@ export function registerAiIpc(): void {
     return true
   })
 
-  ipcMain.handle('ai:contextUsage', (_e, sessionId: string) => {
-    const session = loadSession(sessionId)
-    const settings = loadAiSettings()
-    const used = session ? estimateSessionTokens(session) : 0
-    return { used, limit: settings.contextWindow }
+  ipcMain.handle('ai:contextUsage', (_e, sessionId: string, mode?: AgentMode) => {
+    const session = sessionId ? loadSession(sessionId) : null
+    const agentMode = mode === 'ask' || mode === 'plan' || mode === 'outline' || mode === 'agent' ? mode : 'agent'
+    return estimateContextBreakdown(session, agentMode)
   })
 
   ipcMain.handle(
@@ -138,6 +137,7 @@ export function registerAiIpc(): void {
         mode?: AgentMode
         planFileRel?: string | null
         turnSystemHint?: string
+        skillId?: string
       }
     ) => {
       const win = winFromEvent(e)
@@ -149,7 +149,8 @@ export function registerAiIpc(): void {
         editor: payload.editor,
         mode: payload.mode,
         planFileRel: payload.planFileRel,
-        turnSystemHint: payload.turnSystemHint
+        turnSystemHint: payload.turnSystemHint,
+        skillId: payload.skillId
       })
       return { ok: true }
     }

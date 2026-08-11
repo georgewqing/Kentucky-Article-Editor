@@ -23,6 +23,12 @@ export interface AiSettingsView {
   webSearchProvider: 'duckduckgo' | 'bing' | 'brave' | 'tavily'
   webSearchMaxResults: number
   enabledSkillIds: string[] | null
+  maxRevisionSnaps: number
+}
+
+export interface AiContextBucket {
+  id: string
+  tokens: number
 }
 
 export interface AiSkillView {
@@ -49,6 +55,10 @@ export interface AiChatMessage {
   toolName?: string
   proposalIds?: string[]
   error?: string
+  attachedPaths?: string[]
+  attachmentPreviews?: Array<{ path: string; lines: string[] }>
+  /** Slash skill invoked for this user turn. */
+  skillId?: string
 }
 
 export interface AiProposal {
@@ -94,11 +104,14 @@ interface AiState {
   error: string | null
   contextUsed: number
   contextLimit: number
+  contextBuckets: AiContextBucket[]
   showHistory: boolean
   draft: string
   agentMode: AgentMode
   profiles: AiProfileView[]
   composerAttachments: string[]
+  /** Slash-selected skill shown as a composer chip (not plain `/id` text). */
+  composerSkillId: string | null
   hydrate: () => Promise<void>
   /** Rebind panel prefs + chat list when workspace opens/closes/switches. */
   onWorkspaceChanged: (workspacePath: string | null) => Promise<void>
@@ -116,6 +129,7 @@ interface AiState {
   addComposerAttachment: (relPath: string) => void
   removeComposerAttachment: (relPath: string) => void
   clearComposerAttachments: () => void
+  setComposerSkillId: (id: string | null) => void
   pickComposerAttachments: () => Promise<void>
   refreshSessions: () => Promise<void>
   newChat: () => Promise<void>
@@ -142,11 +156,15 @@ interface AiState {
   refreshContextUsage: () => Promise<void>
 }
 
-function getEditorContext(mentionedPaths: string[] = []): {
+function getEditorContext(
+  mentionedPaths: string[] = [],
+  attachedPaths: string[] = []
+): {
   workspacePath: string | null
   activeFilePath: string | null
   selection: string | null
   mentionedPaths: string[]
+  attachedPaths: string[]
 } {
   const app = useAppStore.getState()
   const tab = app.tabs.find((t) => t.id === app.activeTabId)
@@ -161,7 +179,8 @@ function getEditorContext(mentionedPaths: string[] = []): {
     workspacePath: app.workspacePath,
     activeFilePath: tab?.path ?? null,
     selection,
-    mentionedPaths
+    mentionedPaths,
+    attachedPaths
   }
 }
 
@@ -179,11 +198,13 @@ export const useAiStore = create<AiState>((set, get) => ({
   error: null,
   contextUsed: 0,
   contextLimit: 128000,
+  contextBuckets: [],
   showHistory: false,
   draft: '',
   agentMode: 'agent',
   profiles: [],
   composerAttachments: [],
+  composerSkillId: null,
 
   hydrate: async () => {
     const p = getPlatform()
@@ -232,7 +253,9 @@ export const useAiStore = create<AiState>((set, get) => ({
       error: null,
       contextUsed: 0,
       agentPhase: 'idle',
-      agentToolName: null
+      agentToolName: null,
+      composerAttachments: [],
+      composerSkillId: null
     })
     if (sessions[0]) {
       await get().openSession(sessions[0].id)
@@ -268,6 +291,7 @@ export const useAiStore = create<AiState>((set, get) => ({
   setAgentMode: (mode) => {
     set({ agentMode: mode })
     void getPlatform().aiSaveSettings({ agentMode: mode })
+    void get().refreshContextUsage()
   },
 
   refreshProfiles: async () => {
@@ -321,23 +345,32 @@ export const useAiStore = create<AiState>((set, get) => ({
   },
 
   addComposerAttachment: (relPath) => {
-    const norm = relPath.replace(/\\/g, '/')
-    if (!norm) return
-    set((s) => ({
-      composerAttachments: s.composerAttachments.includes(norm)
-        ? s.composerAttachments
-        : [...s.composerAttachments, norm]
-    }))
+    const raw = relPath.replace(/\\/g, '/')
+    if (!raw) return
+    const isDir = /\/$/.test(raw)
+    const norm = isDir ? raw.replace(/\/+$/, '') + '/' : raw.replace(/\/+$/, '')
+    const key = norm.replace(/\/+$/, '').toLowerCase()
+    set((s) => {
+      const withoutDup = s.composerAttachments.filter(
+        (p) => p.replace(/\/+$/, '').toLowerCase() !== key
+      )
+      return { composerAttachments: [...withoutDup, norm] }
+    })
   },
 
   removeComposerAttachment: (relPath) => {
-    const norm = relPath.replace(/\\/g, '/')
+    const key = relPath.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
     set((s) => ({
-      composerAttachments: s.composerAttachments.filter((p) => p !== norm)
+      composerAttachments: s.composerAttachments.filter(
+        (p) => p.replace(/\/+$/, '').toLowerCase() !== key
+      )
     }))
   },
 
   clearComposerAttachments: () => set({ composerAttachments: [] }),
+
+  setComposerSkillId: (id) =>
+    set({ composerSkillId: id && id.trim() ? id.trim() : null }),
 
   pickComposerAttachments: async () => {
     const ws = useAppStore.getState().workspacePath
@@ -411,7 +444,15 @@ export const useAiStore = create<AiState>((set, get) => ({
       return
     }
     const session = (await getPlatform().aiCreateSession(ws)) as AiSession
-    set({ session, error: null, streamBuffer: '', showHistory: false })
+    set({
+      session,
+      error: null,
+      streamBuffer: '',
+      showHistory: false,
+      draft: '',
+      composerAttachments: [],
+      composerSkillId: null
+    })
     await get().refreshSessions()
     await get().refreshContextUsage()
   },
@@ -488,14 +529,28 @@ export const useAiStore = create<AiState>((set, get) => ({
 
   refreshContextUsage: async () => {
     const id = get().session?.id
-    if (!id) return
-    const usage = await getPlatform().aiContextUsage(id)
-    set({ contextUsed: usage.used, contextLimit: usage.limit })
+    if (!id) {
+      // Still show fixed overhead (system/tools) with empty conversation.
+      const usage = await getPlatform().aiContextUsage('', get().agentMode)
+      set({
+        contextUsed: usage.used,
+        contextLimit: usage.limit,
+        contextBuckets: usage.buckets || []
+      })
+      return
+    }
+    const usage = await getPlatform().aiContextUsage(id, get().agentMode)
+    set({
+      contextUsed: usage.used,
+      contextLimit: usage.limit,
+      contextBuckets: usage.buckets || []
+    })
   },
 
   send: async (text, opts) => {
-    const content = (text ?? get().draft).trim()
-    if (!content || get().streaming) return
+    const draftText = (text ?? get().draft).trim()
+    const chipSkill = get().composerSkillId?.trim() || null
+    if ((!draftText && !chipSkill) || get().streaming) return
     let session = get().session
     if (!session) {
       await get().newChat()
@@ -516,24 +571,51 @@ export const useAiStore = create<AiState>((set, get) => ({
       return
     }
 
+    const MODE_CMDS = new Set(['agent', 'plan', 'outline', 'ask', 'new'])
+    const skillInvoke = draftText.match(/^\/([A-Za-z0-9._-]+)(?:\s+([\s\S]*))?$/)
+    let sendText = draftText
+    let turnSystemHint = opts?.turnSystemHint
+    let skillId: string | undefined
+    if (chipSkill && !MODE_CMDS.has(chipSkill)) {
+      skillId = chipSkill
+      sendText = draftText || `Follow skill /${skillId} for this request.`
+    } else if (skillInvoke && !MODE_CMDS.has(skillInvoke[1])) {
+      skillId = skillInvoke[1]
+      const rest = (skillInvoke[2] || '').trim()
+      sendText = rest || `Follow skill /${skillId} for this request.`
+    }
+
+    if (skillId) {
+      turnSystemHint = [
+        turnSystemHint,
+        // Skill body is injected in agentLoop; keep a short reminder for the model.
+        `User mounted skill /${skillId}. Follow the injected skill instructions. Plain "/…" in the user text is literal, not a command.`
+      ]
+        .filter(Boolean)
+        .join('\n')
+    }
+
+    const attachments = get().composerAttachments
     set({
       streaming: true,
       error: null,
       draft: '',
       streamBuffer: '',
       agentPhase: 'thinking',
-      agentToolName: null
+      agentToolName: null,
+      composerAttachments: [],
+      composerSkillId: null
     })
-    const fromAt = Array.from(content.matchAll(/@([^\s@]+)/g)).map((m) => m[1])
-    const attachments = get().composerAttachments
+    const fromAt = Array.from(sendText.matchAll(/@([^\s@]+)/g)).map((m) => m[1])
     const mentions = Array.from(new Set([...fromAt, ...attachments].map((p) => p.replace(/\\/g, '/'))))
     await getPlatform().aiSend({
       sessionId: session.id,
-      text: content,
+      text: sendText,
       mode: get().agentMode,
       planFileRel: get().session?.planFileRel ?? undefined,
-      turnSystemHint: opts?.turnSystemHint,
-      editor: getEditorContext(mentions)
+      turnSystemHint,
+      skillId,
+      editor: getEditorContext(mentions, attachments.map((p) => p.replace(/\\/g, '/')))
     })
   },
 

@@ -43,7 +43,7 @@
 | 项 | 决定 |
 |----|------|
 | 协议 | OpenAI 兼容；**多配置档**（label/baseUrl/model/contextWindow + 每档加密 Key），输入栏切换 |
-| UI | 编辑区右侧面板；**Cursor 风格 composer**（模式 / 配置档 / 参考文件芯片 / 上传 / 发送）；主题色变量 |
+| UI | 编辑区右侧面板；**Cursor 风格 composer**（模式 / 配置档 / **行内挂载芯片**；资源树拖入挂载；**Skill 暖色胶囊** + 发送注入 SKILL 正文 / 上传 / 发送）；主题色变量 |
 | 模式 | **Ask** 无工具；**Plan** 只读调研 + `create_plan` 写入工作区 `plans/<slug>.plan.md`（同 slug 覆盖、自动打开）；**Outline** 结构/导图；**Agent** 全工具+G3 可审。计划真相 = md 文件；**对话栏上方不挂常驻计划列表**。计划 md 顶栏 **开始执行 / Build**：切 Agent、绑定 `planFileRel`、发执行提示。Agent 若会话有 `planFileRel` 则 InjectPath；`update_plan_step` Soft 勾选 md（保留正文） |
 | 工作区文件结构 | Agent 可用 **`workspace_mkdir` / `workspace_copy` / `workspace_move` / `workspace_delete`**（主进程 Node FS，**非** Shell）。用于归档/迁移；move/delete 同步台词 sidecar 与 `.kmind` assets；UI 刷新树并关闭受影响标签 |
 | 写文件 | **G3 按类型可审**：已有内容的正文 md/txt、导图内容编辑、多文件同轮内容改 → Accept/Reject；**新建 / 空文件**、**角色 upsert（始终 auto，含批量）**、台词 ≤5 行、纯 layout → 自动。结果含 `written`/`pending`/`reviewHint`。Accept 后按设置写盘或标黄（**R1**：Accept 前不改打开中的 tab） |
@@ -54,7 +54,9 @@
 | 会话 | 多会话 JSON：`data/ai-chats/`；**按工作区路径严格隔离**（列表/打开均过滤，互不互通） |
 | 面板开关 | **绑定工作区**：启动默认关闭；`data/ai-workspace-prefs.json` 记住各工作区是否打开；无工作区时不可开 AI |
 | 上下文 | **L5**：当前文件/选区/`@` + 自动角色表摘要；上下文占用进度条；接近满时禁止静默丢弃历史 |
-| 工具 | 只读 list/read；**L1** continuity_check；**L2** 角色驱动；**L3** scene↔kmind；**L4** 台词图；`.kmind` + dagre；**Skills**（`data/ai-skills/`）；可选 **联网搜索**（默认关，DuckDuckGo；Brave/Tavily 预留）；无 Shell/Git |
+| 工具 | 只读 list/read；**L1** continuity_check（含 timeline/prop/foreshadow/scene/voice/glossary/proof）；**L2** 角色；**L3** scene↔kmind；**L4** 台词图；**文学记忆** story_state/foreshadow/voice/glossary/materials/revisions（按需 YAML，非 Git）；`.kmind` + dagre；**Skills**；可选联网搜索；无 Shell/Git |
+| 文学记忆文件 | 工作区根可见、按需创建：`story_state.yaml`、`foreshadow.yaml`、`voice_anchor.yaml`、`voice_bank.yaml`、`glossary.yaml`；`materials/`；`revisions/`。启用态 = story_state 存在且至少一章。语义冲突只警告不挡写入。M1 schema 冻结后只增不改。 |
+| 快照上限 | `maxRevisionSnaps`（默认 20，AI 设置可配）；满则拒建、不自动删 |
 | 导图可读性 | AI 须建树/分层 DAG（非角色↔场景全连接网）；缺省 Sugiyama/LR；乱图可 `layout_kmind` |
 | 台词图能力 | AI 按协议 **v1.3** 读写：`read_dialogue` 看 options / 空 text 链；角色 `operable`；`propose_dialogue_graph` 整图（csv+choices+layout，线性也写空 text options）；`propose_set_dialogue_choices` / `layout_dialogue` / 行级增改排；speaker=角色 id；`propose_upsert_character` 可写 operable |
 | Skills | 全局 `data/ai-skills/<id>/SKILL.md`；设置开关/导入；catalog 注入提示；`list_skills` / `read_skill`；**不**执行 scripts |

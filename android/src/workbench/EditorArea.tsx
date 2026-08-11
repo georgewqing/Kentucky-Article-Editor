@@ -76,47 +76,48 @@ export function EditorArea() {
   return (
     <section className="editor-area">
       <div className="tab-bar">
-        {tabs.map((tab) => (
-          <div
-            key={tab.id}
-            className={`tab ${tab.id === activeTabId ? 'active' : ''}`}
-            onClick={() => onTabClick(tab.id, false)}
-            onContextMenu={(e) => {
-              e.preventDefault()
-              if (splitEnabled) setSplitTab(tab.id)
-            }}
-          >
-            <span className="tab-title">
-              {tab.isNew ? (
-                <span className="tab-new" title={t('editor.tabNew')}>
-                  ●{' '}
-                </span>
-              ) : tab.dirty ? (
-                <span className="tab-dirty" title={t('editor.tabDirty')}>
-                  ●{' '}
-                </span>
-              ) : null}
-              {tab.title}
-            </span>
-            <button
-              type="button"
-              className="tab-close"
-              title={t('editor.close')}
-              aria-label={`${t('editor.close')} ${tab.title}`}
-              onPointerDown={(e) => {
-                // Keep the parent tab from taking ownership before the close click.
-                e.stopPropagation()
-              }}
-              onClick={(e) => {
-                e.stopPropagation()
-                void closeTab(tab.id)
+        <div className="tab-bar-scroll">
+          {tabs.map((tab) => (
+            <div
+              key={tab.id}
+              className={`tab ${tab.id === activeTabId ? 'active' : ''}`}
+              onClick={() => onTabClick(tab.id, false)}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                if (splitEnabled) setSplitTab(tab.id)
               }}
             >
-              ×
-            </button>
-          </div>
-        ))}
-        <div className="tab-bar-spacer" />
+              <span className="tab-title">
+                {tab.isNew ? (
+                  <span className="tab-new" title={t('editor.tabNew')}>
+                    ●{' '}
+                  </span>
+                ) : tab.dirty ? (
+                  <span className="tab-dirty" title={t('editor.tabDirty')}>
+                    ●{' '}
+                  </span>
+                ) : null}
+                {tab.title}
+              </span>
+              <button
+                type="button"
+                className="tab-close"
+                title={t('editor.close')}
+                aria-label={`${t('editor.close')} ${tab.title}`}
+                onPointerDown={(e) => {
+                  // Keep the parent tab from taking ownership before the close click.
+                  e.stopPropagation()
+                }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void closeTab(tab.id)
+                }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
         <div className="tab-bar-actions">
           {splitEnabled ? (
             <button type="button" onClick={disableSplit}>

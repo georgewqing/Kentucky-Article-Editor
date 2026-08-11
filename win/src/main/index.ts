@@ -154,6 +154,39 @@ function createSplashWindow(): BrowserWindow {
 
 const forceCloseIds = new Set<number>()
 
+/**
+ * Windows: after maximize / fullscreen / DPI changes, Chromium sometimes leaves the
+ * webContents view smaller than the client area (letterbox of backgroundColor).
+ * Re-assert content size so the UI fills the frame.
+ */
+function bindClientAreaFill(win: BrowserWindow): void {
+  if (process.platform !== 'win32') return
+  let ticking = false
+  const sync = (): void => {
+    if (win.isDestroyed() || ticking) return
+    ticking = true
+    setImmediate(() => {
+      ticking = false
+      if (win.isDestroyed()) return
+      try {
+        const [cw, ch] = win.getContentSize()
+        if (cw > 0 && ch > 0) win.setContentSize(cw, ch)
+        if (!win.webContents.isDestroyed()) win.webContents.invalidate()
+      } catch {
+        /* ignore */
+      }
+    })
+  }
+  win.on('resize', sync)
+  win.on('maximize', sync)
+  win.on('unmaximize', sync)
+  win.on('restore', sync)
+  win.on('enter-full-screen', sync)
+  win.on('leave-full-screen', sync)
+  win.webContents.on('did-finish-load', sync)
+  win.webContents.on('dom-ready', sync)
+}
+
 function createWindow(opts: CreateWindowOpts = {}): BrowserWindow {
   const role: WindowRole = opts.role ?? 'main'
   const isFloat = role === 'float'
@@ -188,6 +221,8 @@ function createWindow(opts: CreateWindowOpts = {}): BrowserWindow {
   if (process.platform !== 'darwin') {
     win.setMenuBarVisibility(false)
   }
+
+  bindClientAreaFill(win)
 
   const wcId = win.webContents.id
   win.webContents.on('destroyed', () => {
@@ -539,6 +574,18 @@ ipcMain.handle('shell:showItemInFolder', async (_e, targetPath: string) => {
       return !err
     }
     shell.showItemInFolder(targetPath)
+    return true
+  } catch {
+    return false
+  }
+})
+
+ipcMain.handle('shell:openExternal', async (_e, url: string) => {
+  if (!url || typeof url !== 'string') return false
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false
+    await shell.openExternal(parsed.toString())
     return true
   } catch {
     return false

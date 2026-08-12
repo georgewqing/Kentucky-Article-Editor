@@ -38,7 +38,9 @@
     "recent": "最近打开",
     "recentWorkspaces": "最近工作区",
     "noRecent": "暂无最近文件夹",
-    "removeRecent": "移除"
+    "removeRecent": "移除",
+    "alreadyOpen": "已打开",
+    "multiHint": "与活动栏「+」相同：从这里再开文件夹会加入当前窗口，不会关掉已打开的工作区。"
   },
   "explorer": {
     "title": "资源管理器",

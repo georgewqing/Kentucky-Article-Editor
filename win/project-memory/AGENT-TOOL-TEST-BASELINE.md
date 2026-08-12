@@ -5,7 +5,7 @@
 > **工具版本轨迹**：旧版 → `d` → `e` → `f` → **`2026-08-11-g`**（MD patch 修复）  
 > **状态**：正式工作区已清空；本文为后续参考基线  
 > **权威缺陷/契约表**：[`AGENT-TOOL-FEEDBACK.md`](./AGENT-TOOL-FEEDBACK.md)  
-> **Android 对齐**：[`../../android/project-memory/OPEN-agent-tool-feedback-parity.md`](../../android/project-memory/OPEN-agent-tool-feedback-parity.md)
+> **Android 对齐**：[`../../android/project-memory/BOARD.md`](../../android/project-memory/BOARD.md)
 
 ---
 

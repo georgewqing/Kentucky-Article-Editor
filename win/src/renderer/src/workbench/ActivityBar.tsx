@@ -22,6 +22,7 @@ export function ActivityBar() {
   const switchWorkspace = useAppStore((s) => s.switchWorkspace)
   const addWorkspaceViaDialog = useAppStore((s) => s.addWorkspaceViaDialog)
   const closeWorkspaceById = useAppStore((s) => s.closeWorkspaceById)
+  const goHome = useAppStore((s) => s.goHome)
   const aiVisible = useAiStore((s) => s.panelVisible)
   const setPanelVisible = useAiStore((s) => s.setPanelVisible)
   const togglePanel = useAiStore((s) => s.togglePanel)
@@ -40,10 +41,6 @@ export function ActivityBar() {
       window.removeEventListener('blur', close)
     }
   }, [menu])
-
-  const goHome = (): void => {
-    setActiveView('home')
-  }
 
   const onAiClick = (): void => {
     if (!workspacePath) return
@@ -129,6 +126,27 @@ export function ActivityBar() {
       </div>
 
       <div className="spacer" />
+      <button
+        type="button"
+        className={`activity-btn ${activeView === 'scm' && !onHome ? 'active' : ''}`}
+        title={t('scm.title')}
+        aria-label={t('scm.title')}
+        disabled={onHome}
+        onClick={() => {
+          if (onHome) return
+          if (activeView === 'scm') {
+            setActiveView('explorer')
+            setSidebarVisible(true)
+          } else {
+            setActiveView('scm')
+            setSidebarVisible(true)
+          }
+        }}
+      >
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+          <path d="M6 3a3 3 0 0 1 2.83 4H11a1 1 0 0 1 1 1v5.17a3.001 3.001 0 1 1-2 0V9H8.83A3.001 3.001 0 1 1 6 3zm0 2a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm9 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2z" />
+        </svg>
+      </button>
       <button
         type="button"
         className={`activity-btn ${activeView === 'settings' ? 'active' : ''}`}

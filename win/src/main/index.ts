@@ -10,6 +10,8 @@ import {
   docPatch,
   docSave,
   docDiscard,
+  docReloadFromDisk,
+  docEvict,
   docSeedFromRenderer,
   docSubscribe,
   docUnsubscribe,
@@ -33,6 +35,9 @@ import {
   writeSplashTheme
 } from './themeSettings'
 import { registerAiIpc } from './ai/registerAiIpc'
+import { registerGitIpc } from './git/registerGitIpc'
+import { setGitExecutable } from './git/gitService'
+import { loadAiSettings } from './ai/aiSettings'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -298,6 +303,12 @@ app.whenReady().then(() => {
 
   applyAppMenu('zh-CN')
   registerAiIpc()
+  registerGitIpc()
+  try {
+    setGitExecutable(loadAiSettings().gitPath)
+  } catch {
+    /* ignore */
+  }
   createWindow({ role: 'main', showSplash: true })
 
   app.on('activate', () => {
@@ -429,6 +440,19 @@ ipcMain.handle('doc:save', async (e, filePath: string) => {
 
 ipcMain.handle('doc:discard', (e, filePath: string) => {
   return docDiscard(filePath, e.sender.id)
+})
+
+ipcMain.handle('doc:reloadFromDisk', async (_e, filePath: string) => {
+  try {
+    return await docReloadFromDisk(filePath)
+  } catch {
+    return null
+  }
+})
+
+ipcMain.handle('doc:evict', (_e, filePath: string) => {
+  docEvict(filePath)
+  return true
 })
 
 ipcMain.handle('window:confirmClose', (e) => {

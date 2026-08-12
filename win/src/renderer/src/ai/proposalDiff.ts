@@ -42,3 +42,32 @@ export function formatProposalDiff(before: string, after: string, maxLines = 48)
   }
   return out.join('\n')
 }
+
+export type ChangeLineRange = { startLine: number; endLine: number }
+
+/** 1-based line ranges in `after` that differ from `before` (single outer hunk). */
+export function computeChangeRanges(before: string, after: string): ChangeLineRange[] {
+  const b = before ?? ''
+  const a = after ?? ''
+  if (b === a) return []
+  const oldLines = b.split('\n')
+  const newLines = a.split('\n')
+  if (!b.trim()) {
+    return newLines.length ? [{ startLine: 1, endLine: newLines.length }] : []
+  }
+  let start = 0
+  while (start < oldLines.length && start < newLines.length && oldLines[start] === newLines[start]) {
+    start += 1
+  }
+  let oldEnd = oldLines.length - 1
+  let newEnd = newLines.length - 1
+  while (oldEnd >= start && newEnd >= start && oldLines[oldEnd] === newLines[newEnd]) {
+    oldEnd -= 1
+    newEnd -= 1
+  }
+  if (newEnd < start) {
+    const line = Math.max(1, start)
+    return [{ startLine: line, endLine: line }]
+  }
+  return [{ startLine: start + 1, endLine: newEnd + 1 }]
+}

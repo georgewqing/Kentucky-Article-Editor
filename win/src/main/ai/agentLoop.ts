@@ -9,6 +9,7 @@ import {
   type ChatMessage,
   type ChatSession,
   type FileProposal,
+  type GitPendingOp,
   type PlanStep
 } from './chatSessions'
 import { loadAiSettings } from './aiSettings'
@@ -27,7 +28,6 @@ import {
 import { parseCharactersCsv } from './formats'
 import {
   decideAutoApply,
-  shouldPersistAutoToDisk,
   type FileProposalEx,
   type GateDecision
 } from './proposalGate'
@@ -42,7 +42,7 @@ export interface EditorContextPayload {
   activeFilePath: string | null
   selection: string | null
   mentionedPaths: string[]
-  /** Composer paperclip mounts (subset of mentions); used for bubble UI + previews. */
+  /** Composer paperclip mounts; bodies CRITICAL-injected each turn (like skill chips). */
   attachedPaths?: string[]
 }
 
@@ -50,13 +50,18 @@ function send(win: BrowserWindow, channel: string, payload: unknown): void {
   if (!win.isDestroyed()) win.webContents.send(channel, payload)
 }
 
+function pathKey(p: string): string {
+  return p.replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase()
+}
+
 function readAbsSafe(workspaceRoot: string | null, filePath: string): string | null {
   if (!workspaceRoot || !filePath) return null
   try {
     const cleaned = filePath.replace(/[/\\]+$/, '')
     const abs = isAbsolute(cleaned) ? cleaned : join(workspaceRoot, cleaned)
-    const rootNorm = workspaceRoot.replace(/[/\\]+$/, '').toLowerCase()
-    if (!abs.toLowerCase().startsWith(rootNorm)) return null
+    const rootKey = pathKey(workspaceRoot)
+    const absKey = pathKey(abs)
+    if (absKey !== rootKey && !absKey.startsWith(rootKey + '\\')) return null
     if (!existsSync(abs)) return null
     return abs
   } catch {
@@ -84,6 +89,40 @@ function readWorkspaceMention(workspaceRoot: string | null, filePath: string): s
     return null
   }
   return readWorkspaceText(workspaceRoot, filePath.replace(/[/\\]+$/, ''), null)
+}
+
+/** CRITICAL turn hint for composer paperclip mounts (parity with skill body injection). */
+function buildMountedFilesHint(
+  workspaceRoot: string | null,
+  attachedPaths: string[]
+): string | null {
+  if (!attachedPaths.length) return null
+  const blocks: string[] = [
+    'CRITICAL: User mounted file(s) / folder(s) via the composer chip for this turn.',
+    'These are primary attached workspace paths — treat them as the subject of the request.',
+    'They are NOT skills. Skills are /id capsules whose SKILL.md body is injected separately.',
+    'Do not ask the user to re-attach or claim you cannot see a mounted path if its body is below.',
+    ''
+  ]
+  for (const rel of attachedPaths.slice(0, 8)) {
+    const label = rel.replace(/\\/g, '/')
+    const body = readWorkspaceMention(workspaceRoot, rel)
+    blocks.push(`# Mounted: ${label}`)
+    if (!body) {
+      blocks.push(
+        '(Could not read — missing, unreadable, or outside the workspace sandbox. Tell the user.)'
+      )
+    } else {
+      blocks.push('"""')
+      blocks.push(body)
+      blocks.push('"""')
+    }
+    blocks.push('')
+  }
+  if (attachedPaths.length > 8) {
+    blocks.push(`…and ${attachedPaths.length - 8} more mount(s) omitted from this injection.`)
+  }
+  return blocks.join('\n')
 }
 
 /** L5: head + selection neighborhood + tail when file is large. */
@@ -146,12 +185,12 @@ function buildCharacterSummary(workspaceRoot: string | null): string | null {
   }
 }
 
-function toApiMessagesWithTools(
+async function toApiMessagesWithTools(
   session: ChatSession,
   editor: EditorContextPayload,
   mode: AgentToolMode,
   turnSystemHint?: string
-): ChatCompletionMessage[] {
+): Promise<ChatCompletionMessage[]> {
   const settings = loadAiSettings()
   const msgs: ChatCompletionMessage[] = [
     {
@@ -171,6 +210,13 @@ function toApiMessagesWithTools(
   if (editor.workspacePath) {
     const storyL5 = buildStoryStateL5Summary(editor.workspacePath)
     if (storyL5) ctxParts.push(storyL5)
+    try {
+      const { buildGitL5Summary } = await import('../git/gitService')
+      const gitL5 = await buildGitL5Summary(editor.workspacePath)
+      if (gitL5) ctxParts.push(gitL5)
+    } catch {
+      /* git optional */
+    }
   }
 
   if (editor.activeFilePath) {
@@ -180,8 +226,14 @@ function toApiMessagesWithTools(
   }
   if (editor.selection) ctxParts.push(`Selection:\n"""\n${editor.selection.slice(0, 12000)}\n"""`)
   if (editor.mentionedPaths?.length) {
+    const attachedKeys = new Set(
+      (editor.attachedPaths || []).map((p) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase())
+    )
     ctxParts.push(`@mentions: ${editor.mentionedPaths.join(', ')}`)
     for (const rel of editor.mentionedPaths.slice(0, 8)) {
+      const key = rel.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+      // Paperclip mounts are injected as CRITICAL turn hints — skip duplicate bodies here.
+      if (attachedKeys.has(key)) continue
       const body = readWorkspaceMention(editor.workspacePath, rel)
       if (body) ctxParts.push(`@${rel}:\n"""\n${body}\n"""`)
     }
@@ -233,19 +285,12 @@ function commitProposal(
   settings: ReturnType<typeof loadAiSettings>
 ): { autoApplied: boolean; gate: GateDecision; writeDisk: boolean } {
   p.messageId = assistantId
-  // Decide BEFORE registering this path so multi-file means "other paths already in turn".
   const gate = decideAutoApply(p, turnPaths, settings)
   turnPaths.add(p.absPath.replace(/\//g, '\\').toLowerCase())
-  const auto = gate.auto
   const isNewFile = !p.before
-  let wroteDisk = false
-  if (auto) {
-    wroteDisk = shouldPersistAutoToDisk(p, settings)
-    if (wroteDisk) applyProposalToDisk(p)
-    p.status = 'applied'
-  } else {
-    p.status = 'pending'
-  }
+  // Always auto + always disk (architecture: Git working tree)
+  applyProposalToDisk(p)
+  p.status = 'applied'
   session.proposals.push(p)
   const owner = session.messages.find((m) => m.id === assistantId)
   if (owner) {
@@ -255,12 +300,103 @@ function commitProposal(
   send(win, 'ai:proposal', {
     sessionId: session.id,
     proposal: p,
-    autoApplied: auto,
-    writeDisk: wroteDisk,
+    autoApplied: true,
+    writeDisk: true,
     isNew: isNewFile,
     gateReason: gate.reason
   })
-  return { autoApplied: auto, gate, writeDisk: wroteDisk }
+  return { autoApplied: true, gate, writeDisk: true }
+}
+
+async function commitGitOp(
+  win: BrowserWindow,
+  session: ChatSession,
+  assistantId: string,
+  partial: Omit<GitPendingOp, 'status' | 'messageId' | 'resultNote' | 'error'> & {
+    status?: 'pending'
+  }
+): Promise<GitPendingOp> {
+  if (!session.gitOps) session.gitOps = []
+  const op: GitPendingOp = {
+    ...partial,
+    status: 'pending',
+    messageId: assistantId
+  }
+  const workspaceRoot = session.workspacePath
+  if (!workspaceRoot) {
+    op.status = 'rejected'
+    op.error = 'No workspace'
+  } else {
+    const r = await executeGitPendingOp(workspaceRoot, op)
+    if (r.ok) {
+      op.status = 'applied'
+      op.resultNote = r.note
+      op.error = undefined
+    } else {
+      op.status = 'rejected'
+      op.error = r.error || 'Git operation failed'
+    }
+  }
+  session.gitOps.push(op)
+  const owner = session.messages.find((m) => m.id === assistantId)
+  if (owner) {
+    owner.gitOpIds = [...(owner.gitOpIds || []), op.id]
+  }
+  saveSession(session)
+  send(win, 'ai:gitOp', { sessionId: session.id, op, highlight: true })
+  return op
+}
+
+async function executeGitPendingOp(
+  workspaceRoot: string,
+  op: GitPendingOp
+): Promise<{ ok: boolean; note?: string; error?: string }> {
+  const {
+    gitAddAll,
+    gitStage,
+    gitCommit,
+    gitRemoteAdd,
+    gitRemoteRemove
+  } = await import('../git/gitService')
+  if (op.kind === 'add') {
+    if (op.params.all) {
+      const r = await gitAddAll(workspaceRoot)
+      return r.ok
+        ? { ok: true, note: 'Staged all changes (git add -A).' }
+        : { ok: false, error: r.error }
+    }
+    const paths = op.params.paths || []
+    const r = await gitStage(workspaceRoot, paths)
+    return r.ok
+      ? { ok: true, note: `Staged ${paths.length} path(s).` }
+      : { ok: false, error: r.error }
+  }
+  if (op.kind === 'commit') {
+    const message = (op.params.message || '').trim()
+    const r = await gitCommit(workspaceRoot, message)
+    return r.ok
+      ? { ok: true, note: (r.stdout || 'Committed.').trim() }
+      : { ok: false, error: r.error }
+  }
+  if (op.kind === 'remote_add') {
+    const remote = (op.params.remote || '').trim()
+    const url = (op.params.url || '').trim()
+    const r = await gitRemoteAdd(workspaceRoot, remote, url)
+    if (!r.ok) return { ok: false, error: r.error }
+    const bits = [`Added remote "${remote}".`]
+    if (r.bareCreated && r.barePath) {
+      bits.push(`Created local bare repo at ${r.barePath}.`)
+    }
+    return { ok: true, note: bits.join(' ') }
+  }
+  if (op.kind === 'remote_remove') {
+    const remote = (op.params.remote || '').trim()
+    const r = await gitRemoteRemove(workspaceRoot, remote)
+    return r.ok
+      ? { ok: true, note: `Removed remote "${remote}".` }
+      : { ok: false, error: r.error }
+  }
+  return { ok: false, error: `Unknown git op kind: ${(op as GitPendingOp).kind}` }
 }
 
 export function abortAiForWebContents(wcId: number): void {
@@ -370,6 +506,11 @@ export async function runAgentTurn(opts: {
     }
   }
 
+  const mountHint = buildMountedFilesHint(opts.editor.workspacePath, attachedPaths)
+  if (mountHint) {
+    turnHint = turnHint ? `${mountHint}\n\n${turnHint}` : mountHint
+  }
+
   const workspaceRoot = opts.editor.workspacePath
   let steps = 0
   const maxSteps = mode === 'ask' ? 1 : settings.agentEnabled ? 20 : 1
@@ -390,30 +531,44 @@ export async function runAgentTurn(opts: {
       send(opts.win, 'ai:assistant_start', { messageId: assistantId, sessionId: session.id })
 
       await new Promise<void>((resolve) => {
-        void streamChatCompletion({
-          messages: toApiMessagesWithTools(session, opts.editor, mode, turnHint || undefined),
-          tools,
-          signal: ac.signal,
-          onEvent: (ev) => {
-            if (ev.type === 'content') {
-              content += ev.text
-              send(opts.win, 'ai:chunk', {
-                sessionId: session.id,
-                messageId: assistantId,
-                text: ev.text
-              })
-            } else if (ev.type === 'tool_call_delta') {
-              const cur = toolAcc.get(ev.index) || { id: '', name: '', arguments: '' }
-              if (ev.id) cur.id = ev.id
-              if (ev.name) cur.name += ev.name
-              if (ev.argumentsDelta) cur.arguments += ev.argumentsDelta
-              toolAcc.set(ev.index, cur)
-            } else if (ev.type === 'error') {
-              send(opts.win, 'ai:error', { message: ev.message, sessionId: session.id })
-            } else if (ev.type === 'done') {
-              resolve()
+        void (async () => {
+          const messages = await toApiMessagesWithTools(
+            session,
+            opts.editor,
+            mode,
+            turnHint || undefined
+          )
+          await streamChatCompletion({
+            messages,
+            tools,
+            signal: ac.signal,
+            onEvent: (ev) => {
+              if (ev.type === 'content') {
+                content += ev.text
+                send(opts.win, 'ai:chunk', {
+                  sessionId: session.id,
+                  messageId: assistantId,
+                  text: ev.text
+                })
+              } else if (ev.type === 'tool_call_delta') {
+                const cur = toolAcc.get(ev.index) || { id: '', name: '', arguments: '' }
+                if (ev.id) cur.id = ev.id
+                if (ev.name) cur.name += ev.name
+                if (ev.argumentsDelta) cur.arguments += ev.argumentsDelta
+                toolAcc.set(ev.index, cur)
+              } else if (ev.type === 'error') {
+                send(opts.win, 'ai:error', { message: ev.message, sessionId: session.id })
+              } else if (ev.type === 'done') {
+                resolve()
+              }
             }
-          }
+          })
+        })().catch((err) => {
+          send(opts.win, 'ai:error', {
+            message: err instanceof Error ? err.message : String(err),
+            sessionId: session.id
+          })
+          resolve()
         })
       })
 
@@ -480,6 +635,7 @@ export async function runAgentTurn(opts: {
               }
             }
           },
+          onGitOp: (partial) => commitGitOp(opts.win, session, assistantId, partial),
           onPlan: (stepsIn, planFileRel) => {
             session.plan = stepsIn
             if (planFileRel) session.planFileRel = planFileRel
@@ -552,11 +708,7 @@ export function applyProposal(sessionId: string, proposalId: string): FilePropos
   if (!session) return null
   const p = session.proposals.find((x) => x.id === proposalId)
   if (!p || p.status !== 'pending') return null
-  const settings = loadAiSettings()
-  const isNewFile = !p.before
-  if (shouldPersistAutoToDisk(p, settings) || settings.applyWritesToDisk || isNewFile) {
-    applyProposalToDisk(p)
-  }
+  applyProposalToDisk(p)
   p.status = 'applied'
   saveSession(session)
   return p
@@ -572,17 +724,53 @@ export function rejectProposal(sessionId: string, proposalId: string): FilePropo
   return p
 }
 
+/** @deprecated Confirm gate removed — ops auto-run. Kept for old IPC clients. */
+export async function confirmGitOp(
+  sessionId: string,
+  opId: string
+): Promise<GitPendingOp | null> {
+  const session = loadSession(sessionId)
+  if (!session) return null
+  const op = (session.gitOps || []).find((x) => x.id === opId)
+  if (!op || op.status !== 'pending') return null
+  const workspaceRoot = session.workspacePath
+  if (!workspaceRoot) {
+    op.status = 'rejected'
+    op.error = 'No workspace'
+    saveSession(session)
+    return op
+  }
+  const r = await executeGitPendingOp(workspaceRoot, op)
+  if (r.ok) {
+    op.status = 'applied'
+    op.resultNote = r.note
+    op.error = undefined
+  } else {
+    op.error = r.error || 'Git operation failed'
+  }
+  saveSession(session)
+  return op
+}
+
+/** @deprecated Confirm gate removed. */
+export function rejectGitOp(sessionId: string, opId: string): GitPendingOp | null {
+  const session = loadSession(sessionId)
+  if (!session) return null
+  const op = (session.gitOps || []).find((x) => x.id === opId)
+  if (!op || op.status !== 'pending') return null
+  op.status = 'rejected'
+  op.resultNote = 'Rejected by user'
+  saveSession(session)
+  return op
+}
+
 export function applyAllPending(sessionId: string): FileProposal[] {
   const session = loadSession(sessionId)
   if (!session) return []
-  const settings = loadAiSettings()
   const applied: FileProposal[] = []
   for (const p of session.proposals) {
     if (p.status !== 'pending') continue
-    const isNewFile = !p.before
-    if (shouldPersistAutoToDisk(p, settings) || settings.applyWritesToDisk || isNewFile) {
-      applyProposalToDisk(p)
-    }
+    applyProposalToDisk(p)
     p.status = 'applied'
     applied.push(p)
   }

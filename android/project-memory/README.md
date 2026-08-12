@@ -1,41 +1,59 @@
-# KENTUCKY Android — project memory
+# Kentucky Android — project memory
 
-安卓软件根自有记忆目录（与 `../win/project-memory` 分离）。当前版本 **0.2.0**，
-功能对齐 `../win` 0.2.0，并包含 Android 平板专属 system bars、WindowInsets、
-界面缩放、AI 覆盖抽屉、返回键、SAF 与触控板适配。
+> **AI 入口**。先读本页 → 做 Win 对齐时再读 [`BOARD.md`](./BOARD.md) + [`PORTING-WIN-TO-ANDROID.md`](./PORTING-WIN-TO-ANDROID.md)。  
+> 版本：`0.2.0` · 独立软件根 · 勿 `import ../win`
 
-| 文档 | 内容 |
-|------|------|
-| [SESSION-HANDOFF.md](./SESSION-HANDOFF.md) | **清空上下文后续聊先看这份** |
-| [PORTING-WIN-TO-ANDROID.md](./PORTING-WIN-TO-ANDROID.md) | **Win 正式功能持续移植到 Android 的完整操作手册** |
-| [how-to-run.md](./how-to-run.md) | 安装、Vite、Capacitor、真机 Run |
-| [product-decisions.md](./product-decisions.md) | 产品边界 |
-| [architecture.md](./architecture.md) | 结构与 Platform |
-| [gotchas.md](./gotchas.md) | 移植 / 真机注意点 |
-| [changelog.md](./changelog.md) | 改动时间线 |
-| [OPEN-trackpad-md-ai-scroll.md](./OPEN-trackpad-md-ai-scroll.md) | **OPEN**：MD↔AI 触控板滚动（待真机验收原生分流） |
-| [OPEN-dialogue-saf-corruption.md](./OPEN-dialogue-saf-corruption.md) | **OPEN/部分修复**：台词 SAF 脏名、Accept 落盘、状态栏 insets |
-| [OPEN-agent-tool-feedback-parity.md](./OPEN-agent-tool-feedback-parity.md) | **OPEN**：Win Agent 工具反馈 Round A–G → Android 对齐（总清单在 win） |
-| [OPEN-literary-memory-parity.md](./OPEN-literary-memory-parity.md) | **OPEN**：文学记忆 M1–M4（Round H）详细移植契约 |
-| [OPEN-agent-ui-parity.md](./OPEN-agent-ui-parity.md) | **OPEN**：Agent `/` skills 预览 + 上下文分项用量（含色板/limit 比例） |
-| [OPEN-workbench-chrome-parity.md](./OPEN-workbench-chrome-parity.md) | **OPEN**：挂载 chip / Skill 胶囊 / 选区菜单 / 文件夹展开记忆（§70–73） |
+## 硬规则（每次动手前）
 
-## 2026-08-10 会话摘要（已实现 / 待验收）
+1. `win/` 与 `android/` **分家**；禁止整目录覆盖 `android/src`。
+2. 文件 / AI / 对话框只走 `src/platform/index.ts`；真机工作区主路径是 **SAF**。
+3. 改 `MainActivity.java` / `KentuckySafPlugin.java` → Android Studio **Run 重装**（仅 `cap sync` 不够）。
+4. 移植进度只改 [`BOARD.md`](./BOARD.md)；契约细节只改 [`open/`](./open/)。
+5. 浏览器预览 ≠ 完成；涉及文件/原生/触控板必须真机验。
 
-### 已落地（需 Android Studio **Run 重装** 因含 Java）
+## 按任务读什么
 
-1. **0.2.0 移植**：Win 功能对齐、单窗、SAF 插件、`ai-runtime`、对话 v1.3、ghost tabs、全部保存等  
-2. **触控板 Mac 语义（画布）**：RF `panOnScroll`、捏合缩放、次要点击、sash Pointer Events；禁 viewport `user-scalable=no`  
-3. **MD↔AI 触控板冲突**：纯 JS 多次失败；现 `MainActivity` 截获 `ACTION_SCROLL` + `useSpatialWheelScroll` 按原生坐标分流 — **真机是否修好仍待确认**  
-4. **状态栏重叠**：insets 绑 Capacitor Bridge `@id/webview` margin（勿绑不存在的 `main_content`）  
-5. **台词损坏**：SAF 写入防 `.csv.txt` / `(N).txt`；Capacitor Accept **强制写盘**；历史脏文件需人工恢复  
+| 你要做的事 | 读 |
+|------------|-----|
+| 清空上下文续聊 / 当前状态 | 本页「现状」+ [`BOARD.md`](./BOARD.md) |
+| 从 Win 搬功能 | [`PORTING-WIN-TO-ANDROID.md`](./PORTING-WIN-TO-ANDROID.md) → 阶段分类 → [`BOARD.md`](./BOARD.md) 对应 ID |
+| 实现某一 OPEN 项 | `BOARD` 行内「详约」列 → `open/*.md` |
+| 踩坑 / 禁止项 | [`gotchas.md`](./gotchas.md) |
+| 产品边界 | [`product-decisions.md`](./product-decisions.md) |
+| 结构 / Platform | [`architecture.md`](./architecture.md) |
+| 怎么跑 | [`how-to-run.md`](./how-to-run.md) |
+| 历史改动 | [`changelog.md`](./changelog.md) |
+| Win 工具总清单（源真） | [`../win/project-memory/AGENT-TOOL-FEEDBACK.md`](../win/project-memory/AGENT-TOOL-FEEDBACK.md) |
+| Win Git 完整记录（源真） | [`../win/project-memory/AGENT-GIT.md`](../win/project-memory/AGENT-GIT.md) |
 
-### 明确未自动解决
+## 现状（2026-08-12）
 
-- test2 工作区里已存在的 mangled 台词副本内容整理  
-- MD↔AI 触控板：以真机验收为准  
+- **骨架**：0.2.0 已对齐 Win 主能力（编辑器 / 对话 v1.3 / SAF / `ai-runtime` / 单窗平板 chrome）。
+- **Win 超前未移植**：Agent 工具反馈 W*、文学记忆 H*、UI U1–U18 — 进度见 [`BOARD.md`](./BOARD.md)。
+- **本大版本不移植**：U13–U18（去 Accept / 始终写盘 / Git / kmind 子树）— Win 已落地至 `toolApi: 2026-08-12-l`；**契约镜像** [`open/auto-apply-git.md`](./open/auto-apply-git.md)；Win 完整记录 [`../win/project-memory/AGENT-GIT.md`](../win/project-memory/AGENT-GIT.md)。Android **无** Git 实现代码。
+- **待真机验收**：MD↔AI 触控板分流 — [`open/trackpad-scroll.md`](./open/trackpad-scroll.md)。
+- **历史脏文件**：工作区里已 mangled 的台词副本需人工整理（代码不自动修内容）。
 
-### 真机最短路径
+## 目录（整理后）
+
+```text
+project-memory/
+  README.md                 ← 你在这里
+  BOARD.md                  ← 唯一进度板（W / H / U / A）
+  PORTING-WIN-TO-ANDROID.md ← 操作规程
+  architecture.md | product-decisions.md | gotchas.md | how-to-run.md | changelog.md
+  open/                     ← 详约（按需打开，勿当进度板）
+    literary-memory.md      H1–H4
+    agent-ui.md             U1–U3
+    workbench-chrome.md     U4–U7
+    shell-ux.md             U8–U12
+    auto-apply-git.md       U13–U18
+    trackpad-scroll.md      A1
+```
+
+旧文件名（`OPEN-*.md` / `SESSION-HANDOFF.md`）保留为 **跳转 stub**，勿再往里写进度。
+
+## 真机最短路径
 
 ```bat
 cd /d "d:\Working Directory\Kentucky\android"
@@ -43,4 +61,4 @@ npm run cap:sync
 npm run cap:open
 ```
 
-Android Studio → Run。改 Java 后不能只 sync 网页。
+Android Studio → 平板 → Run。

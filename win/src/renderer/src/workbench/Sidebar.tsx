@@ -4,6 +4,7 @@ import { FilePlus, FolderPlus, MessagesSquare, RefreshCw, Waypoints } from 'luci
 import { useAppStore } from '@/state/appStore'
 import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 import { FileTree } from './FileTree'
+import { ScmPane } from './ScmPane'
 import {
   CREATE_FILE_EXT,
   CREATE_MINDMAP_EXT,
@@ -17,6 +18,7 @@ const actionIcon = { size: 14, strokeWidth: 2, absoluteStrokeWidth: false } as c
 export function Sidebar() {
   const { t } = useTranslation()
   const workspacePath = useAppStore((s) => s.workspacePath)
+  const activeView = useAppStore((s) => s.activeView)
   const fileTree = useAppStore((s) => s.fileTree)
   const sidebarWidth = useAppStore((s) => s.sidebarWidth)
   const setSidebarWidth = useAppStore((s) => s.setSidebarWidth)
@@ -140,6 +142,17 @@ export function Sidebar() {
   }
 
   const inlineCreate = createKind === 'file' || createKind === 'folder' || createKind === 'mindmap'
+
+  if (activeView === 'scm') {
+    return (
+      <>
+        <aside className="sidebar" style={{ width: sidebarWidth }}>
+          <ScmPane />
+        </aside>
+        <div className="sash" onMouseDown={onSashDown} />
+      </>
+    )
+  }
 
   return (
     <>

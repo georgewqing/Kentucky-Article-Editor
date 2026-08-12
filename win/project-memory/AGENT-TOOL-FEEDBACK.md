@@ -3,15 +3,16 @@
 > **权威清单**：创作侧长会话反馈 → 工具侧缺陷与修复对照。  
 > Win 实现以本文件 + 源码为准；Android **必须按本清单逐项移植**，不得只抄 UI。  
 > 会话交接短文：[`SESSION-TOOL-FEEDBACK.md`](./SESSION-TOOL-FEEDBACK.md)  
-> Android OPEN 工单：[`../../android/project-memory/OPEN-agent-tool-feedback-parity.md`](../../android/project-memory/OPEN-agent-tool-feedback-parity.md)
+> Android 进度板：[`../../android/project-memory/BOARD.md`](../../android/project-memory/BOARD.md) · 入口 [`README.md`](../../android/project-memory/README.md)
 
 | 字段 | 值 |
 |------|-----|
 | 反馈来源 | `test2/tool_feedback.md`（v1 → v2） |
 | Win 轮次 | Round A/B/C/D（2026-08-11） |
-| 部署指纹 | 写入类工具结果须含 `toolApi: "2026-08-11-j"` |
+| 部署指纹 | 写入类工具结果须含 `toolApi: "2026-08-12-l"` |
+| Git 专档 | [`AGENT-GIT.md`](./AGENT-GIT.md)（SCM + Agent 完整契约 §80–89） |
 | 测试基线 | [`AGENT-TOOL-TEST-BASELINE.md`](./AGENT-TOOL-TEST-BASELINE.md)（9 项实证） |
-| Android 状态 | **未对齐**（见 OPEN 工单） |
+| Android 状态 | **未对齐**（见 [`BOARD.md`](../../android/project-memory/BOARD.md)） |
 
 ---
 
@@ -79,7 +80,8 @@
 - dialogue：**行数** `changeCount ≤ 5` 可 auto；更大或多文件 → Accept。
 - 已有 prose / kmind / performance / 多文件内容 → Accept。
 - **没有「角色卡 ≥5 张 → pending」**；勿把台词 ≤5 误套到角色。
-- 多文件判定：`turnPaths` 为**本轮已提交的其它路径**（先 `decideAutoApply`，再登记当前 path）。
+- 多文件判定：`turnPaths` 为**本轮已提交的其它内容路径**（先 `decideAutoApply`，再登记当前 path）。`update_plan_step` Soft 写计划 **不进** 门控；`plans/*.plan.md` 不计入 `multi_file_turn`。
+- `propose_append_dialogue_lines` 返回 `addedLineIds`（勿猜 id）；`setCurrent:false` 用 `asBool`，且不挪 `current.location`。
 
 ### 2.2 自动落盘（即使「改完只标黄」）
 
@@ -124,6 +126,10 @@ Android 另有 SAF/杀进程风险：角色与小台词建议与 Win 一样强�
 | `continuity_check` | 结构化 issues |
 | `create_plan` / `update_plan_step` | `plans/*.plan.md` |
 | `web_search` / `web_research` / `web_fetch` | snippet 非空 |
+| `git_status` / `git_diff` / `git_pull` / `git_push` | 见 changelog §80–82；**无** force；**无** Agent commit；路径 UTF-8 |
+| `propose_kmind_edit` | 含 shape/子树；非法 id → `skipped`/`warnings` |
+| `propose_reorder_dialogue_lines` | 可返回 `openingChanged`（CSV 首行=开场） |
+| `propose_dialogue_performance` | 校验 font_size / text_color |
 
 ### 2.5 System prompt 要点
 
@@ -135,24 +141,41 @@ Android 另有 SAF/杀进程风险：角色与小台词建议与 Win 一样强�
 
 ### 2.6 Round H · 文学记忆（M1–M4）契约摘要
 
-> **Android 完整移植书**：[`../../android/project-memory/OPEN-literary-memory-parity.md`](../../android/project-memory/OPEN-literary-memory-parity.md)
+> **Android 完整移植书**：[`../../android/project-memory/open/literary-memory.md`](../../android/project-memory/open/literary-memory.md)
 
 | 项 | 契约 |
 |----|------|
 | 指纹 | `2026-08-11-j` |
 | 工作区文件 | 按需：`story_state.yaml` / `foreshadow.yaml` / `voice_*.yaml` / `glossary.yaml` / `materials/` / `revisions/` |
 | 启用态 | 状态表存在且 `chapters.length≥1`（stale + L5） |
-| 门禁 | `MEMORY_KINDS`（story_state/foreshadow/voice_*/glossary/materials_index/revision_meta）→ auto+强制落盘；`materials/*.md`→prose；restore 正文→Accept |
-| continuity aspects | + `foreshadow`/`scene`/`voice`/`glossary`/`proof`；可选 `chapterId`、`assertions[]`（空忽略） |
+| 门禁 | `MEMORY_KINDS` → auto+强制落盘；`materials/*.md`→prose；restore 正文→**自动写盘**（无 Accept，见 U13/U14） |
+| continuity aspects | + `foreshadow`/`scene`/`voice`/`glossary`/`proof`；可选 `chapterId`、`assertions[]`；未知角色状态 → `unknown_character` |
 | 道具 | **仅表内** + assertions；**禁止**正文搜道具名 |
 | 伏笔 | unpaid 清单；overdue 仅精确 chapter.id |
 | L5 | 启用态：地点/dayOffset/道具数/open伏笔数 + 「Before write / After chapter」CTA |
 | 防遗忘 | `memoryNudge.ts`：系统提示 CRITICAL 清单；散文写入结果 `memoryHint`（**非** reviewHint）；工具 description 含 CALL WHEN |
 | voice_anchor | 合法键 person/tense/sentence/metaphorDensity/lexicon/notes；`narrator`→notes；读写带 `schemaHint` |
-| Agent UI（另 OPEN） | `/` skills+commands（可滑无滑块）；`contextEstimate` buckets；色条按 **limit**；冷灰蓝色板；消息区 `overflow-x:hidden` — Android：[`OPEN-agent-ui-parity.md`](../../android/project-memory/OPEN-agent-ui-parity.md) |
+| Agent UI（另 OPEN） | `/` skills+commands（可滑无滑块）；`contextEstimate` buckets；色条按 **limit**；冷灰蓝色板；消息区 `overflow-x:hidden` — Android：[`open/agent-ui.md`](../../android/project-memory/open/agent-ui.md) |
 | 禁止 | excerpts 全文；工具内嵌套 LLM；脚手架空壳；独立 scene_state.yaml；Git |
 
 Win 实现入口：`literaryTools.ts` / `literaryContinuity.ts` / `memoryNudge.ts` / `storyState.ts` / `foreshadow.ts` / `voiceFiles.ts` / `revisions.ts` / `glossaryMaterials.ts` / `proofread.ts`。
+
+---
+
+## 2b. Git / SCM（Agent + UI）
+
+**完整契约**：[AGENT-GIT.md](./AGENT-GIT.md)（勿在本表重复维护细节）。
+
+| 项 | 当前态 |
+|----|--------|
+| 指纹 | `toolApi: "2026-08-12-l"` |
+| 建仓 | 打开工作区 `ensureWorkspaceGit`；点文件对 UI/`list_dir` 隐藏 |
+| Agent 工具 | status/diff/log/pull/push/add/commit/remote_add/remote_remove — 全部立即执行 |
+| 写反馈 | 高亮卡 + Toast（无 Confirm；`-g` 已废） |
+| 本地 remote | 可含空格；缺失 → `git init --bare`（add/push） |
+| 新对话 | Git (L5) + `GIT_AGENT_PLAYBOOK` |
+| 禁止 | force / Shell / 任意 argv |
+| Android | 详约 [`../../android/project-memory/open/auto-apply-git.md`](../../android/project-memory/open/auto-apply-git.md)；本大版本不实现；Win 真源 [AGENT-GIT.md](./AGENT-GIT.md) |
 
 ---
 
@@ -178,6 +201,7 @@ Win 实现入口：`literaryTools.ts` / `literaryContinuity.ts` / `memoryNudge.t
 | Plan 文件 | `planFiles.ts`：剥裸 checkbox、patch Todos |
 | Diff UI | `renderer/.../proposalDiff.ts` + `AiPanel.tsx` |
 | 区外附件 | `aiStore` → `.kentucky/refs/` |
+| Git | `main/git/gitService.ts` · `registerGitIpc.ts` · `tools.ts` git_* · `agentLoop` commitGitOp/L5 · `AiPanel` GitResultCard — 见 [AGENT-GIT.md](./AGENT-GIT.md) |
 
 ---
 
@@ -191,7 +215,7 @@ Win 实现入口：`literaryTools.ts` / `literaryContinuity.ts` / `memoryNudge.t
 6. 新 dialogue append → 自动建表 + `columnOrder`。
 7. `web_search` → snippet 非空。
 8. 写入结果含 `uiReview`；UI diff/批量仍 **人眼**确认一次。
-9. **Round H**：见 [`AGENT-TOOL-TEST-BASELINE.md`](./AGENT-TOOL-TEST-BASELINE.md) §四；Android 详约见 [`OPEN-literary-memory-parity.md`](../../android/project-memory/OPEN-literary-memory-parity.md) §8。
+9. **Round H**：见 [`AGENT-TOOL-TEST-BASELINE.md`](./AGENT-TOOL-TEST-BASELINE.md) §四；Android 详约见 [`open/literary-memory.md`](../../android/project-memory/open/literary-memory.md)。
 
 ---
 
@@ -211,5 +235,5 @@ Win 实现入口：`literaryTools.ts` / `literaryContinuity.ts` / `memoryNudge.t
 1. 对照 §1 总表，在 `android/src/ai-runtime/` 逐项 diff Win（含 **`ghostNames.ts`**）。
 2. 优先：`proposalGate` + `emitProposal` 字段 + characters 落盘 + continuity/ghost + append 建表 + plan 返回值。
 3. 其次：FS 工具、`propose_upsert_characters`、web_search snippet、AiPanel diff/批量。
-4. **Round H**：按 [`../../android/project-memory/OPEN-literary-memory-parity.md`](../../android/project-memory/OPEN-literary-memory-parity.md) §7 移植文学记忆；勾选 OPEN H1–H4。
-5. 真机跑 §5 + 基线 §四；更新 [`OPEN-agent-tool-feedback-parity.md`](../../android/project-memory/OPEN-agent-tool-feedback-parity.md) 勾选；细节见 [`PORTING-WIN-TO-ANDROID.md`](../../android/project-memory/PORTING-WIN-TO-ANDROID.md) 阶段 G。
+4. **Round H**：按 [`open/literary-memory.md`](../../android/project-memory/open/literary-memory.md) 移植文学记忆；勾选 [`BOARD.md`](../../android/project-memory/BOARD.md) H1–H4。
+5. 真机跑 §5 + 基线 §四；更新 [`BOARD.md`](../../android/project-memory/BOARD.md) 勾选；细节见 [`PORTING-WIN-TO-ANDROID.md`](../../android/project-memory/PORTING-WIN-TO-ANDROID.md) 阶段 G。

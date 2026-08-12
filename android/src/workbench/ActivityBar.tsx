@@ -27,6 +27,7 @@ export function ActivityBar() {
   const switchWorkspace = useAppStore((s) => s.switchWorkspace)
   const addWorkspaceViaDialog = useAppStore((s) => s.addWorkspaceViaDialog)
   const closeWorkspaceById = useAppStore((s) => s.closeWorkspaceById)
+  const goHome = useAppStore((s) => s.goHome)
   const showToast = useAppStore((s) => s.showToast)
   const aiVisible = useAiStore((s) => s.panelVisible)
   const setPanelVisible = useAiStore((s) => s.setPanelVisible)
@@ -46,10 +47,6 @@ export function ActivityBar() {
       window.removeEventListener('blur', close)
     }
   }, [menu])
-
-  const goHome = (): void => {
-    setActiveView('home')
-  }
 
   const onAiClick = (): void => {
     if (!workspacePath) {

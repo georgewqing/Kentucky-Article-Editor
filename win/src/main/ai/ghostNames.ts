@@ -262,6 +262,9 @@ const FALSE_SURNAME_PHRASES = new Set([
   '一张'
 ])
 
+/** 这/那/该/某 + 量词…（「那串风铃」启发式会切出「那串风」） */
+const DEMO_MEASURE_RE = /^[这那该某每][串根枚条个只本份片块阵股缕道张扇面层架捆包盒罐瓶袋段截]/
+
 
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -298,6 +301,7 @@ export function isLikelyNonPersonToken(name: string): boolean {
   if (STOP_OR_FUNCTION.has(t)) return true
   if (PREFIX_SKIP.has(t)) return true
   if (FALSE_SURNAME_PHRASES.has(t)) return true
+  if (DEMO_MEASURE_RE.test(t)) return true
   if (/^第[零一二三四五六七八九十百千两\d]+[章节回卷部篇幕]$/.test(t)) return true
   if (/^[零一二三四五六七八九十百千两\d]+[章节回卷部篇幕]$/.test(t)) return true
   if (/[楼街巷道桥门墙园院馆店寺庙宫府庄村镇城港岛山河湖海崖谷关隘堡寨台堂殿阁塔]$/.test(t)) {
@@ -319,8 +323,9 @@ export function isLikelyNonPersonToken(name: string): boolean {
 function followingBreaksName(text: string, index: number, name: string): boolean {
   const after = text.slice(index + name.length, index + name.length + 2)
   if (!after) return false
-  // 老规|矩、小字|报、张船|票、钟楼|会、水泡|得
-  if (/^[矩实是早样虎鼠大少孩子集字时候票船件会得的了着过张条个只次]/.test(after)) return true
+  // 老规|矩、小字|报、张船|票、钟楼|会、水泡|得、那串风|铃
+  if (/^[矩实是早样虎鼠大少孩子集字时候票船件会得的了着过张条个只次铃鼓琴弦]/.test(after))
+    return true
   if (name.startsWith('老') && /^[矩人]/.test(after)) return true
   if (name.startsWith('小') && /^[字孩]/.test(after)) return true
   return false

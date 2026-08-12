@@ -105,7 +105,23 @@
 - AI 联网：默认关；DDG 超时自动回退 Bing；搜索结果会抓取前几条页面写入 `excerpt`（天气站可解析预报卡）；需要更深可读 `web_fetch`。Brave/Tavily 未实现。
 - Plan 模式：计划真相是工作区 `plans/<slug>.plan.md`（同 slug 覆盖），**不是**会话 JSON  alone；AI 面板**不**再挂常驻计划列表。`update_plan_step` 只改 Todos 勾选，勿整文件覆盖冲掉用户改的正文。`plans/` 可随项目提交。
 - Agent 归档/迁移：用 `workspace_mkdir` / `workspace_copy` / `workspace_move` / `workspace_delete`，**不要**说「没有 shell / 不能移动删除」。删除须用户明确要求。勿对归档读全文再 `propose_write_file` 抄写。
-- 写入门禁：角色 upsert **始终自动落盘**（即使设置是「改完标黄」、即使本轮已改正文）；**没有「5 张卡阈值」**——`≤5` 只约束台词行数。看 `written`/`pending`/`reviewHint`/`gateDetail`/`toolApi`。
+- 写入门禁：**Agent 一律自动写盘**（无 Accept）。黄● = 相对上次 Ctrl+S 的 original。看 `written`/`reviewHint`/`gateDetail`/`toolApi`。误改用 Source Control 丢弃。
+- Agent Git 完整契约与验收：[AGENT-GIT.md](./AGENT-GIT.md)（指纹 `2026-08-12-l`）。
+- Source Control：活动栏 SCM；**打开工作区自动 ensure Git**（无祖先 `.git` 则在根 init）；untracked 丢弃二次确认；discard 强制重载打开文件。Git 调用带 `core.quotepath=false`，中文路径应可读。`git_status` 会 ensure 仓 + 幂等补 `.kentucky/`。
+- **`.git` 对用户不可见**：资源管理器过滤 `name.startsWith('.')`；Agent `list_dir` 同样隐藏点文件 / `node_modules`。磁盘上仍有标准 `.git`。
+- Agent Git：`git_status` / `git_diff` / `git_log` / `git_pull` / `git_push` / `git_add` / `git_commit` / `git_remote_add` / `git_remote_remove`（**禁止 force**）。写操作立即执行，聊天高亮卡 + Toast；discard 仍 UI。
+- `git_status` **非纯只读**：可能自动 init（`repoCreated`）并/或追加 `.gitignore` 的 `.kentucky/`（`gitignoreUpdated`）。
+- 指纹：工具结果须含 `toolApi: "2026-08-12-l"`；缺则完整重启 Electron。
+- `git_remote_add`：本地路径 / `file://` / 带空格路径合法；缺失目录会自动 `git init --bare`。`git_push` 对已配本地 remote 同样补建。清理远程用 `git_remote_remove`。
+- 新对话仍会调用 Git：系统提示含 `GIT_AGENT_PLAYBOOK`；每轮 Editor context 有 **Git (L5)** 实况。
+- kmind `moveSubtree`/`connect` skipped 文案区分哪一端 id 不存在。
+- `propose_kmind_edit`：非法 connect/move/update id 会进返回体 `skipped`/`warnings`，勿当静默成功。
+- `propose_reorder_dialogue_lines`：CSV **首行=开场**；部分 order 可能改 opening — 看 `openingChanged`。
+- `continuity_check` 角色状态断言：表中无该角色键 → `unknown_character`（非静默）。
+- `propose_dialogue_performance`：`font_size` 须数字或空；`text_color` 须 `#RGB/#RRGGBB/#RRGGBBAA` 或空。
+- append / voice upsert：未注册 speaker/characterId → `warnings`（仍可写盘）。
+- `propose_kmind_edit` 支持 shape/尺寸与子树删移。
+- DocumentHub：Agent 走 `docApplyAgentWrite`（保 original）；勿对 Agent 用会清脏的 `docApplyExternalWrite`。
 - 打开 `.md` 无编辑却变脏：TipTap `getMarkdown` 规范化误写回；已用 hydration 门闩挡住（changelog §62）。
 - Markdown AI 写入曾因 TipTap 无 Table 扩展毁掉 `|` 表格（W19）；已修。
 - Diff / 批量 Accept 只在 AiPanel；agent 看 `uiReview`。

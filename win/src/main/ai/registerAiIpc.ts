@@ -30,6 +30,8 @@ import {
   abortAiForWebContents,
   applyAllPending,
   applyProposal,
+  confirmGitOp,
+  rejectGitOp,
   rejectProposal,
   runAgentTurn,
   type EditorContextPayload
@@ -172,6 +174,20 @@ export function registerAiIpc(): void {
     'ai:rejectProposal',
     (_e, payload: { sessionId: string; proposalId: string }) => {
       return rejectProposal(payload.sessionId, payload.proposalId)
+    }
+  )
+
+  ipcMain.handle(
+    'ai:confirmGitOp',
+    async (_e, payload: { sessionId: string; opId: string }) => {
+      return confirmGitOp(payload.sessionId, payload.opId)
+    }
+  )
+
+  ipcMain.handle(
+    'ai:rejectGitOp',
+    (_e, payload: { sessionId: string; opId: string }) => {
+      return rejectGitOp(payload.sessionId, payload.opId)
     }
   )
 

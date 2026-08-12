@@ -38,7 +38,9 @@
     "recent": "Recent",
     "recentWorkspaces": "Recent workspaces",
     "noRecent": "No recent folders",
-    "removeRecent": "Remove"
+    "removeRecent": "Remove",
+    "alreadyOpen": "Opened",
+    "multiHint": "Same as the activity-bar +: opening another folder here adds it to this window without closing existing workspaces."
   },
   "explorer": {
     "title": "Explorer",

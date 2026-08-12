@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync } from 'fs'
 import type { FileProposal } from './chatSessions'
 import { TOOL_API_VERSION } from './proposalGate'
 import type { ToolDef } from './openaiCompatClient'
+import { parseCharactersCsv } from './formats'
 import {
   STORY_STATE_FILE,
   loadStoryState,
@@ -63,7 +64,7 @@ import {
   readerCritiqueSkeleton,
   type ContinuityAssertion
 } from './literaryContinuity'
-import { asStringArray, asStringRecord } from './yamlUtil'
+import { asBool, asStringArray, asStringRecord } from './yamlUtil'
 
 export type LiteraryEmitCtx = {
   workspaceRoot: string
@@ -298,7 +299,7 @@ export function getLiteraryToolDefs(): ToolDef[] {
       function: {
         name: 'propose_upsert_scene',
         description:
-          'CALL after establishing a scene beat. Upsert scenes[] in story_state.yaml; sets current.sceneId by default. ALWAYS auto-writes.',
+          'CALL after establishing a scene beat. Upsert scenes[] in story_state.yaml; sets current.sceneId (+ location from where) by default. Pass setCurrent:false to record a scene without moving the pointer — chapter rollup never sets sceneId. ALWAYS auto-writes.',
         parameters: {
           type: 'object',
           properties: {
@@ -318,7 +319,11 @@ export function getLiteraryToolDefs(): ToolDef[] {
               },
               required: ['id']
             },
-            setCurrent: { type: 'boolean' }
+            setCurrent: {
+              type: 'boolean',
+              description:
+                'Default true. false = do not change current.sceneId or current.location (even if where is set).'
+            }
           },
           required: ['scene']
         }
@@ -540,7 +545,7 @@ export function runLiteraryTool(
             : {}),
           ...(ch.notes !== undefined ? { notes: String(ch.notes) } : {})
         },
-        { rollup: args.rollup !== false }
+        { rollup: asBool(args.rollup, true) }
       )
       const after = serializeStoryState(doc)
       return JSON.stringify(
@@ -682,17 +687,29 @@ export function runLiteraryTool(
         particles: asStringArray(args.particles),
         metaphorDomain: asStringArray(args.metaphorDomain)
       })
-      return JSON.stringify(
-        ctx.emitProposal({
-          id: cryptoRandom(),
-          path: VOICE_BANK_FILE,
-          absPath: abs,
-          before: loaded.text,
-          after: serializeVoiceBank(doc),
-          summary: `Upsert voice ${characterId}`,
-          kind: 'voice_bank'
-        })
-      )
+      const charsAbs = join(root, 'characters.csv')
+      const castOk =
+        existsSync(charsAbs) &&
+        parseCharactersCsv(readFileSync(charsAbs, 'utf-8')).some((c) => c.id === characterId)
+      const emitted = ctx.emitProposal({
+        id: cryptoRandom(),
+        path: VOICE_BANK_FILE,
+        absPath: abs,
+        before: loaded.text,
+        after: serializeVoiceBank(doc),
+        summary: `Upsert voice ${characterId}`,
+        kind: 'voice_bank'
+      })
+      return JSON.stringify({
+        ...emitted,
+        ...(castOk
+          ? {}
+          : {
+              warnings: [
+                `characterId "${characterId}" not in characters.csv — voice bank entry created anyway; upsert cast if this id is intentional.`
+              ]
+            })
+      })
     }
     case 'compare_voice': {
       const focusPaths = (args.focusPaths as string[]) || []
@@ -746,7 +763,7 @@ export function runLiteraryTool(
           exits: asStringArray(scene.exits),
           notes: scene.notes != null ? String(scene.notes) : undefined
         },
-        { setCurrent: args.setCurrent !== false }
+        { setCurrent: asBool(args.setCurrent, true) }
       )
       return JSON.stringify(
         ctx.emitProposal({

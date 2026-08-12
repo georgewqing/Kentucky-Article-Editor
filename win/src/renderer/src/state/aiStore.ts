@@ -72,6 +72,26 @@ export interface AiProposal {
   messageId?: string
 }
 
+export type AiGitPendingKind = 'add' | 'commit' | 'remote_add' | 'remote_remove'
+
+export interface AiGitOp {
+  id: string
+  kind: AiGitPendingKind
+  summary: string
+  detail: string
+  params: {
+    paths?: string[]
+    all?: boolean
+    message?: string
+    remote?: string
+    url?: string
+  }
+  status: 'pending' | 'applied' | 'rejected'
+  messageId?: string
+  resultNote?: string
+  error?: string
+}
+
 export interface AiPlanStep {
   id: string
   text: string
@@ -87,6 +107,7 @@ export interface AiSession {
   plan: AiPlanStep[]
   planFileRel?: string | null
   proposals: AiProposal[]
+  gitOps?: AiGitOp[]
 }
 
 interface AiState {
@@ -792,6 +813,33 @@ export const useAiStore = create<AiState>((set, get) => ({
         if (data.autoApplied) {
           void get().syncAppliedFile(data.proposal, data.writeDisk === true, data.isNew === true)
         }
+      }),
+      p.onAiEvent('ai:gitOp', (payload) => {
+        const data = payload as { sessionId: string; op: AiGitOp; highlight?: boolean }
+        const cur = get().session
+        if (!cur || cur.id !== data.sessionId || !data.op) return
+        const prev = cur.gitOps || []
+        const next = prev.some((o) => o.id === data.op.id)
+          ? prev.map((o) => (o.id === data.op.id ? data.op : o))
+          : [...prev, data.op]
+        set({ session: { ...cur, gitOps: next } })
+        const label =
+          data.op.kind === 'add'
+            ? 'git add'
+            : data.op.kind === 'commit'
+              ? 'git commit'
+              : data.op.kind === 'remote_remove'
+                ? 'git remote remove'
+                : 'git remote add'
+        const msg =
+          data.op.status === 'applied'
+            ? `${label}: ${data.op.resultNote || data.op.summary}`
+            : `${label} failed: ${data.op.error || 'error'}`
+        void import('./appStore').then(({ useAppStore }) => {
+          useAppStore
+            .getState()
+            .showToast(msg, data.op.status === 'applied' ? 'info' : 'error')
+        })
       }),
       p.onAiEvent('ai:plan', (payload) => {
         const data = payload as {

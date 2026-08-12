@@ -262,13 +262,19 @@ export function upsertScene(
   }
   if (idx >= 0) scenes[idx] = next
   else scenes.push(next)
+  const setCurrent = opts?.setCurrent !== false
   return {
     ...doc,
     scenes,
     current: {
       ...doc.current,
-      ...(opts?.setCurrent !== false ? { sceneId: next.id } : {}),
-      ...(next.where ? { location: next.where } : {})
+      // setCurrent:false must not move the pointer OR current.location from scene.where
+      ...(setCurrent
+        ? {
+            sceneId: next.id,
+            ...(next.where ? { location: next.where } : {})
+          }
+        : {})
     }
   }
 }

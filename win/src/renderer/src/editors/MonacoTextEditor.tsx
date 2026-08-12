@@ -44,6 +44,7 @@ export function MonacoTextEditor({ tabId }: { tabId: string }) {
   const showToast = useAppStore((s) => s.showToast)
   const lineFlash = useAppStore((s) => s.lineFlash)
   const clearLineFlash = useAppStore((s) => s.clearLineFlash)
+  const agentChangeRanges = useAppStore((s) => s.agentChangeRanges)
   const linePickSession = useAppStore((s) => s.linePickSession)
   const confirmLinePick = useAppStore((s) => s.confirmLinePick)
   const cancelLinePick = useAppStore((s) => s.cancelLinePick)
@@ -89,6 +90,35 @@ export function MonacoTextEditor({ tabId }: { tabId: string }) {
       window.clearTimeout(id)
     }
   }, [tab, flashForTab, showToast, t, clearLineFlash, monacoTick])
+
+  useEffect(() => {
+    const ed = monacoRef.current
+    if (!ed || !tab) return
+    const key = tab.path.replace(/\//g, '\\').toLowerCase()
+    const ranges = agentChangeRanges[key] || []
+    const model = ed.getModel()
+    if (!model) return
+    const deco = ranges.map((r) => ({
+      range: {
+        startLineNumber: r.startLine,
+        startColumn: 1,
+        endLineNumber: r.endLine,
+        endColumn: model.getLineMaxColumn(Math.min(r.endLine, model.getLineCount()))
+      },
+      options: {
+        isWholeLine: true,
+        className: 'monaco-agent-change',
+        overviewRuler: {
+          color: 'rgba(128,128,128,0.4)',
+          position: 4
+        }
+      }
+    }))
+    const ids = ed.deltaDecorations([], deco as never)
+    return () => {
+      ed.deltaDecorations(ids, [])
+    }
+  }, [tab, agentChangeRanges, monacoTick])
 
   useEffect(() => {
     const ed = monacoRef.current

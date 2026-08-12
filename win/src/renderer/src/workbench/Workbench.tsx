@@ -119,7 +119,12 @@ export function Workbench() {
 
   const showSettings = activeView === 'settings'
   const showHome = activeView === 'home' || !workspacePath
-  const showSidebar = Boolean(workspacePath) && sidebarVisible && !showSettings && !showHome
+  const showSidebar =
+    Boolean(workspacePath) &&
+    sidebarVisible &&
+    !showSettings &&
+    !showHome &&
+    (activeView === 'explorer' || activeView === 'scm')
 
   return (
     <div className="app-root">

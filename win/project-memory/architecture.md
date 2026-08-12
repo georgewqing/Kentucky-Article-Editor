@@ -28,10 +28,12 @@ Kentucky/                  ← Cursor 工作区容器（非本软件根）
     dev-data/              ← 开发态本体数据（gitignore）
     src/
       main/                Electron 主进程
-        index.ts           IPC：对话框、fs、菜单、多窗口、DocumentHub、AI
+        index.ts           IPC：对话框、fs、菜单、多窗口、DocumentHub、AI、Git
         ai/                OpenAI 兼容客户端、agent loop、tools、kmindLayout（dagre）、本体 data 路径
+        git/               gitService（ensure/status/diff/add/commit/remote/pull/push/bare/L5）+ registerGitIpc；无任意 argv
+                           完整契约 → project-memory/AGENT-GIT.md
         menu.ts            原生菜单（中/英）
-        documentHub.ts     跨窗文件正文权威
+        documentHub.ts     跨窗文件正文权威（含 docApplyAgentWrite / docReloadFromDisk）
         windowRegistry.ts  main/float 元数据
       preload/
         index.ts           contextBridge → window.kentucky（含 ai:*）
@@ -75,17 +77,24 @@ Renderer (React)
 AiPanel / aiStore
   → ai:send（含编辑器上下文）
   → main agentLoop（OpenAI 兼容 SSE + tools）
-  → propose_* 工具 → 立即写盘（可选）+ ai:proposal
-  → aiStore.syncAppliedFile → appStore.applyAiFileEdit（不抢焦点；标 dirty/isNew）
-  → 标签栏 / 资源管理器黄蓝标记；Ctrl+S 清除
+  → propose_* → **始终写盘** + ai:proposal（只读变更卡；无 Accept）
+  → aiStore.syncAppliedFile → appStore.applyAiFileEdit（不抢焦点；黄●；agentChangeRanges）
+  → 误改：Source Control discard / Undo；Ctrl+S 清脏与高亮
 ```
 
 - 本体路径：`appBodyPaths.ts` → 开发 `win/dev-data/data/`，打包为 exe 旁 `data/`
 - 会话：`data/ai-chats/*.json`（含 Mirror `plan[]` + `planFileRel`）；设置：`data/ai-settings.json`；密钥：`data/ai-key.bin`
 - Plan：`create_plan` → 工作区 `plans/<slug>.plan.md`（`planFiles.ts`）；对话栏无常驻计划列表；Agent InjectPath；md 顶栏 Build
 - 工作区结构：`workspace_mkdir` / `copy` / `move` / `delete`（`tools.ts` + `ai:workspaceOp`）
-- `.kmind`：`kmindLayout.ts`（dagre Sugiyama）；`propose_kmind_edit` / `layout_kmind`
-- `.dialogue.csv`：`formats.ts`（choices/layout 解析 + `layoutDialogueGraph`）；`propose_dialogue_graph` / `layout_dialogue` / `propose_set_dialogue_choices` 等
+- `.kmind`：`kmindLayout.ts`（dagre Sugiyama）；`propose_kmind_edit`（shape/子树；非法 id → skipped）/ `layout_kmind`
+- `.dialogue.csv`：`formats.ts`；performance 校验 font_size/text_color；reorder 可报 openingChanged
+- Git：`main/git/gitService.ts` + Agent `git_*`（自动写 + 高亮卡 + L5/playbook + 本地裸仓）。**完整契约**：[AGENT-GIT.md](./AGENT-GIT.md)；指纹 `toolApi: 2026-08-12-l`（changelog §80–§89）
+  ```
+  openWorkspace → gitEnsure
+  agentLoop → Git (L5) + GIT_AGENT_PLAYBOOK
+  git_add/commit/remote_* → commitGitOp → ai:gitOp → GitResultCard + Toast
+  git_remote_add / git_push（本地）→ ensureLocalBareRepo
+  ```
 - Skills：`skills.ts` → `data/ai-skills/`；catalog 注入系统提示；`list_skills` / `read_skill`
 - 联网：`webSearch.ts`（DuckDuckGo）；`web_search` / `web_research`；设置开关
 
@@ -95,7 +104,7 @@ AiPanel / aiStore
 ### `appStore`
 
 - `windowRole`、`workspacePath`、`fileTree`、`tabs`（含 `docRev`、`dirty`、`isNew`）、`activeTabId`、分屏
-- `activeView`: `'explorer' | 'settings' | 'home'`
+- `activeView`: `'explorer' | 'settings' | 'home' | 'scm'`
 - `recentFolders`: `{ path, lastOpened }[]`（欢迎页最多展示 6；存储可更多）
 - 文件：`openFile` / `saveTab` / `discardTab` / `applyDocSnapshot` / **`applyAiFileEdit`**（AI 安静写回）/ `spawnNewWindow` 等
 - `unsavedDialogStore`：应用内未保存三按钮对话框
@@ -104,8 +113,9 @@ AiPanel / aiStore
 
 ### `aiStore`
 
-- 会话列表 / 当前会话、流式缓冲、`agentPhase`（idle/thinking/streaming/tool）
+- 会话列表 / 当前会话（含 `proposals` + **`gitOps`**）、流式缓冲、`agentPhase`（idle/thinking/streaming/tool）
 - `syncAppliedFile`：收到 `ai:proposal` 后更新标签与树，不切换当前页
+- `ai:gitOp`：更新 `gitOps` + Toast（Git 高亮卡由 AiPanel 渲染）
 
 ### `settingsStore`（localStorage: `kentucky.settings`）
 
@@ -126,7 +136,8 @@ AiPanel / aiStore
 - 动效 tokens 与 `prefers-reduced-motion`：`styles/global.css`；boot：`index.html` / `public/splash.html`
 - 无工作区 → `WelcomePage`（品牌 + 打开文件夹 + 最多 6 张工作区卡片）
 - 有工作区 → `Sidebar` + `EditorArea`
-- `activeView`: `'explorer' | 'settings' | 'home'`
+- `activeView`: `'explorer' | 'settings' | 'home' | 'scm'`
+- `activeView === 'scm'` → `ScmPane`（Source Control）
 - `activeView === 'settings'` → `SettingsPage`（可无工作区打开）
 - `activeView === 'home'`（或无工作区）→ `WelcomePage`；已开项目时侧栏隐藏，工作区与标签保留
 - `activeView === 'explorer'` + 有工作区 → `EditorArea` + 可选侧栏 + 可选右侧 `AiPanel`

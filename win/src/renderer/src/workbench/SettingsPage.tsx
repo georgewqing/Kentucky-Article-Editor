@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useAiStore, type AiProfileView, type AiSkillView } from '@/state/aiStore'
 import { ACCENT_PRESETS } from '@/theme/applyTheme'
 import i18n, { setStoredLocale, type AppLocale } from '@/i18n'
+import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 import { SegmentedControl } from './SegmentedControl'
 
 export function SettingsPage() {
   const { t } = useTranslation()
+  const pageRef = useRef<HTMLDivElement>(null)
+  useOverlayScroll(pageRef)
   const themeMode = useSettingsStore((s) => s.themeMode)
   const accent = useSettingsStore((s) => s.accent)
   const fontSize = useSettingsStore((s) => s.fontSize)
@@ -66,7 +69,7 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="settings-page">
+    <div className="settings-page kentucky-overlay-scroll" ref={pageRef}>
       <div className="settings-page-inner">
         <header className="settings-header">
           <h1>{t('settings.title')}</h1>
@@ -327,35 +330,7 @@ export function SettingsPage() {
                     ]}
                   />
                 </div>
-                <div className="settings-field settings-field--inline">
-                  <div className="settings-label-stack">
-                    <span className="settings-label">{t('settings.aiApplyMode')}</span>
-                  </div>
-                  <SegmentedControl
-                    aria-label={t('settings.aiApplyMode')}
-                    value={ai.applyWritesToDisk}
-                    onChange={(on) => void saveSettings({ applyWritesToDisk: on })}
-                    options={[
-                      { value: true, label: t('settings.aiApplyDisk') },
-                      { value: false, label: t('settings.aiApplyDirty') }
-                    ]}
-                  />
-                </div>
-                <div className="settings-field settings-field--inline settings-field--stack-sm">
-                  <div className="settings-label-stack">
-                    <span className="settings-label">{t('settings.aiForceReview')}</span>
-                    <p className="settings-hint">{t('settings.aiReviewHint')}</p>
-                  </div>
-                  <SegmentedControl
-                    aria-label={t('settings.aiForceReview')}
-                    value={ai.forceReviewAllWrites}
-                    onChange={(on) => void saveSettings({ forceReviewAllWrites: on })}
-                    options={[
-                      { value: true, label: t('settings.on') },
-                      { value: false, label: t('settings.off') }
-                    ]}
-                  />
-                </div>
+                <p className="settings-hint">{t('settings.aiAutoWriteHint')}</p>
                 <div className="settings-field">
                   <label className="settings-label" htmlFor="settings-style-memo">
                     {t('settings.aiStyleMemo')}

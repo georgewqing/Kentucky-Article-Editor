@@ -116,7 +116,15 @@ function checkAssertions(
     }
     if (a.character && a.characterStatus) {
       const st = doc.current.characterStatus[a.character]
-      if (st !== undefined && st !== a.characterStatus) {
+      if (st === undefined) {
+        issues.push({
+          severity: 'warn',
+          kind: 'unknown_character',
+          path: STORY_STATE_FILE,
+          quote: a.character,
+          suggestion: `Asserted ${a.character}=${a.characterStatus}, but character has no entry in current.characterStatus (unregistered / never upserted).`
+        })
+      } else if (st !== a.characterStatus) {
         issues.push({
           severity: 'warn',
           kind: 'assertion_failed',

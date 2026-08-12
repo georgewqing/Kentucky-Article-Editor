@@ -19,7 +19,7 @@ import i18n from '@/i18n'
 import { askUnsavedConfirm } from '@/state/unsavedDialogStore'
 
 export type EditorKind = 'text' | 'mindmap' | 'dialogue' | 'characters'
-export type ActiveView = 'explorer' | 'settings' | 'home'
+export type ActiveView = 'explorer' | 'settings' | 'home' | 'scm'
 
 export interface LinePickSession {
   mindmapTabId: string
@@ -106,6 +106,8 @@ interface AppState {
   toggleSidebar: () => void
   setSidebarWidth: (w: number) => void
   setActiveView: (v: ActiveView) => void
+  /** Show welcome without closing workspaces; parks the active session first. */
+  goHome: () => void
   showToast: (message: string, type?: 'error' | 'info') => void
   clearToast: () => void
 
@@ -113,6 +115,7 @@ interface AppState {
   addRecent: (path: string) => void
   removeRecent: (path: string) => void
 
+  /** Open or switch to a folder; always additive (same as activity-bar +). */
   openWorkspace: (path: string) => Promise<void>
   switchWorkspace: (id: string) => Promise<void>
   addWorkspaceViaDialog: () => Promise<void>
@@ -143,6 +146,13 @@ interface AppState {
     writeDisk: boolean
     isNew?: boolean
   }) => Promise<void>
+  /** Agent change highlight ranges (1-based lines), cleared on save/close/git reload */
+  agentChangeRanges: Record<string, Array<{ startLine: number; endLine: number }>>
+  setAgentChangeRanges: (
+    absPath: string,
+    ranges: Array<{ startLine: number; endLine: number }>
+  ) => void
+  clearAgentChangeRanges: (absPath?: string) => void
   saveTab: (id?: string) => Promise<boolean>
   discardTab: (id: string) => Promise<void>
   closeTab: (id: string, force?: boolean) => Promise<boolean>
@@ -335,12 +345,31 @@ export const useAppStore = create<AppState>((set, get) => ({
   linePickResult: null,
   openWorkspaces: [],
   activeWorkspaceId: null,
+  agentChangeRanges: {},
 
   setWindowRole: (role) => set({ windowRole: role }),
   setSidebarVisible: (v) => set({ sidebarVisible: v }),
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   setSidebarWidth: (w) => set({ sidebarWidth: Math.min(480, Math.max(160, w)) }),
   setActiveView: (v) => set({ activeView: v }),
+
+  setAgentChangeRanges: (absPath, ranges) =>
+    set((s) => ({
+      agentChangeRanges: { ...s.agentChangeRanges, [absPath.replace(/\//g, '\\').toLowerCase()]: ranges }
+    })),
+  clearAgentChangeRanges: (absPath) =>
+    set((s) => {
+      if (!absPath) return { agentChangeRanges: {} }
+      const key = absPath.replace(/\//g, '\\').toLowerCase()
+      const next = { ...s.agentChangeRanges }
+      delete next[key]
+      return { agentChangeRanges: next }
+    }),
+
+  goHome: () => {
+    const parked = snapshotActiveSession(get())
+    set({ openWorkspaces: parked, activeView: 'home' })
+  },
 
   showToast: (message, type = 'error') => {
     const id = Date.now()
@@ -379,6 +408,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   openWorkspace: async (path) => {
     const platform = getPlatform()
+    // Park current mirrors first so returning to welcome never drops an open project.
+    const parkedEarly = snapshotActiveSession(get())
+    if (parkedEarly !== get().openWorkspaces) {
+      set({ openWorkspaces: parkedEarly })
+    }
+
     const existing = get().openWorkspaces.find((w) => pathsEqual(w.path, path))
     if (existing) {
       await get().switchWorkspace(existing.id)
@@ -391,16 +426,28 @@ export const useAppStore = create<AppState>((set, get) => ({
       const id = newWorkspaceId()
       const session: WorkspaceSession = { id, ...emptySessionFields(path, tree) }
       const parked = snapshotActiveSession(get())
-      set({
-        openWorkspaces: [...parked, session],
-        ...mirrorsFromSession(session),
-        activeView: 'explorer',
-        sidebarVisible: true
-      })
+      const already = parked.find((w) => pathsEqual(w.path, path))
+      if (already) {
+        set({
+          openWorkspaces: parked,
+          ...mirrorsFromSession(already),
+          activeView: 'explorer',
+          sidebarVisible: true
+        })
+      } else {
+        set({
+          openWorkspaces: [...parked, session],
+          ...mirrorsFromSession(session),
+          activeView: 'explorer',
+          sidebarVisible: true
+        })
+      }
       if (get().windowRole === 'main') {
         void platform.reportWorkspace(path)
       }
       void notifyWorkspaceChanged(path)
+      // Auto-register local Git at workspace root (`.git` hidden in explorer).
+      void platform.gitEnsure(path).catch(() => undefined)
     } catch {
       get().showToast(i18n.t('errors.loadTreeFailed'))
     }
@@ -425,6 +472,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       void getPlatform().reportWorkspace(target.path)
     }
     void notifyWorkspaceChanged(target.path)
+    void getPlatform().gitEnsure(target.path).catch(() => undefined)
   },
 
   addWorkspaceViaDialog: async () => {
@@ -574,16 +622,29 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (snap.rev <= tab.docRev && tab.content === snap.content && tab.dirty === snap.dirty && !tab.isNew) {
           return s
         }
+        const hubClean =
+          !snap.dirty && snap.content === snap.originalContent && snap.rev > tab.docRev
         const next = [...s.tabs]
         next[idx] = {
           ...tab,
           content: snap.content,
-          originalContent: tab.isNew || tab.dirty ? tab.originalContent : snap.originalContent,
-          dirty: tab.isNew ? true : tab.dirty ? true : snap.dirty,
-          isNew: Boolean(tab.isNew),
+          originalContent: hubClean
+            ? snap.originalContent
+            : tab.isNew || tab.dirty
+              ? tab.originalContent
+              : snap.originalContent,
+          dirty: tab.isNew ? true : hubClean ? false : tab.dirty ? true : snap.dirty,
+          isNew: hubClean ? false : Boolean(tab.isNew),
           docRev: snap.rev
         }
-        return { tabs: next }
+        const patch: Partial<AppState> = { tabs: next }
+        if (hubClean) {
+          const key = snap.path.replace(/\//g, '\\').toLowerCase()
+          const ranges = { ...s.agentChangeRanges }
+          delete ranges[key]
+          patch.agentChangeRanges = ranges
+        }
+        return patch
       })
     } finally {
       applyingFromHub = false
@@ -692,6 +753,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     const dirty = true
     const originalContent = before
 
+    try {
+      const { computeChangeRanges } = await import('@/ai/proposalDiff')
+      get().setAgentChangeRanges(absPath, computeChangeRanges(before, content))
+    } catch {
+      /* ignore */
+    }
+
     const patchTab = (t: OpenTab): OpenTab => ({
       ...t,
       content,
@@ -773,6 +841,7 @@ export const useAppStore = create<AppState>((set, get) => ({
               : t
           )
         }))
+        get().clearAgentChangeRanges(latest.path)
         return true
       }
       applyingFromHub = true
@@ -794,6 +863,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       } finally {
         applyingFromHub = false
       }
+      get().clearAgentChangeRanges(latest.path)
       return true
     } catch {
       get().showToast(i18n.t('errors.saveFailed'))

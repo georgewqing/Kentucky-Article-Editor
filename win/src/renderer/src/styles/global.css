@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   /* Fallbacks before applyTheme runs */
   --bg: #141414;
   --bg-elev-1: #1a1a1a;
@@ -1833,8 +1833,18 @@ input[type='color'] {
 
 .welcome-actions {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 10px;
   margin-bottom: 36px;
+}
+
+.welcome-multi-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--fg-muted);
+  line-height: 1.45;
+  max-width: 42ch;
 }
 
 .btn-primary {
@@ -1911,6 +1921,17 @@ input[type='color'] {
   min-width: 0;
 }
 
+.workspace-card.is-open {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.workspace-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .workspace-card-title {
   font-size: 15px;
   font-weight: 600;
@@ -1918,6 +1939,19 @@ input[type='color'] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.workspace-card-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .workspace-card-path {
@@ -4156,6 +4190,66 @@ input[type='color'] {
 .ai-proposal.pending {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
 }
+.ai-proposal.ai-git-op.pending {
+  border-color: color-mix(in srgb, #3b82f6 50%, var(--border));
+  background: color-mix(in srgb, #3b82f6 6%, var(--bg-elevated, var(--bg)));
+}
+.ai-proposal.ai-git-op.applied {
+  border-color: color-mix(in srgb, #3b82f6 40%, var(--border));
+  opacity: 1;
+}
+.ai-proposal.ai-git-op.rejected {
+  border-color: color-mix(in srgb, var(--danger, #c44) 45%, var(--border));
+}
+.ai-proposal.ai-git-op.is-flash {
+  animation: ai-git-flash 1.8s var(--ease-out, ease-out);
+}
+@keyframes ai-git-flash {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, #3b82f6 55%, transparent);
+    background: color-mix(in srgb, #3b82f6 18%, var(--bg-elevated, var(--bg)));
+  }
+  35% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, #3b82f6 35%, transparent);
+    background: color-mix(in srgb, #3b82f6 12%, var(--bg-elevated, var(--bg)));
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-proposal.ai-git-op.is-flash {
+    animation: none;
+    outline: 2px solid color-mix(in srgb, #3b82f6 50%, transparent);
+  }
+}
+.ai-git-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #3b82f6;
+  margin-right: 4px;
+}
+.ai-git-op-head {
+  cursor: default;
+}
+.ai-git-detail {
+  max-height: 140px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ai-git-result {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.ai-git-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--danger, #c44);
+}
 .ai-proposal.applied {
   opacity: 0.85;
 }
@@ -4852,3 +4946,22 @@ input[type='color'] {
     opacity: 1 !important;
   }
 }
+
+/* ���� Source Control (SCM) ���� */
+.scm-pane { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.scm-pane .sidebar-title { display: inline-flex; align-items: center; gap: 6px; }
+.scm-block { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.scm-meta { font-size: 12px; color: var(--muted); }
+.scm-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; color: var(--muted); }
+.scm-file-list { list-style: none; margin: 0; padding: 0; }
+.scm-file-list li { display: flex; flex-direction: column; gap: 4px; padding: 4px 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+.scm-file-list li.active { background: var(--accent-soft); }
+.scm-file-btn { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; color: inherit; cursor: pointer; text-align: left; width: 100%; padding: 2px 0; }
+.scm-letter { font-family: ui-monospace, monospace; font-size: 11px; width: 14px; color: var(--accent); font-weight: 700; }
+.scm-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.scm-file-actions { display: flex; gap: 6px; padding-left: 22px; }
+.scm-file-actions button { font-size: 11px; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0; }
+.scm-file-actions button:hover { color: var(--fg); }
+.scm-diff { max-height: 220px; overflow: auto; font-size: 11px; background: var(--bg-elevated); padding: 8px; border-radius: 6px; white-space: pre-wrap; }
+.scm-commit { display: flex; flex-direction: column; gap: 8px; }
+.monaco-agent-change { background: color-mix(in srgb, var(--accent) 18%, transparent); }

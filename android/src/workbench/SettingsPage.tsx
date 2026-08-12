@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useAiStore, type AiProfileView, type AiSkillView } from '@/state/aiStore'
 import { ACCENT_PRESETS } from '@/theme/applyTheme'
 import i18n, { setStoredLocale, type AppLocale } from '@/i18n'
+import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 
 export function SettingsPage() {
   const { t } = useTranslation()
+  const pageRef = useRef<HTMLDivElement>(null)
+  useOverlayScroll(pageRef)
   const themeMode = useSettingsStore((s) => s.themeMode)
   const accent = useSettingsStore((s) => s.accent)
   const fontSize = useSettingsStore((s) => s.fontSize)
@@ -67,7 +70,7 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="settings-page">
+    <div className="settings-page kentucky-overlay-scroll" ref={pageRef}>
       <h1>{t('settings.title')}</h1>
       <p className="settings-desc">{t('settings.desc')}</p>
 

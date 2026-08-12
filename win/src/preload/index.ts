@@ -73,6 +73,37 @@ const api = {
   docSave: (filePath: string): Promise<DocSnapshot | null> => ipcRenderer.invoke('doc:save', filePath),
   docDiscard: (filePath: string): Promise<DocSnapshot | null> =>
     ipcRenderer.invoke('doc:discard', filePath),
+  docReloadFromDisk: (filePath: string): Promise<DocSnapshot | null> =>
+    ipcRenderer.invoke('doc:reloadFromDisk', filePath),
+  docEvict: (filePath: string): Promise<boolean> => ipcRenderer.invoke('doc:evict', filePath),
+
+  gitProbe: (): Promise<{ ok: boolean; version: string | null; error: string | null }> =>
+    ipcRenderer.invoke('git:probe'),
+  gitSetPath: (gitPath: string | null): Promise<{ ok: boolean; version: string | null; error: string | null }> =>
+    ipcRenderer.invoke('git:setPath', gitPath),
+  gitFindRoot: (workspaceRoot: string): Promise<string | null> =>
+    ipcRenderer.invoke('git:findRoot', workspaceRoot),
+  gitInit: (workspaceRoot: string): Promise<{ ok: boolean; repoRoot: string; error?: string }> =>
+    ipcRenderer.invoke('git:init', workspaceRoot),
+  gitEnsure: (
+    workspaceRoot: string
+  ): Promise<{ ok: boolean; repoRoot: string | null; created: boolean; error?: string }> =>
+    ipcRenderer.invoke('git:ensure', workspaceRoot),
+  gitStatus: (workspaceRoot: string): Promise<unknown> =>
+    ipcRenderer.invoke('git:status', workspaceRoot),
+  gitDiff: (workspaceRoot: string, path: string, staged?: boolean): Promise<unknown> =>
+    ipcRenderer.invoke('git:diff', workspaceRoot, path, staged),
+  gitStage: (workspaceRoot: string, paths: string[]): Promise<unknown> =>
+    ipcRenderer.invoke('git:stage', workspaceRoot, paths),
+  gitUnstage: (workspaceRoot: string, paths: string[]): Promise<unknown> =>
+    ipcRenderer.invoke('git:unstage', workspaceRoot, paths),
+  gitCommit: (workspaceRoot: string, message: string): Promise<unknown> =>
+    ipcRenderer.invoke('git:commit', workspaceRoot, message),
+  gitDiscard: (
+    workspaceRoot: string,
+    absPath: string,
+    opts?: { untrackedConfirmed?: boolean }
+  ): Promise<unknown> => ipcRenderer.invoke('git:discard', workspaceRoot, absPath, opts),
 
   confirmWindowClose: (): Promise<boolean> => ipcRenderer.invoke('window:confirmClose'),
   onWindowCloseRequest: (cb: () => void): (() => void) => {
@@ -176,6 +207,14 @@ const api = {
     sessionId: string
     proposalId: string
   }): Promise<unknown> => ipcRenderer.invoke('ai:rejectProposal', payload),
+  aiConfirmGitOp: (payload: {
+    sessionId: string
+    opId: string
+  }): Promise<unknown> => ipcRenderer.invoke('ai:confirmGitOp', payload),
+  aiRejectGitOp: (payload: {
+    sessionId: string
+    opId: string
+  }): Promise<unknown> => ipcRenderer.invoke('ai:rejectGitOp', payload),
   aiApplyAllProposals: (sessionId: string): Promise<unknown[]> =>
     ipcRenderer.invoke('ai:applyAllProposals', sessionId),
   aiListSkills: (): Promise<unknown[]> => ipcRenderer.invoke('ai:listSkills'),

@@ -44,17 +44,19 @@
 |----|------|
 | 协议 | OpenAI 兼容；**多配置档**（label/baseUrl/model/contextWindow + 每档加密 Key），输入栏切换 |
 | UI | 编辑区右侧面板；**Cursor 风格 composer**（模式 / 配置档 / **行内挂载芯片**；资源树拖入挂载；**Skill 暖色胶囊** + 发送注入 SKILL 正文 / 上传 / 发送）；主题色变量 |
-| 模式 | **Ask** 无工具；**Plan** 只读调研 + `create_plan` 写入工作区 `plans/<slug>.plan.md`（同 slug 覆盖、自动打开）；**Outline** 结构/导图；**Agent** 全工具+G3 可审。计划真相 = md 文件；**对话栏上方不挂常驻计划列表**。计划 md 顶栏 **开始执行 / Build**：切 Agent、绑定 `planFileRel`、发执行提示。Agent 若会话有 `planFileRel` 则 InjectPath；`update_plan_step` Soft 勾选 md（保留正文） |
+| 模式 | **Ask** 无工具；**Plan** 只读调研 + `create_plan`；**Outline** 结构/导图；**Agent** 全工具且**始终自动写盘**（无 Accept）。计划真相 = md 文件；**对话栏上方不挂常驻计划列表**。计划 md 顶栏 **开始执行 / Build**：切 Agent、绑定 `planFileRel`、发执行提示。Agent 若会话有 `planFileRel` 则 InjectPath；`update_plan_step` Soft 勾选 md（保留正文） |
 | 工作区文件结构 | Agent 可用 **`workspace_mkdir` / `workspace_copy` / `workspace_move` / `workspace_delete`**（主进程 Node FS，**非** Shell）。用于归档/迁移；move/delete 同步台词 sidecar 与 `.kmind` assets；UI 刷新树并关闭受影响标签 |
-| 写文件 | **G3 按类型可审**：已有内容的正文 md/txt、导图内容编辑、多文件同轮内容改 → Accept/Reject；**新建 / 空文件**、**角色 upsert（始终 auto，含批量）**、台词 ≤5 行、纯 layout → 自动。结果含 `written`/`pending`/`reviewHint`。Accept 后按设置写盘或标黄（**R1**：Accept 前不改打开中的 tab） |
+| 写文件 | **始终自动写盘**（无 Accept/Reject）。黄● = 相对上次 Ctrl+S/打开/Git 重载的 baseline。AiPanel 只读变更卡 + diff。误改靠 **Source Control 丢弃** 或编辑器 Undo。 |
 | 脏/新建色 | 改过未保存 = **黄 ●**；新建 = **蓝 ●**（标签栏 + 资源管理器同步）；保存后清除 |
+| Git | 工作区打开时若无仓则**自动**在根目录 `git init` + 默认 `.gitignore`（`kentucky.autoInit`）；**`.git`/点文件在资源管理器与 `list_dir` 不可见**。活动栏 SCM：status/diff/discard/stage/commit。Agent 工具见下行。无任意 Shell。完整说明：[`AGENT-GIT.md`](./AGENT-GIT.md)。 |
+| Git Agent 工具 | **全部立即执行**（无 Confirm）：`git_status`/`git_diff`/`git_log`/`git_pull`/`git_push`/`git_add`/`git_commit`/`git_remote_add`/`git_remote_remove`。写操作 → **高亮卡 + Toast**。本地/`file://` URL（可含空格）；缺失本地路径 → 自动 `git init --bare`。每轮 **Git (L5)** + **`GIT_AGENT_PLAYBOOK`**。**禁止** force。指纹 `toolApi: 2026-08-12-l`。 |
 | 焦点 | AI 改多文件时**不切换**当前标签（不闪页）；后台挂标签并刷新树 |
 | 数据 | 软件本体 `data/`（打包后与 exe 同目录；开发态 `win/dev-data/data/`）；**不**进项目、**不**用 `%APPDATA%` |
 | 密钥 | 每配置档 `safeStorage` 加密 blob：`data/ai-keys/<id>.bin`（旧单 Key 会迁入默认档） |
 | 会话 | 多会话 JSON：`data/ai-chats/`；**按工作区路径严格隔离**（列表/打开均过滤，互不互通） |
 | 面板开关 | **绑定工作区**：启动默认关闭；`data/ai-workspace-prefs.json` 记住各工作区是否打开；无工作区时不可开 AI |
-| 上下文 | **L5**：当前文件/选区/`@` + 自动角色表摘要；上下文占用进度条；接近满时禁止静默丢弃历史 |
-| 工具 | 只读 list/read；**L1** continuity_check（含 timeline/prop/foreshadow/scene/voice/glossary/proof）；**L2** 角色；**L3** scene↔kmind；**L4** 台词图；**文学记忆** story_state/foreshadow/voice/glossary/materials/revisions（按需 YAML，非 Git）；`.kmind` + dagre；**Skills**；可选联网搜索；无 Shell/Git |
+| 上下文 | **L5**：当前文件/选区/`@` + 角色表摘要 + **Git (L5)**（branch/remotes/dirty）；上下文占用进度条；接近满时禁止静默丢弃历史 |
+| 工具 | 只读 list/read；continuity；角色；scene↔kmind（含子树）；台词图；文学记忆 YAML（非 Git）；**Git** 全套（见 [`AGENT-GIT.md`](./AGENT-GIT.md)）；Skills；可选联网；**无**通用 Shell |
 | 文学记忆文件 | 工作区根可见、按需创建：`story_state.yaml`、`foreshadow.yaml`、`voice_anchor.yaml`、`voice_bank.yaml`、`glossary.yaml`；`materials/`；`revisions/`。启用态 = story_state 存在且至少一章。语义冲突只警告不挡写入。M1 schema 冻结后只增不改。 |
 | 快照上限 | `maxRevisionSnaps`（默认 20，AI 设置可配）；满则拒建、不自动删 |
 | 导图可读性 | AI 须建树/分层 DAG（非角色↔场景全连接网）；缺省 Sugiyama/LR；乱图可 `layout_kmind` |
@@ -63,7 +65,7 @@
 | 联网搜索 | 设置 `webSearchEnabled`（默认关）；`web_search` + `web_research`；DuckDuckGo 失败自动回退 Bing；可直选 Bing |
 
 | 加载态 | 思考中 / 调工具时必须有可见指示，禁止长时间空白像卡死 |
-| 文案 | pending 提案引导用户在卡片上接受/拒绝；自动类标明已写入 |
+| 文案 | Agent 写入标明已落盘；勿引导 Accept；误改指向 Source Control |
 | 费用 | **不做**账单累计 |
 | 失败 | 明确报错 + 手动「重试」 |
 | 范围 | 仅 `win/`；安卓冻结至 Win 正式版后再移植 |
@@ -96,7 +98,7 @@
 
 - 正文 ↔ 思维导图自动同步
 - Markdown 左右分屏实时预览（已用 WYSIWYG 替代）
-- 命令面板 / 扩展系统 / Git / 云同步
+- 命令面板 / 扩展系统 / 云同步（**Git SCM + Agent Git 已做**：见 [`AGENT-GIT.md`](./AGENT-GIT.md)；无分支图 / checkout UI）
 - 刚性左右树状思维导图布局（已改为自由白板）
 - `.md` 工具栏插图 / 表格、专注藏侧栏（本版）
 - `.txt` 的 Word 式工具栏（仅 `.md`）
@@ -106,5 +108,5 @@
 - 多窗口：精简窗内换文件、跨窗同步光标/选区、主窗标签列表镜像
 - 台词：分支/条件可视化、表达式编辑器、Godot **双向实时协议**、多语言对照编辑、音频播放/资源库、Markdown 内嵌台词、`characters.csv` 路径可配置、全工作区台词一键导出、Kentucky 内预览对焦/校验节点、在本仓附带/打包 Godot 插件  
   （执行器参考：[ai_river_godot](https://github.com/CCFOX12/ai_river_godot)；同目录磁盘联动 ≠ Kentucky 内嵌引擎；协议 v1.3 见 extras）
-- AI：命令面板式入口、扩展市场、Shell/Git 工具、费用账单、云同步 Key、正文↔导图自动双向同步、Composer 整页多文件编辑器、Cursor Tab 补全、工作区 skills、执行 skill 脚本、通用网页 fetch/浏览器自动化
-  （联网搜索：设置可选开启；Brave/Tavily 真实请求尚未实现）
+- AI：命令面板式入口、扩展市场、**任意 Shell**、Agent 侧 git **force** push/任意 argv、费用账单、云同步 Key、正文↔导图自动双向同步、Composer 整页多文件编辑器、Cursor Tab 补全、工作区 skills、执行 skill 脚本、通用浏览器自动化
+  （联网搜索：设置可选开启；Brave/Tavily 真实请求尚未实现；Agent Git 全记录见 [`AGENT-GIT.md`](./AGENT-GIT.md)，**无** force）

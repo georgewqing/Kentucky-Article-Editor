@@ -1,34 +1,58 @@
 # 改动时间线（Android）
 
+## 2026-08-12（文档对齐 Win Git l）
+- **未混入实现**：Android 仍无 Git/`U13–U18` 代码；BOARD U13–U18 保持 ⏭
+- 契约镜像 [`open/auto-apply-git.md`](./open/auto-apply-git.md) 指纹对齐 Win **`2026-08-12-l`**；文首标明 Win 真源 [`../win/project-memory/AGENT-GIT.md`](../win/project-memory/AGENT-GIT.md)
+- 修正过期表述：README 曾写 `-f`+§七 OPEN；PORTING/BOARD/gotchas 曾写 `-c`；清单内曾写 `-k`/`-i`
+- README 增加 Win AGENT-GIT 链接
+
+## 2026-08-12（冒烟 f）
+- Win `toolApi: 2026-08-12-f`：FIND-J/K；§七当时仍 OPEN（其后 Win `-g`…`-l` 已关闭；见 AGENT-GIT）
+
+## 2026-08-12（冒烟 e 详录）
+- Win changelog **§82** 扩写：FIND-03/E/F/G/H/I 表 + Agent `git_pull`/`git_push` 契约
+- Android [`open/auto-apply-git.md`](./open/auto-apply-git.md) §4.3–4.6 对齐（ensure ignore、工具表、验收）
+- 本版仍 **不移植** Android 代码
+
+## 2026-08-12（冒烟 d 详录）
+- Win changelog **§81** 扩写：FIND-A/B/C/D
+
+## 2026-08-12（冒烟 e）
+- Win `toolApi: 2026-08-12-e`：FIND-03/E/F/G/H/I + Agent `git_pull`/`git_push`（Android 本版仍不移植代码）
+
+## 2026-08-12（冒烟 d）
+- Win `toolApi: 2026-08-12-d`：git 中文路径、kmind skipped、unknown_character、reorder openingChanged（Android 本版仍不移植代码；契约见 [`open/auto-apply-git.md`](./open/auto-apply-git.md)）
+
+## 2026-08-12（文档整理）
+- **AI 易读重构**：入口 [`README.md`](./README.md) · 唯一进度板 [`BOARD.md`](./BOARD.md) · 详约集中 [`open/`](./open/)
+- 旧 `OPEN-*.md` / `SESSION-HANDOFF.md` 改为跳转 stub（勿再写进度）
+- SAF/台词说明并入 [`gotchas.md`](./gotchas.md)；PORTING 阶段 G / §11 指向 BOARD+open
+- Win 侧 SESSION / AGENT-TOOL-FEEDBACK / README 链接已改
+
+## 2026-08-12（晚）
+- 详化 auto-apply 契约（现 [`open/auto-apply-git.md`](./open/auto-apply-git.md)）：U13–U18；本版 **不实施** Android 代码
+
+## 2026-08-12
+- Shell UX 契约（现 [`open/shell-ux.md`](./open/shell-ux.md)）：U8–U12；Settings overlay / Welcome 部分已同步待验
+
 ## 文档 — Agent UI + 滚动条契约补全（2026-08-11）
 
-- [OPEN-agent-ui-parity.md](./OPEN-agent-ui-parity.md) 增补：
-  - slash 菜单可滑无滑块
-  - `.ai-messages` 禁横向滑块；`pre` 内部横滚
-  - 色条按 limit；冷色板 hex 表
-  - 验收第 8 条
-- Win SESSION / changelog §67–69 已对齐（voice_anchor j、色条、滑块）
+- Agent UI 详约（现 [`open/agent-ui.md`](./open/agent-ui.md)）增补 slash/消息滚动条、色条、验收
 - **代码尚未移植**；状态 OPEN
 
 ## 文档 — Agent UI + 文学记忆增量移植详约（2026-08-11）
 
-- 新增 [OPEN-agent-ui-parity.md](./OPEN-agent-ui-parity.md)：Win `/` Skills+Commands 预览、`contextEstimate` buckets、ContextBar 弹层（**按 limit 比例**、冷灰蓝色板）、send→`read_skill` hint
-- 更新 [OPEN-literary-memory-parity.md](./OPEN-literary-memory-parity.md)：指纹 → `2026-08-11-j`；§4.7.1 `voice_anchor` 合法键 + `narrator`→notes + `schemaHint`
-- [OPEN-agent-tool-feedback-parity.md](./OPEN-agent-tool-feedback-parity.md) 增 U1–U3；[PORTING-WIN-TO-ANDROID.md](./PORTING-WIN-TO-ANDROID.md) 阶段 G 第 11 条
+- 新增 Agent UI / 文学记忆详约（现 `open/agent-ui.md` · `open/literary-memory.md`）
 - **代码尚未移植**；状态 OPEN
 
 ## 文档 — 文学记忆 Round H 移植详约（2026-08-11）
 
-- 新增 [OPEN-literary-memory-parity.md](./OPEN-literary-memory-parity.md)：Win M1–M4（初版指纹 `2026-08-11-h`，现以 Win `TOOL_API_VERSION` 为准）
-  - 文件映射、工具/门禁、启用态/stale/L5、issue kinds、Grill 定稿、真机验收、Android SAF/落盘风险
-- [OPEN-agent-tool-feedback-parity.md](./OPEN-agent-tool-feedback-parity.md) H1–H4 链到详约；[PORTING-WIN-TO-ANDROID.md](./PORTING-WIN-TO-ANDROID.md) 阶段 G 第 10 条
+- 新增文学记忆详约（现 [`open/literary-memory.md`](./open/literary-memory.md)）
 - **代码尚未移植**；状态 OPEN
 
 ## 文档 — Agent 工具反馈对齐 OPEN（2026-08-11）
 
-- 新增 [OPEN-agent-tool-feedback-parity.md](./OPEN-agent-tool-feedback-parity.md)：Win Round A–D 工具反馈须移植到 `ai-runtime`
-- 权威总清单在 Win：[`../win/project-memory/AGENT-TOOL-FEEDBACK.md`](../win/project-memory/AGENT-TOOL-FEEDBACK.md)
-- [PORTING-WIN-TO-ANDROID.md](./PORTING-WIN-TO-ANDROID.md) 阶段 G 增加第 9 条对照总清单
+- 进度并入 [`BOARD.md`](./BOARD.md)；Win 总清单 [`../win/project-memory/AGENT-TOOL-FEEDBACK.md`](../win/project-memory/AGENT-TOOL-FEEDBACK.md)
 - **代码尚未移植**；状态 OPEN
 
 ## 0.2.0+ — 状态栏绑错 id 纠正 + 台词 SAF/Accept（2026-08-10）
@@ -36,7 +60,7 @@
 - **状态栏**：确认 Capacitor 不用 app `main_content`；`configureSystemBars` 直接给 Bridge `@id/webview` 加 margin，状态栏/导航栏纯黑
 - **SAF**：`writeStream` 回收 `.txt` / `(N).txt`、`renameTo` 纠正 mangled 名，纠正失败则抛错避免静默脏名
 - **AI Accept**：Capacitor 真机强制 `applyProposalToDisk`（避免只标脏后重载丢失）
-- 文档：[OPEN-dialogue-saf-corruption.md](./OPEN-dialogue-saf-corruption.md)
+- 说明已并入 [`gotchas.md`](./gotchas.md)
 
 ## 文档 — Win → Android 持续移植手册（2026-08-10）
 
@@ -47,7 +71,7 @@
   - Win 正式功能更新后的分阶段同步流程；
   - Platform 契约、Node I/O 改造、AI runtime、原生 plugin、数据迁移和 Android UX；
   - 常见功能移植模板、强制真机回归矩阵、故障定位和完成定义。
-- README 与 SESSION-HANDOFF 已加入必读入口。今后 Win 功能同步必须在本时间线记录
+- README 已加入必读入口。今后 Win 功能同步必须在本时间线记录
   功能来源、Android 差异、未移植项和验证结果。
 
 ## 0.2.0+ — 真机首轮回归修复（2026-08-10）
@@ -161,7 +185,7 @@
 ## 0.2.0+ — MD↔AI 触控板原生修复候选（2026-08-10）
 
 - 现象：Markdown + AI 触控板滚动互斥；触屏正常；MindMap/Dialogue+AI 正常
-- 专项记录：[OPEN-trackpad-md-ai-scroll.md](./OPEN-trackpad-md-ai-scroll.md)
+- 专项记录：[`open/trackpad-scroll.md`](./open/trackpad-scroll.md)
 - 已尝试均无效：viewport、CSS pan-y、全局/区域 wheel 劫持、focusScrollHost、`useSpatialWheelScroll`
 - 原生候选：
   - `MainActivity.dispatchGenericMotionEvent` 截获 pointer `ACTION_SCROLL`
@@ -182,7 +206,7 @@
 
 ## 0.2.0+ — 真机修复与侧栏（2026-08-10）
 
-详见 [SESSION-HANDOFF.md](./SESSION-HANDOFF.md)。
+详见 [`README.md`](./README.md)。
 
 - Vite：`/boot-theme.js` + `public/boot-splash.css`（规避 Windows 空格路径 inline-css bug）
 - `openFolder`：Capacitor 真机优先 SAF，不再被 WebView 假 FSA 抢走

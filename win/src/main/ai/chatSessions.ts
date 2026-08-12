@@ -19,6 +19,8 @@ export interface ChatMessage {
   toolName?: string
   toolCallId?: string
   proposalIds?: string[]
+  /** Agent Git confirm-card ops produced by this assistant turn. */
+  gitOpIds?: string[]
   error?: string
   /** Paperclip / composer mounts for this user turn (workspace-relative). */
   attachedPaths?: string[]
@@ -66,6 +68,29 @@ export interface FileProposal {
   changeCount?: number
 }
 
+/** Agent Git write ops — auto-executed; UI shows highlight card (no Confirm). */
+export type GitPendingKind = 'add' | 'commit' | 'remote_add' | 'remote_remove'
+
+export interface GitPendingOp {
+  id: string
+  kind: GitPendingKind
+  summary: string
+  /** Human-readable detail shown on the result card */
+  detail: string
+  /** Opaque params for execution */
+  params: {
+    paths?: string[]
+    all?: boolean
+    message?: string
+    remote?: string
+    url?: string
+  }
+  status: 'pending' | 'applied' | 'rejected'
+  messageId?: string
+  resultNote?: string
+  error?: string
+}
+
 export interface ChatSession {
   id: string
   title: string
@@ -77,6 +102,8 @@ export interface ChatSession {
   /** Workspace-relative path to active plans/*.plan.md (Mirror companion). */
   planFileRel?: string | null
   proposals: FileProposal[]
+  /** Pending / history Agent Git ops (confirm card). */
+  gitOps?: GitPendingOp[]
 }
 
 function sessionPath(id: string): string {
@@ -119,7 +146,24 @@ export function loadSession(id: string): ChatSession | null {
   const p = sessionPath(id)
   if (!existsSync(p)) return null
   try {
-    return JSON.parse(readFileSync(p, 'utf-8')) as ChatSession
+    const session = JSON.parse(readFileSync(p, 'utf-8')) as ChatSession
+    if (!session.gitOps) session.gitOps = []
+    // Migrate legacy pending file proposals (Accept UI removed): treat as applied if after
+    // looks like a real write, else rejected. Legacy pending gitOps (Confirm removed) → rejected.
+    let dirty = false
+    for (const prop of session.proposals || []) {
+      if (prop.status !== 'pending') continue
+      prop.status = prop.after != null && String(prop.after).length >= 0 ? 'applied' : 'rejected'
+      dirty = true
+    }
+    for (const op of session.gitOps) {
+      if (op.status !== 'pending') continue
+      op.status = 'rejected'
+      op.resultNote = op.resultNote || 'Superseded: Git ops now auto-execute'
+      dirty = true
+    }
+    if (dirty) saveSession(session)
+    return session
   } catch {
     return null
   }
@@ -140,7 +184,8 @@ export function createSession(workspacePath: string | null): ChatSession {
     updatedAt: now,
     messages: [],
     plan: [],
-    proposals: []
+    proposals: [],
+    gitOps: []
   }
   saveSession(session)
   return session

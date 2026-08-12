@@ -566,3 +566,159 @@
 - 选项卡悬停用 `cursor: pointer`
 - 连线手柄圆心贴节点边缘（半进半出）；缩放时手柄不宜过大
 
+## 74. 设置页排版与分段开关动效
+- 卡片分区、stacked 字段；SegmentedControl clip-path（`--duration-toggle`）
+- 详见 android `OPEN-shell-ux-parity.md` U8
+
+## 75. 设置页主题色滚动条
+- `kentucky-overlay-scroll` + `useOverlayScroll`（U9）
+
+## 76. 上下文用量跟随主体色
+- `accentTone` / `CONTEXT_BUCKET_STRENGTH`；ContextBar 读 settings accent（U10）
+
+## 77. 开始页多开工作区
+- `goHome` 停车；Welcome 与活动栏「+」同为加开；已开 badge（U11）
+
+## 78. 纸夹挂载 CRITICAL 注入
+- `buildMountedFilesHint`；`readAbsSafe` 路径键统一；`toolApi: 2026-08-12-a`（U12）
+- 移植契约：`android/project-memory/OPEN-shell-ux-parity.md`
+
+## 79. 冒烟反馈修复（2026-08-12-b）
+- **门控澄清**：`update_plan_step` 不进 `turnPaths`；`multi_file_turn` 仅内容路径（plan 路径排除）
+- **setCurrent:false**：`asBool` 防 `"false"`；不改 `current.location`；rollup 本就不写 sceneId
+- **append**：返回 `addedLineIds`；空/已有 dNN 续编号；schema 支持 `lines[].id`
+- **choices merge**：`null` 亦可删 key
+- **ghost**：排除「这/那+量词」（那串风铃）
+- `toolApi: 2026-08-12-b`
+
+## 80. Agent 自动落盘 + Git SCM + 导图子树（2026-08-12-c）
+- 取消 Accept/Reject；提案只读卡；Agent **始终写盘**
+- DocumentHub `docApplyAgentWrite` / `docReloadFromDisk`；黄●相对 original 至 Ctrl+S
+- 活动栏 Source Control：init、status、diff、discard、stage、commit；Agent `git_status`/`git_diff`
+- `propose_kmind_edit`：shape/尺寸、removeSubtree、moveSubtree
+- Android：仅手册 [`open/auto-apply-git.md`](../../android/project-memory/open/auto-apply-git.md)，本版不同步代码
+- `toolApi: 2026-08-12-c`
+
+## 81. 第三轮冒烟修复（2026-08-12-d）
+
+来源：`test2/agent-第三轮冒烟测试总结.md`（找茬）。指纹 `toolApi: 2026-08-12-d`（须**完整重启** Electron）。
+
+| FIND | 严重度 | 现象 | 修复 |
+|------|--------|------|------|
+| **A** | 中 | `propose_kmind_edit` connect/move 非法 id 静默丢弃 | 收集 `skipped[]`，同步 `warnings` + note；覆盖 update/removeSubtree |
+| **B** | 低 | continuity `character`+`characterStatus` 表中无键则静默 | `kind: unknown_character` warn（`literaryContinuity.checkAssertions`） |
+| **C** | 低/设计 | 部分 reorder 改 CSV 首行=开场无感知 | 返回 `openingId`/`openingBefore`/`openingChanged` + note；schema 说明首行=开场 |
+| **D** | 中 | `git_status` 中文路径八进制 | 所有 git 调用前缀 `-c core.quotepath=false`；`unquoteGitPath` 按 **UTF-8 字节**解八进制（勿逐字节 `fromCharCode`） |
+
+**文件：** `gitService.ts`（quotepath / unquote / 默认 `.gitignore` 含 `.kentucky/`）· `tools.ts`（kmind skipped、reorder）· `literaryContinuity.ts` · `proposalGate.ts`。
+
+**验收：** 错 id 连线有 skipped；未知角色断言有 unknown_character；部分 reorder 有 openingChanged；中文路径可读。
+
+## 82. 第四轮冒烟 + Agent git pull/push（2026-08-12-e）
+
+来源：`test2/agent-第四轮冒烟测试总结.md`（含 §六 备份/拉取补测）。指纹 `toolApi: 2026-08-12-e`。
+
+### 82.1 冒烟 FIND
+
+| FIND | 严重度 | 现象 | 修复 |
+|------|--------|------|------|
+| **03** | 中 | 旧仓 `.gitignore` 无 `.kentucky/`（`-d` 只写在**新建** ignore） | `ensureKentuckyGitignore` 幂等；`git init` + **`git_status`/summary** 时调用 |
+| **E** | 低 | `git_diff` 缺文件/目录 → `ok:true, diff:""` | 缺文件 / 是目录 → `ok:false` + `error` |
+| **F** | 低（复测降级） | `staged=true` 对 untracked 仍全文 fallback | **仅** `staged=false` 才对 untracked 生成 `/dev/null` 全文；staged 空则 note |
+| **G** | 低-中 | performance `font_size:"abc"` / 非 hex `text_color` 落盘 | 校验：font_size=数字或空；text_color=`#RGB/#RRGGBB/#RRGGBBAA` 或空；拒写字段进 `warnings` |
+| **H** | 低 | append 未注册 speaker 静默 | 仍写盘；`warnings` 列未注册 speaker |
+| **I** | 低 | voice upsert 未注册 characterId 静默 | 仍写盘；`warnings` 提示不在 cast |
+
+**未做（有意）：** Agent **commit** 仍 UI-only；append/voice **不硬拦**（与 cast_check 分工）。
+
+### 82.2 Agent Git 工具扩展
+
+产品决策更新：Agent 可 **pull/push**，**禁止 force**；无任意 argv/Shell；**无** Agent commit。
+
+| 工具 | 行为 |
+|------|------|
+| `git_status` | 分支、files、**remotes**、`gitignoreUpdated`；触发 ensure `.kentucky/` |
+| `git_diff` | 见 FIND-E/F；截断大 diff |
+| `git_pull` | `git pull` [remote] [branch]；可选 `ffOnly`→`--ff-only`；无 remote → error |
+| `git_push` | `git push` [remote] [branch]；可选 `setUpstream`→`-u`（须 branch）；**永不** `--force` / `--force-with-lease` |
+
+**IPC（供日后 UI）：** `git:pull` / `git:push` / `git:remotes`（`registerGitIpc.ts`）。
+
+**文件：** `gitService.ts` · `registerGitIpc.ts` · `tools.ts`（defs + cases）· `literaryTools.ts`（voice warn）· `proposalGate` 文案 · `product-decisions.md` / `gotchas.md`。
+
+**Android：** 详约 [`open/auto-apply-git.md`](../../android/project-memory/open/auto-apply-git.md)；**本版不移植代码**。
+
+**验收：** 指纹 `2026-08-12-e`；无 remote 时 pull/push 可读错误；FIND-03/E/F/G/H/I 对齐。
+
+## 83. 第五轮冒烟（2026-08-12-f）
+
+来源：`test2/agent-第五轮冒烟测试总结.md`。
+
+| FIND | 处理 |
+|------|------|
+| **J** | `moveSubtree` 区分 `unknown root` / `unknown parent`；`connect` 区分 source/target |
+| **K** | `git_status` 工具描述与返回 `note` 标明可能写 `.gitignore`（非纯只读）；`gitignoreUpdated` 时写明 side effect |
+
+**产品 OPEN（报告 §七）：** 已由后续版本关闭 — Confirm 卡（`-g`）→ 自动执行+高亮（`-i`）→ 本地 URL/裸仓/L5（`-j`…`-l`）。详见 [`AGENT-GIT.md`](./AGENT-GIT.md)。
+
+- `toolApi: 2026-08-12-f`
+
+## 84. 独立 Git 确认卡（2026-08-12-g）
+
+用户拍板：Agent Git **写操作**用独立确认卡（非文件 Accept；文件仍始终自动写盘）。
+
+| 工具 | 行为 |
+|------|------|
+| `git_add` | 排队 Confirm；`all=true`→`git add -A`，或 `paths[]` |
+| `git_commit` | 排队 Confirm；Confirm 后 `git commit -m` |
+| `git_remote_add` | 排队 Confirm；`name`+`url` |
+| `git_log` | 只读立即执行 |
+| `git_pull` / `git_push` | 仍立即执行（无 force） |
+
+- 工具结果：`pending:true` / `executed:false` / `opId` / `toolApi`；**勿**在 Confirm 前声称已提交。
+- 会话：`ChatSession.gitOps[]`；IPC `ai:confirmGitOp` / `ai:rejectGitOp`；事件 `ai:gitPending`。
+- UI：`AiPanel` `GitConfirmCard`（Confirm/Reject）；执行失败保持 pending 可重试。
+- `toolApi: 2026-08-12-g`（须完整重启 Electron）。
+
+## 85. 工作区自动建仓（隐藏 `.git`）（2026-08-12-h）
+
+- 打开/切换工作区 → `gitEnsure`：无祖先 `.git` 时在**工作区根** `git init` + 默认 `.gitignore` + `kentucky.autoInit=true`。
+- `git:status` / Agent `git_status` 同样 ensure（返回可含 `repoCreated`）。
+- **软件内不可见**：资源管理器与 Agent `list_dir` 均不列出 `.git` 等点文件；SCM 不再依赖用户手动「初始化」（失败时仍可重试）。
+- 有父级 Git 仓时**不**嵌套 init，复用向上找到的仓根。
+- `toolApi: 2026-08-12-h`
+
+## 86. Git 写操作取消确认 · 高亮提示（2026-08-12-i）
+
+- `git_add` / `git_commit` / `git_remote_add` **立即执行**（无 Confirm/Reject）。
+- UI：只读高亮卡（flash 动画）+ Toast；失败卡显示 error。
+- 事件：`ai:gitOp`（替代 `ai:gitPending`）。旧会话 pending gitOps 加载时标 rejected。
+- `toolApi: 2026-08-12-i`
+
+## 87. git_remote_add 本地路径（2026-08-12-j）
+
+冒烟：带空格的 Windows/`file://` 路径被 `/\s/` 误拒为 Invalid remote URL。
+
+- `isValidGitRemoteUrl`：允许 https/ssh/git/file、scp-like、本地盘符/相对路径（**允许空格**）。
+- 新增 `git_remote_remove`（清理占位 origin）。
+- `toolApi: 2026-08-12-j`
+
+## 88. 本地 remote 自动建裸仓（2026-08-12-k）
+
+- `git_remote_add` 指向本地/`file://` 且目录不存在 → 自动 `git init --bare`（`bareCreated`）。
+- `git_push` 前同样 ensure：已配置但裸仓缺失时补建再推。
+- 路径已存在且非 Git 目录 → 明确报错（不覆盖）。
+- `toolApi: 2026-08-12-k`
+
+## 89. Git 工具更易被 Agent 调用（2026-08-12-l）
+
+- 每轮 Editor context 注入 **Git (L5)** 实况（branch/remotes/dirty），新对话不依赖旧聊天记忆。
+- 系统提示增加 `GIT_AGENT_PLAYBOOK`（配方 + 意图关键词）。
+- 各 `git_*` 工具 description 改为 WHEN/Next 导向。
+- `toolApi: 2026-08-12-l`
+
+## 90. Git 专档归档
+
+- 新增完整记录 [`AGENT-GIT.md`](./AGENT-GIT.md)；README / product-decisions / architecture / SESSION 已交叉链接。
+- 本文 §80–§89 为时间线；**契约以 AGENT-GIT 为准**。
+

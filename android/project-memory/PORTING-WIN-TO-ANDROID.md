@@ -6,7 +6,7 @@
 > 单窗模型和离线能力的前提下，将同一业务能力完整移植到 `android/`。
 >
 > 本文是操作规程，不是背景介绍。开始修改前必须完整阅读本文，并同时阅读
-> [SESSION-HANDOFF.md](./SESSION-HANDOFF.md)、[architecture.md](./architecture.md)、
+> [README.md](./README.md)、[BOARD.md](./BOARD.md)、[architecture.md](./architecture.md)、
 > [product-decisions.md](./product-decisions.md) 和 [gotchas.md](./gotchas.md)。
 
 ## 1. 最重要的结论
@@ -451,16 +451,17 @@ Win AI 位于 `win/src/main/ai/`，Android 位于 `android/src/ai-runtime/`。�
 1. Win `getWritingTools()` 增加/修改工具定义时，同步 Android定义。
 2. 同步工具执行分支，而不仅是 JSON schema。
 3. 检查读写是否全部走 `WorkspaceIo`。
-4. 检查 proposal Accept/Reject/Apply All 的结果一致。
-5. 检查自动落盘阈值、dirty tab、ghost tab 和“全部保存”。
+4. 检查写入反馈与 Win 一致（**无 Accept**；只读 diff；见 U13）。
+5. 检查自动落盘、dirty tab、ghost tab 和“全部保存”（U14 他日：始终写盘）。
 6. 检查会话与 profile 升级，不得丢失旧 Preferences 数据。
 7. 真机用真实兼容 API 发一轮消息，不能只测试 mock。
 8. 网络失败、无 Key、Abort、App 切后台后恢复都要有可理解结果。
-9. **对照** [`../win/project-memory/AGENT-TOOL-FEEDBACK.md`](../win/project-memory/AGENT-TOOL-FEEDBACK.md) 与 OPEN 工单 [`OPEN-agent-tool-feedback-parity.md`](./OPEN-agent-tool-feedback-parity.md)：写入门禁、`toolApi`/`gateDetail`、characters 强制落盘、continuity 无全文、Plan 返回值、append 建表、FS 工具、`propose_upsert_characters`、web snippet、diff/批量 UI。缺一项不得标「AI 已对齐」。
-10. **Round H 文学记忆**：对照 [`OPEN-literary-memory-parity.md`](./OPEN-literary-memory-parity.md)（M1–M4）。同步 `proposalGate` 的 `MEMORY_KINDS`、整套 `literary*` 模块（`WorkspaceIo` 化）、`continuity_check` aspects、`maxRevisionSnaps`、L5 摘要、`reader-critique` skill、`memoryNudge`/`memoryHint`、`voice_anchor` schemaHint。H1–H4 未 ✅ 不得标「AI 已对齐」。
-11. **Agent UI（`/` + 上下文用量 + 滚动条）**：对照 [`OPEN-agent-ui-parity.md`](./OPEN-agent-ui-parity.md)。同步 `contextEstimate`、`aiContextUsage` buckets、AiComposer slash（**可滑无滑块**）、ContextBar（色条按 **limit**、冷色板）、消息区 `overflow-x:hidden`。U1–U3 未 ✅ 不得标「Agent UI 已对齐」。  
-    **Skill 选中行为以 chrome OPEN 为准**：暖色胶囊 + `skillId` 注入 SKILL 正文（见下条），不是只写 `/id ` 进 draft。
-12. **Workbench Chrome（§70–73）**：对照 [`OPEN-workbench-chrome-parity.md`](./OPEN-workbench-chrome-parity.md)。挂载 chip / 拖入文件夹、`attachedPaths`、Skill 胶囊与正文注入、选区右键、`explorerExpandPrefs`。U4–U7 未 ✅ 不得标「Workbench chrome 已对齐」。
+9. **进度与契约**：勾选 [`BOARD.md`](./BOARD.md)；详约在 [`open/`](./open/)。Win 总清单 [`../win/project-memory/AGENT-TOOL-FEEDBACK.md`](../win/project-memory/AGENT-TOOL-FEEDBACK.md)。W* 未 ✅ 不得标「AI 已对齐」。
+10. **Round H**：[`open/literary-memory.md`](./open/literary-memory.md)。H1–H4 未 ✅ 不得标「AI 已对齐」。
+11. **Agent UI U1–U3**：[`open/agent-ui.md`](./open/agent-ui.md)。Skill 选中以 chrome 为准（暖色胶囊 + 正文注入）。
+12. **Workbench Chrome U4–U7**：[`open/workbench-chrome.md`](./open/workbench-chrome.md)。**U4 须含 U12 CRITICAL**。
+13. **Shell UX U8–U12**：[`open/shell-ux.md`](./open/shell-ux.md)。
+14. **Auto-apply + Git U13–U18**：[`open/auto-apply-git.md`](./open/auto-apply-git.md)。**本大版本跳过 Android 代码**。Win 指纹参考 `2026-08-12-l`；Win 完整记录 [`../win/project-memory/AGENT-GIT.md`](../win/project-memory/AGENT-GIT.md)。
 
 #### Round H 通常可同步的逻辑文件（仍须 WorkspaceIo 包装 IO）
 
@@ -843,8 +844,8 @@ Shell 正在用过新的 JDK。改用 JDK/JBR 17 或 21，不要改 Gradle 来�
 - `product-decisions.md`：产品边界变化；
 - `gotchas.md`：踩坑和禁止项；
 - `how-to-run.md`：构建/验收流程变化；
-- `SESSION-HANDOFF.md`：当前状态和下一步；
-- 独立 `OPEN-*.md`：未解决且需要真机继续追踪的问题。
+- `README.md` / `BOARD.md`：当前状态与进度勾选；
+- `open/*.md`：未解决契约（新工单先加 BOARD 行，必要时再加详约）。
 
 不得只在聊天里说“已经同步”，却不更新 project-memory。
 
@@ -860,7 +861,7 @@ Shell 正在用过新的 JDK。改用 JDK/JBR 17 或 21，不要改 Gradle 来�
 - Android Back、system bars、IME、touch/trackpad 不回归；
 - `uiScale` 和窄宽 drawer 不回归；
 - typecheck/build/cap sync/assemble 通过；
-- 真机必测项已实际验证，或在 `OPEN-*.md` 明确标记“待真机验收”；
+- 真机必测项已实际验证，或在 `BOARD.md` / `open/` 明确标记“待真机验收”；
 - project-memory 已记录来源、差异、验证和遗留项。
 
 “代码已复制”“TypeScript 能编译”“浏览器能打开”都不等于移植完成。
@@ -869,7 +870,7 @@ Shell 正在用过新的 JDK。改用 JDK/JBR 17 或 21，不要改 Gradle 来�
 
 如果上下文不足，严格执行：
 
-1. 读 `README.md` → `SESSION-HANDOFF.md` → 本文 → `gotchas.md`。
+1. 读 `README.md` → `BOARD.md` → 本文 → `gotchas.md`；实现某 ID 时打开对应 `open/*.md`。
 2. 找出 Win 功能的 renderer/main/preload/AI/依赖/协议全部改动。
 3. 分类 R/P/E/N/A/D/U。
 4. 先移植类型、协议、纯算法。
@@ -879,7 +880,7 @@ Shell 正在用过新的 JDK。改用 JDK/JBR 17 或 21，不要改 Gradle 来�
 8. 补 Android 入口、Back、touch、trackpad、drawer、uiScale。
 9. 跑 typecheck/build/cap sync/assemble。
 10. 真机验证 SAF、系统栏、滚动、键盘和本功能。
-11. 更新 changelog/handoff/gotchas；未验收内容写 OPEN。
+11. 更新 `changelog.md` / `BOARD.md` / `gotchas.md`；新缺口写 BOARD + 必要时 `open/`。
 
 任何一步不清楚时，先停止修改并继续读代码，不要用空实现、浏览器 API 假实现或整目录
 覆盖来“让编译通过”。

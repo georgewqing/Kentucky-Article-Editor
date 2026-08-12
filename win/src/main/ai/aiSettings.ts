@@ -41,6 +41,8 @@ export interface AiPublicSettings {
   enabledSkillIds: string[] | null
   /** Max file snapshots under revisions/snaps (default 20). Full → create fails. */
   maxRevisionSnaps: number
+  /** Optional absolute path to git.exe (portable / custom install). */
+  gitPath: string
 }
 
 const DEFAULTS: Omit<AiPublicSettings, 'baseUrl' | 'model' | 'contextWindow' | 'activeProfileId'> & {
@@ -52,7 +54,7 @@ const DEFAULTS: Omit<AiPublicSettings, 'baseUrl' | 'model' | 'contextWindow' | '
   model: 'gpt-4o-mini',
   contextWindow: 128000,
   agentEnabled: true,
-  applyWritesToDisk: false,
+  applyWritesToDisk: true,
   forceReviewAllWrites: false,
   temperature: 0.7,
   styleMemo: '',
@@ -63,7 +65,8 @@ const DEFAULTS: Omit<AiPublicSettings, 'baseUrl' | 'model' | 'contextWindow' | '
   webSearchProvider: 'duckduckgo',
   webSearchMaxResults: 5,
   enabledSkillIds: null,
-  maxRevisionSnaps: 20
+  maxRevisionSnaps: 20,
+  gitPath: ''
 }
 
 function loadGlobalRaw(): Partial<AiPublicSettings> {
@@ -108,8 +111,9 @@ export function loadAiSettings(): AiPublicSettings {
     model: profile.model,
     contextWindow: profile.contextWindow,
     agentEnabled: raw.agentEnabled !== false,
-    applyWritesToDisk: Boolean(raw.applyWritesToDisk),
-    forceReviewAllWrites: Boolean(raw.forceReviewAllWrites),
+    // Legacy: agent always writes disk now; keep fields for schema compat but force off review.
+    applyWritesToDisk: true,
+    forceReviewAllWrites: false,
     temperature:
       typeof raw.temperature === 'number'
         ? Math.min(2, Math.max(0, raw.temperature))
@@ -132,7 +136,8 @@ export function loadAiSettings(): AiPublicSettings {
     maxRevisionSnaps:
       typeof raw.maxRevisionSnaps === 'number'
         ? Math.min(100, Math.max(1, Math.floor(raw.maxRevisionSnaps)))
-        : DEFAULTS.maxRevisionSnaps
+        : DEFAULTS.maxRevisionSnaps,
+    gitPath: typeof raw.gitPath === 'string' ? raw.gitPath : ''
   }
 }
 
@@ -151,7 +156,8 @@ export function saveAiSettings(partial: Partial<AiPublicSettings>): AiPublicSett
     'webSearchProvider',
     'webSearchMaxResults',
     'enabledSkillIds',
-    'maxRevisionSnaps'
+    'maxRevisionSnaps',
+    'gitPath'
   ]
   const globalPatch: Record<string, unknown> = {}
   for (const k of globalKeys) {

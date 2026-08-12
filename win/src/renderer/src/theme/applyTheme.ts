@@ -95,13 +95,54 @@ function withAlpha(hex: string, alpha: number): string {
   return `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${alpha})`
 }
 
+function normalizeAccent(accent: string): string {
+  if (/^#[0-9a-fA-F]{6}$/.test(accent)) return accent
+  if (/^#[0-9a-fA-F]{3}$/.test(accent)) {
+    const h = accent.slice(1)
+    return `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`
+  }
+  return DEFAULT_ACCENT
+}
+
+/**
+ * Theme-tinted solid for context meter buckets.
+ * `strength` 0 = pale/weak, 1 = vivid/deep — same hue, different weight.
+ */
+export function accentTone(accent: string, strength: number, mode: ThemeMode = 'dark'): string {
+  const safe = normalizeAccent(accent)
+  const { r, g, b } = hexToRgb(safe)
+  let { h, s, l } = rgbToHsl(r, g, b)
+  // Near-gray accents (e.g. white) have no usable hue — borrow a cool cyan carrier.
+  if (s < 0.08) {
+    h = 195 / 360
+    s = 0.4
+    l = mode === 'dark' ? 0.72 : 0.45
+  }
+  const t = clamp(strength)
+  if (mode === 'dark') {
+    const outS = clamp(0.26 + t * 0.5)
+    const outL = clamp(0.72 - t * 0.36)
+    const rgb = hslToRgb(h, outS, outL)
+    return rgbToHex(rgb.r, rgb.g, rgb.b)
+  }
+  const outS = clamp(0.32 + t * 0.42)
+  const outL = clamp(0.62 - t * 0.28)
+  const rgb = hslToRgb(h, outS, outL)
+  return rgbToHex(rgb.r, rgb.g, rgb.b)
+}
+
+/** Context-usage bucket strength ramp (system → conversation). */
+export const CONTEXT_BUCKET_STRENGTH: Record<string, number> = {
+  system: 0.12,
+  tools: 0.32,
+  skills: 0.5,
+  rules: 0.68,
+  conversation: 0.88
+}
+
 export function applyTheme(mode: ThemeMode, accent: string): void {
   const root = document.documentElement
-  const safeAccent = /^#[0-9a-fA-F]{6}$/.test(accent)
-    ? accent
-    : /^#[0-9a-fA-F]{3}$/.test(accent)
-      ? accent
-      : DEFAULT_ACCENT
+  const safeAccent = normalizeAccent(accent)
 
   const isDark = mode === 'dark'
   const base = isDark ? '#141414' : '#f3f3f3'

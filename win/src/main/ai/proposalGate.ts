@@ -27,7 +27,7 @@ export type FileProposalEx = FileProposal & {
 }
 
 /** Bump when write-gate / tool result shape changes — agents can detect stale main process. */
-export const TOOL_API_VERSION = '2026-08-11-j'
+export const TOOL_API_VERSION = '2026-08-12-l'
 
 const MEMORY_KINDS = new Set<ProposalKind>([
   'story_state',
@@ -72,6 +72,18 @@ function pathKey(abs: string): string {
   return abs.replace(/\//g, '\\').toLowerCase()
 }
 
+/** plans/*.plan.md checkbox updates must not poison multi_file_turn (Soft, not gated). */
+function isPlanPathKey(key: string): boolean {
+  const n = key.replace(/\\/g, '/')
+  return n.includes('/plans/') && n.endsWith('.plan.md')
+}
+
+/** Paths that count toward multi_file_turn telemetry (excludes plan Soft writes). */
+export function countOtherContentPaths(turnPaths: Set<string>, absPath: string): number {
+  const selfKey = pathKey(absPath)
+  return Array.from(turnPaths).filter((p) => p !== selfKey && !isPlanPathKey(p)).length
+}
+
 /** True if this turn already touched a different absolute path. */
 export function turnHasOtherPath(turnPaths: Set<string>, absPath: string): boolean {
   const key = pathKey(absPath)
@@ -82,24 +94,13 @@ export function turnHasOtherPath(turnPaths: Set<string>, absPath: string): boole
 }
 
 /**
- * When auto-applied, whether to write disk immediately.
- * Cast / memory YAML / small dialogue / layouts must hit disk even if user setting is "mark dirty only".
+ * Agent always writes disk (Git working tree = truth). Setting applyWritesToDisk ignored.
  */
 export function shouldPersistAutoToDisk(
-  proposal: FileProposalEx,
-  settings: AiPublicSettings
+  _proposal: FileProposalEx,
+  _settings: AiPublicSettings
 ): boolean {
-  if (settings.applyWritesToDisk) return true
-  if (!proposal.before.trim()) return true
-  const kind = inferKind(proposal)
-  if (kind === 'characters' || MEMORY_KINDS.has(kind)) return true
-  if (kind === 'kmind_layout' || kind === 'dialogue_layout') return true
-  if (kind === 'dialogue_choices') return true
-  if (kind === 'dialogue') {
-    const n = typeof proposal.changeCount === 'number' ? proposal.changeCount : 99
-    return n <= 5
-  }
-  return false
+  return true
 }
 
 export type GateDecision = {
@@ -112,22 +113,17 @@ export type GateDecision = {
 }
 
 /**
- * G3 gate: whether this proposal may auto-apply (no Accept).
- * Memory YAML (story_state / foreshadow / voice / glossary / materials index / revision meta)
- * always auto like characters — story continuity must see disk truth.
+ * Always auto-apply (Cursor-like). forceReviewAllWrites is ignored (legacy).
+ * reason/kind kept for telemetry + tool results.
  */
 export function decideAutoApply(
   proposal: FileProposalEx,
   turnPaths: Set<string>,
-  settings: AiPublicSettings
+  _settings: AiPublicSettings
 ): GateDecision {
   const kind = inferKind(proposal)
-  const selfKey = pathKey(proposal.absPath)
-  const otherTurnPaths = Array.from(turnPaths).filter((p) => p !== selfKey).length
+  const otherTurnPaths = countOtherContentPaths(turnPaths, proposal.absPath)
 
-  if (settings.forceReviewAllWrites) {
-    return { auto: false, reason: 'force_review_all_writes', kind, otherTurnPaths }
-  }
   if (!proposal.before.trim()) {
     return { auto: true, reason: 'new_or_empty_file', kind, otherTurnPaths }
   }
@@ -140,37 +136,21 @@ export function decideAutoApply(
   if (MEMORY_KINDS.has(kind)) {
     return { auto: true, reason: 'memory_yaml_upsert', kind, otherTurnPaths }
   }
-
   if (kind === 'dialogue_choices') {
     const csv = siblingDialogueCsvPath(proposal.absPath)
     if (csv && turnPaths.has(pathKey(csv))) {
       return { auto: true, reason: 'choices_with_sibling_dialogue', kind, otherTurnPaths }
     }
   }
-
+  if (kind === 'dialogue') {
+    const n = typeof proposal.changeCount === 'number' ? proposal.changeCount : 99
+    if (n <= 5) return { auto: true, reason: 'small_dialogue_edit', kind, otherTurnPaths }
+    return { auto: true, reason: 'dialogue_auto', kind, otherTurnPaths }
+  }
   if (otherTurnPaths >= 1) {
-    return { auto: false, reason: 'multi_file_turn', kind, otherTurnPaths }
+    return { auto: true, reason: 'multi_file_auto', kind, otherTurnPaths }
   }
-
-  switch (kind) {
-    case 'prose':
-      return { auto: false, reason: 'existing_prose', kind, otherTurnPaths }
-    case 'kmind':
-      return { auto: false, reason: 'existing_kmind', kind, otherTurnPaths }
-    case 'dialogue_performance':
-      return { auto: false, reason: 'dialogue_performance', kind, otherTurnPaths }
-    case 'dialogue_choices':
-      return { auto: false, reason: 'dialogue_choices_alone', kind, otherTurnPaths }
-    case 'other':
-      return { auto: false, reason: 'existing_other', kind, otherTurnPaths }
-    case 'dialogue': {
-      const n = typeof proposal.changeCount === 'number' ? proposal.changeCount : 99
-      if (n <= 5) return { auto: true, reason: 'small_dialogue_edit', kind, otherTurnPaths }
-      return { auto: false, reason: 'large_dialogue_edit', kind, otherTurnPaths }
-    }
-    default:
-      return { auto: false, reason: 'policy', kind, otherTurnPaths }
-  }
+  return { auto: true, reason: 'always_auto', kind, otherTurnPaths }
 }
 
 export function shouldAutoApply(
@@ -181,7 +161,7 @@ export function shouldAutoApply(
   return decideAutoApply(proposal, turnPaths, settings).auto
 }
 
-/** Stable hint for the model + UI about why Accept is/isn't needed. */
+/** Stable hint for the model + UI. */
 export function proposalReviewHint(proposal: FileProposalEx, autoApplied: boolean): string {
   if (autoApplied) {
     const kind = inferKind(proposal)
@@ -189,29 +169,33 @@ export function proposalReviewHint(proposal: FileProposalEx, autoApplied: boolea
     if (kind === 'characters') return 'auto: character_upsert'
     if (MEMORY_KINDS.has(kind)) return 'auto: memory_yaml_upsert'
     if (kind === 'kmind_layout' || kind === 'dialogue_layout') return 'auto: layout_only'
-    if (kind === 'dialogue') return 'auto: small_dialogue_edit'
+    if (kind === 'dialogue') return 'auto: dialogue'
     return 'auto'
   }
-  if (!proposal.before.trim()) return 'review: unexpected'
-  const kind = inferKind(proposal)
-  if (kind === 'prose') return 'review: existing_prose'
-  if (kind === 'kmind') return 'review: existing_kmind'
-  if (kind === 'dialogue_performance') return 'review: dialogue_performance'
-  if (kind === 'dialogue') return 'review: large_or_multi_file_dialogue'
-  return 'review: multi_file_or_policy'
+  return 'auto: unexpected_pending'
 }
 
 export function proposalToolNote(autoApplied: boolean): string {
   if (autoApplied) {
-    return 'Already written to the workspace. Summarize as written; do not ask the user to Apply.'
+    return 'Already written to the workspace (disk). File is marked dirty until the user saves (Ctrl+S). Summarize as written; do not ask to Accept/Apply. Mistakes: user can discard via Source Control or undo.'
   }
-  return 'Change is PENDING review. Tell the user to Accept or Reject it on the change card in the agent panel. Do not claim it was already written.'
+  return 'Unexpected pending state — treat as written if disk matches.'
 }
 
 /** One-line rules for tool descriptions / system prompt. */
 export const WRITE_GATE_SUMMARY =
-  'Write gate: new/empty auto; character + memory YAML (story_state/foreshadow/voice/glossary/materials index/revision meta) ALWAYS auto; dialogue ≤5 LINES auto; layout auto; existing prose/kmind/performance/multi-file → Accept. Results include written/pending/reviewHint/gateDetail/toolApi. No "5 character cards" threshold — ≤5 is dialogue lines only. Story conflicts are WARN-only (never block writes). UI: change cards show text diff (−/+) and Apply-all / Reject-all — agents cannot see the panel; do not re-report missing diff/batch as tool bugs.'
+  'Write gate: ALL agent file writes auto-apply and ALWAYS hit disk immediately (Git working tree). Yellow dirty = unsaved vs last Ctrl+S baseline — not Accept. No Accept/Reject cards for files. Results include written/pending/reviewHint/gateDetail/toolApi. Story conflicts are WARN-only. UI shows readonly change cards with diff. Git: workspace auto-inits; all git_* execute immediately (no force; no Confirm); write ops → highlight card + toast; local remote paths auto bare-init on add/push.'
 
+/** Standing Git instructions — apply in every chat (plus live Git L5 each turn). */
+export const GIT_AGENT_PLAYBOOK = [
+  'Git tools (CRITICAL — use in every new chat; do not wait for prior conversation memory):',
+  '- Prefer git_* tools over guessing. Live snapshot is under Editor context as “Git (L5)”.',
+  '- Inventory: git_status. Detail: git_diff(path). History: git_log. Sync: git_pull / git_push.',
+  '- Save work: git_add(all=true|paths[]) → git_commit(message) → git_push (optional setUpstream+branch). All auto; highlight cards appear in chat.',
+  '- Remotes: git_remote_add(name,url) accepts https/ssh/file/local paths (spaces OK); missing local bare auto-creates. git_remote_remove(name) drops bad remotes.',
+  '- Never --force. Never claim success unless the tool result says ok/executed. File discard stays in Source Control UI.',
+  '- User intent cues (备份/提交/推送/同步/remote/裸仓/commit/push) → call matching git_* in this turn.'
+].join('\n')
 
 export const CHARACTERS_CSV_FORMAT =
   'characters.csv columns: id,name,color,note,model_node,operable (6). operable=true means player-confirm on empty text.'

@@ -221,7 +221,7 @@ export function getDoc(filePath: string): DocSnapshot | null {
   }
 }
 
-/** Sync hub after an external disk write (e.g. AI plan file). Marks clean + broadcasts. */
+/** Sync hub after an external disk write (e.g. Soft plan checkbox). Marks clean + broadcasts. */
 export function docApplyExternalWrite(filePath: string, content: string): DocSnapshot | null {
   const entry = findEntry(filePath)
   if (!entry) return null
@@ -237,6 +237,90 @@ export function docApplyExternalWrite(filePath: string, content: string): DocSna
     dirty: entry.dirty,
     rev: entry.rev
   }
+}
+
+/**
+ * Agent auto-write: disk already has `content`. Update hub buffer, keep prior
+ * originalContent baseline (or `baseline` for first seed), mark dirty until
+ * user Ctrl+S (or git reload).
+ */
+export function docApplyAgentWrite(
+  filePath: string,
+  content: string,
+  baseline?: string
+): DocSnapshot {
+  let entry = findEntry(filePath)
+  if (!entry) {
+    const original = baseline !== undefined ? baseline : content
+    entry = {
+      path: filePath,
+      content,
+      originalContent: original,
+      dirty: contentIsDirty(filePath, content, original) || baseline !== undefined,
+      rev: 1,
+      subscribers: new Set()
+    }
+    // Always dirty for agent writes so yellow ● shows until user save
+    entry.dirty = true
+    docs.set(filePath, entry)
+  } else {
+    entry.content = content
+    entry.dirty = true
+    entry.rev += 1
+  }
+  broadcast(entry)
+  return {
+    path: entry.path,
+    content: entry.content,
+    originalContent: entry.originalContent,
+    dirty: entry.dirty,
+    rev: entry.rev
+  }
+}
+
+/**
+ * Force hub + subscribers to match on-disk bytes (e.g. after git discard).
+ * Sets original=content, dirty=false.
+ */
+export async function docReloadFromDisk(filePath: string): Promise<DocSnapshot> {
+  let content = ''
+  try {
+    content = await readFile(filePath, 'utf-8')
+  } catch {
+    content = ''
+  }
+  let entry = findEntry(filePath)
+  if (!entry) {
+    entry = {
+      path: filePath,
+      content,
+      originalContent: content,
+      dirty: false,
+      rev: 1,
+      subscribers: new Set()
+    }
+    docs.set(filePath, entry)
+  } else {
+    entry.content = content
+    entry.originalContent = content
+    entry.dirty = false
+    entry.rev += 1
+  }
+  broadcast(entry)
+  return {
+    path: entry.path,
+    content: entry.content,
+    originalContent: entry.originalContent,
+    dirty: entry.dirty,
+    rev: entry.rev
+  }
+}
+
+/** Remove hub entry after file deleted from disk (e.g. untracked discard). */
+export function docEvict(filePath: string): void {
+  const entry = findEntry(filePath)
+  if (!entry) return
+  docs.delete(entry.path)
 }
 
 /** Seed hub from an already-open renderer tab before spawning a float. */

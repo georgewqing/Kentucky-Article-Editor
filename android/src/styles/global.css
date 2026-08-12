@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   /* Fallbacks before applyTheme runs */
   --bg: #141414;
   --bg-elev-1: #1a1a1a;
@@ -1698,8 +1698,18 @@ input[type='color'] {
 
 .welcome-actions {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 10px;
   margin-bottom: 36px;
+}
+
+.welcome-multi-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--fg-muted);
+  line-height: 1.45;
+  max-width: 42ch;
 }
 
 .btn-primary {
@@ -1776,6 +1786,17 @@ input[type='color'] {
   min-width: 0;
 }
 
+.workspace-card.is-open {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.workspace-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .workspace-card-title {
   font-size: 15px;
   font-weight: 600;
@@ -1783,6 +1804,19 @@ input[type='color'] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.workspace-card-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .workspace-card-path {

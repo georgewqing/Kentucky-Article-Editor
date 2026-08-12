@@ -1,21 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { useAiStore, type AiProposal, type AiChatMessage } from '@/state/aiStore'
+import { useAiStore, type AiProposal, type AiGitOp, type AiChatMessage } from '@/state/aiStore'
+import { useSettingsStore } from '@/state/settingsStore'
+import { accentTone, CONTEXT_BUCKET_STRENGTH } from '@/theme/applyTheme'
 import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 import { AiComposer } from './AiComposer'
 import { FileMountChip } from './FileMountChip'
 import { SimpleMarkdown } from './simpleMarkdown'
 import { formatProposalDiff } from './proposalDiff'
-
-/** Low-saturation cool slate ramp (light → deep). */
-const BUCKET_COLORS: Record<string, string> = {
-  system: '#8a9aa8',
-  tools: '#6f8798',
-  skills: '#5a7d8c',
-  rules: '#4a6e80',
-  conversation: '#3d5a6c'
-}
 
 function formatTokens(n: number): string {
   if (n >= 10000) return `${Math.round(n / 1000)}K`
@@ -58,6 +51,8 @@ function ContextBar() {
   const limit = useAiStore((s) => s.contextLimit)
   const buckets = useAiStore((s) => s.contextBuckets)
   const refreshContextUsage = useAiStore((s) => s.refreshContextUsage)
+  const accent = useSettingsStore((s) => s.accent)
+  const themeMode = useSettingsStore((s) => s.themeMode)
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -84,12 +79,15 @@ function ContextBar() {
   // Segment widths are % of the FULL window (limit), not % of used —
   // leftover track = free capacity (matches Cursor / user expectation).
   const stacked = useMemo(() => {
-    return buckets.map((b) => ({
-      ...b,
-      color: BUCKET_COLORS[b.id] || '#64748b',
-      pctOfLimit: Math.max(0, (b.tokens / limitSafe) * 100)
-    }))
-  }, [buckets, limitSafe])
+    return buckets.map((b, i) => {
+      const strength = CONTEXT_BUCKET_STRENGTH[b.id] ?? 0.2 + i * 0.15
+      return {
+        ...b,
+        color: accentTone(accent, strength, themeMode),
+        pctOfLimit: Math.max(0, (b.tokens / limitSafe) * 100)
+      }
+    })
+  }, [buckets, limitSafe, accent, themeMode])
 
   return (
     <div className={`ai-context-bar ${level}`} ref={rootRef}>
@@ -222,60 +220,73 @@ function AppliedChangeCard({ proposal }: { proposal: AiProposal }) {
   )
 }
 
-function PendingChangeCard({ proposal }: { proposal: AiProposal }) {
-  const { t } = useTranslation()
-  const applyProposal = useAiStore((s) => s.applyProposal)
-  const rejectProposal = useAiStore((s) => s.rejectProposal)
-  const [expanded, setExpanded] = useState(true)
-  const base = proposal.path.split(/[/\\]/).pop() || proposal.path
-  const isNew = !proposal.before
-  const diff = useMemo(
-    () => formatProposalDiff(proposal.before, proposal.after),
-    [proposal.before, proposal.after]
-  )
-
-  return (
-    <div className={`ai-proposal pending ${isNew ? 'is-new' : 'is-modified'} is-expanded`}>
-      <button
-        type="button"
-        className="ai-proposal-head"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((v) => !v)}
-      >
-        <span className="ai-proposal-title">
-          {expanded ? (
-            <ChevronDown size={14} className="ai-proposal-chevron" aria-hidden />
-          ) : (
-            <ChevronRight size={14} className="ai-proposal-chevron" aria-hidden />
-          )}
-          <strong title={proposal.path}>{base}</strong>
-        </span>
-        <span className="ai-proposal-status">{t('ai.statusPending')}</span>
-      </button>
-      {proposal.summary ? <p className="ai-proposal-summary">{proposal.summary}</p> : null}
-      {expanded ? <pre className="ai-proposal-diff">{diff}</pre> : null}
-      <div className="ai-proposal-actions">
-        <button type="button" className="ai-btn-apply" onClick={() => void applyProposal(proposal.id)}>
-          {t('ai.apply')}
-        </button>
-        <button type="button" className="ai-btn-reject" onClick={() => void rejectProposal(proposal.id)}>
-          {t('ai.reject')}
-        </button>
-      </div>
-    </div>
-  )
-}
-
 function proposalsForMessage(
   messageId: string,
   proposals: AiProposal[],
   lastAssistantId: string | undefined
 ): AiProposal[] {
   return proposals.filter((p) => {
-    if (p.status !== 'applied' && p.status !== 'pending') return false
+    if (p.status !== 'applied') return false
     if (p.messageId === messageId) return true
     return !p.messageId && messageId === lastAssistantId
   })
+}
+
+function gitOpsForMessage(
+  messageId: string,
+  gitOps: AiGitOp[],
+  lastAssistantId: string | undefined
+): AiGitOp[] {
+  return gitOps.filter((op) => {
+    if (op.messageId === messageId) return true
+    return !op.messageId && messageId === lastAssistantId
+  })
+}
+
+function GitResultCard({ op }: { op: AiGitOp }) {
+  const { t } = useTranslation()
+  const [flash, setFlash] = useState(true)
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setFlash(false), 2200)
+    return () => window.clearTimeout(id)
+  }, [op.id])
+
+  const kindLabel =
+    op.kind === 'add'
+      ? t('ai.gitKindAdd')
+      : op.kind === 'commit'
+        ? t('ai.gitKindCommit')
+        : op.kind === 'remote_remove'
+          ? t('ai.gitKindRemoteRemove')
+          : t('ai.gitKindRemoteAdd')
+
+  const statusLabel =
+    op.status === 'applied'
+      ? t('ai.gitStatusApplied')
+      : op.status === 'rejected'
+        ? t('ai.gitStatusFailed')
+        : t('ai.gitStatusPending')
+
+  return (
+    <div
+      className={`ai-proposal ai-git-op ${op.status}${flash ? ' is-flash' : ''}`}
+      data-git-op={op.id}
+    >
+      <div className="ai-proposal-head ai-git-op-head">
+        <span className="ai-proposal-title">
+          <strong>
+            <span className="ai-git-badge">{t('ai.gitBadge')}</span> {kindLabel}
+          </strong>
+        </span>
+        <span className="ai-proposal-status">{statusLabel}</span>
+      </div>
+      <p className="ai-proposal-summary">{op.summary}</p>
+      {op.detail ? <pre className="ai-proposal-diff ai-git-detail">{op.detail}</pre> : null}
+      {op.resultNote ? <p className="ai-git-result">{op.resultNote}</p> : null}
+      {op.error ? <p className="ai-git-error">{op.error}</p> : null}
+    </div>
+  )
 }
 
 export function AiPanel() {
@@ -314,15 +325,13 @@ export function AiPanel() {
     () => [...messages].reverse().find((m) => m.role === 'assistant')?.id,
     [messages]
   )
-  const applyAll = useAiStore((s) => s.applyAll)
-  const rejectAll = useAiStore((s) => s.rejectAll)
   const proposals = session?.proposals || []
-  const pendingCount = proposals.filter((p) => p.status === 'pending').length
+  const gitOps = session?.gitOps || []
 
   useEffect(() => {
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [session?.messages, session?.proposals, streamBuffer, agentPhase, agentToolName])
+  }, [session?.messages, session?.proposals, session?.gitOps, streamBuffer, agentPhase, agentToolName])
 
   return (
     <aside className="ai-panel" aria-label={t('ai.title')}>
@@ -396,6 +405,8 @@ export function AiPanel() {
           {messages.map((m) => {
             const turnProposals =
               m.role === 'assistant' ? proposalsForMessage(m.id, proposals, lastAssistantId) : []
+            const turnGitOps =
+              m.role === 'assistant' ? gitOpsForMessage(m.id, gitOps, lastAssistantId) : []
             return (
               <div key={m.id} className={`ai-msg ai-msg-${m.role}`}>
                 <div className="ai-msg-role">{m.role === 'user' ? t('ai.you') : t('ai.agent')}</div>
@@ -406,33 +417,14 @@ export function AiPanel() {
                     <UserMessageBody message={m} />
                   )}
                 </div>
-                {turnProposals.length > 0 ? (
+                {turnProposals.length > 0 || turnGitOps.length > 0 ? (
                   <div className="ai-msg-proposals">
-                    {turnProposals.some((p) => p.status === 'pending') ? (
-                      <div className="ai-msg-proposals-bar">
-                        <button
-                          type="button"
-                          className="ai-btn-apply"
-                          onClick={() => void applyAll(m.id)}
-                        >
-                          {t('ai.applyAllTurn')}
-                        </button>
-                        <button
-                          type="button"
-                          className="ai-btn-reject"
-                          onClick={() => void rejectAll(m.id)}
-                        >
-                          {t('ai.rejectAllTurn')}
-                        </button>
-                      </div>
-                    ) : null}
-                    {turnProposals.map((p) =>
-                      p.status === 'pending' ? (
-                        <PendingChangeCard key={p.id} proposal={p} />
-                      ) : (
-                        <AppliedChangeCard key={p.id} proposal={p} />
-                      )
-                    )}
+                    {turnProposals.map((p) => (
+                      <AppliedChangeCard key={p.id} proposal={p} />
+                    ))}
+                    {turnGitOps.map((op) => (
+                      <GitResultCard key={op.id} op={op} />
+                    ))}
                   </div>
                 ) : null}
               </div>
@@ -471,20 +463,6 @@ export function AiPanel() {
           ) : null}
         </div>
       </div>
-
-      {pendingCount > 0 && !streaming ? (
-        <div className="ai-pending-bar">
-          <span>{t('ai.pendingProposals', { count: pendingCount })}</span>
-          <div className="ai-pending-bar-actions">
-            <button type="button" className="ai-btn-apply" onClick={() => void applyAll()}>
-              {t('ai.applyAll')}
-            </button>
-            <button type="button" className="ai-btn-reject" onClick={() => void rejectAll()}>
-              {t('ai.rejectAll')}
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       {error ? (
         <div className="ai-error">

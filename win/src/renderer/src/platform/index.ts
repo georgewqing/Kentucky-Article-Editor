@@ -74,7 +74,30 @@ export interface Platform {
   docPatch(filePath: string, content: string): Promise<DocSnapshot | null>
   docSave(filePath: string): Promise<DocSnapshot | null>
   docDiscard(filePath: string): Promise<DocSnapshot | null>
+  docReloadFromDisk(filePath: string): Promise<DocSnapshot | null>
+  docEvict(filePath: string): Promise<void>
   onDocApply(cb: (snap: DocSnapshot) => void): () => void
+
+  gitProbe(): Promise<{ ok: boolean; version: string | null; error: string | null }>
+  gitSetPath(gitPath: string | null): Promise<{ ok: boolean; version: string | null; error: string | null }>
+  gitFindRoot(workspaceRoot: string): Promise<string | null>
+  gitInit(workspaceRoot: string): Promise<{ ok: boolean; repoRoot: string; error?: string }>
+  gitEnsure(workspaceRoot: string): Promise<{
+    ok: boolean
+    repoRoot: string | null
+    created: boolean
+    error?: string
+  }>
+  gitStatus(workspaceRoot: string): Promise<unknown>
+  gitDiff(workspaceRoot: string, path: string, staged?: boolean): Promise<unknown>
+  gitStage(workspaceRoot: string, paths: string[]): Promise<unknown>
+  gitUnstage(workspaceRoot: string, paths: string[]): Promise<unknown>
+  gitCommit(workspaceRoot: string, message: string): Promise<unknown>
+  gitDiscard(
+    workspaceRoot: string,
+    absPath: string,
+    opts?: { untrackedConfirmed?: boolean }
+  ): Promise<unknown>
 
   confirmWindowClose(): Promise<void>
   onWindowCloseRequest(cb: () => void): () => void
@@ -126,6 +149,8 @@ export interface Platform {
   aiAbort(): Promise<boolean>
   aiApplyProposal(payload: { sessionId: string; proposalId: string }): Promise<unknown>
   aiRejectProposal(payload: { sessionId: string; proposalId: string }): Promise<unknown>
+  aiConfirmGitOp(payload: { sessionId: string; opId: string }): Promise<unknown>
+  aiRejectGitOp(payload: { sessionId: string; opId: string }): Promise<unknown>
   aiApplyAllProposals(sessionId: string): Promise<unknown[]>
   aiListSkills(): Promise<unknown[]>
   aiSetSkillEnabled(id: string, enabled: boolean): Promise<unknown[]>
@@ -251,7 +276,23 @@ export function createElectronPlatform(): Platform {
     docPatch: (filePath, content) => api.docPatch(filePath, content),
     docSave: (filePath) => api.docSave(filePath),
     docDiscard: (filePath) => api.docDiscard(filePath),
+    docReloadFromDisk: (filePath) => api.docReloadFromDisk(filePath),
+    docEvict: async (filePath) => {
+      await api.docEvict(filePath)
+    },
     onDocApply: (cb) => api.onDocApply(cb),
+
+    gitProbe: () => api.gitProbe(),
+    gitSetPath: (p) => api.gitSetPath(p),
+    gitFindRoot: (ws) => api.gitFindRoot(ws),
+    gitInit: (ws) => api.gitInit(ws),
+    gitEnsure: (ws) => api.gitEnsure(ws),
+    gitStatus: (ws) => api.gitStatus(ws),
+    gitDiff: (ws, path, staged) => api.gitDiff(ws, path, staged),
+    gitStage: (ws, paths) => api.gitStage(ws, paths),
+    gitUnstage: (ws, paths) => api.gitUnstage(ws, paths),
+    gitCommit: (ws, message) => api.gitCommit(ws, message),
+    gitDiscard: (ws, abs, opts) => api.gitDiscard(ws, abs, opts),
 
     confirmWindowClose: async () => {
       await api.confirmWindowClose()
@@ -281,6 +322,8 @@ export function createElectronPlatform(): Platform {
     aiAbort: () => api.aiAbort(),
     aiApplyProposal: (payload) => api.aiApplyProposal(payload),
     aiRejectProposal: (payload) => api.aiRejectProposal(payload),
+    aiConfirmGitOp: (payload) => api.aiConfirmGitOp(payload),
+    aiRejectGitOp: (payload) => api.aiRejectGitOp(payload),
     aiApplyAllProposals: (sessionId) => api.aiApplyAllProposals(sessionId),
     aiListSkills: () => api.aiListSkills(),
     aiSetSkillEnabled: (id, enabled) => api.aiSetSkillEnabled(id, enabled),
@@ -369,7 +412,37 @@ export function createBrowserStubPlatform(): Platform {
       localDocs.set(filePath, next)
       return next
     },
+    docReloadFromDisk: async (filePath) => {
+      const next = {
+        path: filePath,
+        content: '',
+        originalContent: '',
+        dirty: false,
+        rev: (localDocs.get(filePath)?.rev || 0) + 1
+      }
+      localDocs.set(filePath, next)
+      return next
+    },
+    docEvict: async (filePath) => {
+      localDocs.delete(filePath)
+    },
     onDocApply: () => () => undefined,
+    gitProbe: async () => ({ ok: false, version: null, error: 'Git not available in web stub' }),
+    gitSetPath: async () => ({ ok: false, version: null, error: 'Git not available' }),
+    gitFindRoot: async () => null,
+    gitInit: async () => ({ ok: false, repoRoot: '', error: 'Git not available' }),
+    gitEnsure: async () => ({
+      ok: false,
+      repoRoot: null,
+      created: false,
+      error: 'Git not available'
+    }),
+    gitStatus: async () => ({ repoRoot: null, branch: null, files: [], error: 'Git not available' }),
+    gitDiff: async () => ({ ok: false, diff: '', error: 'Git not available' }),
+    gitStage: async () => ({ ok: false }),
+    gitUnstage: async () => ({ ok: false }),
+    gitCommit: async () => ({ ok: false }),
+    gitDiscard: async () => ({ ok: false }),
     confirmWindowClose: async () => undefined,
     onWindowCloseRequest: () => () => undefined,
     aiGetSettings: async () => ({
@@ -400,6 +473,8 @@ export function createBrowserStubPlatform(): Platform {
     aiAbort: async () => true,
     aiApplyProposal: async () => null,
     aiRejectProposal: async () => null,
+    aiConfirmGitOp: async () => null,
+    aiRejectGitOp: async () => null,
     aiApplyAllProposals: async () => [],
     aiListSkills: async () => [],
     aiSetSkillEnabled: async () => [],

@@ -35,13 +35,14 @@ import {
   type KMindGraphNode
 } from './formats'
 import { layoutKMindDocument, sanitizeKMindEdges, type KMindRankDir } from './kmindLayout'
-import type { FileProposal } from './chatSessions'
+import type { FileProposal, GitPendingOp } from './chatSessions'
 import { randomUUID } from 'crypto'
 import type { ToolDef } from './openaiCompatClient'
 import {
   proposalToolNote,
   proposalReviewHint,
   WRITE_GATE_SUMMARY,
+  GIT_AGENT_PLAYBOOK,
   TOOL_API_VERSION,
   CHARACTERS_CSV_FORMAT
 } from './proposalGate'
@@ -63,7 +64,7 @@ import {
   writePlanFile,
   type PlanTodoInput
 } from './planFiles'
-import { docApplyExternalWrite, getDoc } from '../documentHub'
+import { docApplyAgentWrite, docApplyExternalWrite, getDoc } from '../documentHub'
 import {
   getLiteraryToolDefs,
   isLiteraryTool,
@@ -196,7 +197,7 @@ export function getWritingTools(): ToolDef[] {
       function: {
         name: 'propose_append_dialogue_lines',
         description:
-          'Insert new dialogue lines (speaker = character id). Creates *.dialogue.csv with standard 11-col header if missing. Default append; pass afterId to insert after that line. ≤5 lines may auto-apply. Generates stable ids. Does not edit choices. CALL read_voice_bank first for multi-speaker tone.',
+          'Insert new dialogue lines (speaker = character id). Creates *.dialogue.csv with standard 11-col header if missing. Default append; pass afterId to insert after that line. ≤5 lines may auto-apply. Prefer lines[].id (e.g. d04); if omitted, continues dNN when the file uses that pattern, else stem_speaker_NNN. Result includes addedLineIds — use those for choices, never guess. Does not edit choices. CALL read_voice_bank first for multi-speaker tone.',
         parameters: {
           type: 'object',
           properties: {
@@ -210,6 +211,10 @@ export function getWritingTools(): ToolDef[] {
               items: {
                 type: 'object',
                 properties: {
+                  id: {
+                    type: 'string',
+                    description: 'Optional stable line id (e.g. d04). Prefer setting this for choices.'
+                  },
                   speaker: { type: 'string', description: 'Character id from characters.csv' },
                   text: { type: 'string' },
                   emotion: { type: 'string' },
@@ -264,7 +269,7 @@ export function getWritingTools(): ToolDef[] {
       function: {
         name: 'propose_reorder_dialogue_lines',
         description:
-          'Reorder *.dialogue.csv rows by id list (linear play order when no choices). Requires Accept if large / multi-file.',
+          'Reorder *.dialogue.csv rows by id list. CSV first row = opening (Godot). Unspecified ids keep relative order at end — if the new first id differs, opening changes (response includes openingId / openingChanged).',
         parameters: {
           type: 'object',
           properties: {
@@ -272,7 +277,8 @@ export function getWritingTools(): ToolDef[] {
             order: {
               type: 'array',
               items: { type: 'string' },
-              description: 'Id order; unspecified ids keep relative order at end'
+              description:
+                'Preferred id order; omitted ids append in prior relative order. First id becomes opening.'
             },
             summary: { type: 'string' }
           },
@@ -285,7 +291,7 @@ export function getWritingTools(): ToolDef[] {
       function: {
         name: 'propose_set_dialogue_choices',
         description:
-          'Write sibling *.dialogue.choices.json (v1.3 play graph). options: { text, goto } (text:\"\" = confirm-to-continue), or { text, end: true }. Do not mix empty and labeled text on one line. Empty nodes deletes the file.',
+          'Write sibling *.dialogue.choices.json (v1.3 play graph). options: { text, goto } (empty text = confirm-to-continue), or { text, end: true }. Do not mix empty and labeled text on one line. Empty nodes object deletes the file. merge: updates keys; pass options:[] or null for a key to delete that node (clear stale guesses). replace: full rewrite.',
         parameters: {
           type: 'object',
           properties: {
@@ -294,7 +300,7 @@ export function getWritingTools(): ToolDef[] {
             nodes: {
               type: 'object',
               description:
-                'Map after_line_id → { options: [{ text, goto?, end? }] }. merge updates keys; replace overwrites all.'
+                'Map after_line_id → { options: [{ text, goto?, end? }] }. merge updates keys; options:[] or null deletes that key; replace overwrites all.'
             },
             summary: { type: 'string' }
           },
@@ -598,7 +604,7 @@ export function getWritingTools(): ToolDef[] {
       function: {
         name: 'propose_kmind_edit',
         description:
-          'Edit a .kmind map (nodes/edges). Requires Accept. Prefer TREE/layered structure. Prefer scene_to_kmind for prose→map. Omit x/y — autoLayout default true.',
+          'Edit a .kmind map (nodes/edges). Auto-writes to disk. Prefer TREE/layered structure. Prefer scene_to_kmind for prose→map. Omit x/y — autoLayout default true. Supports update shape/width/height, removeSubtree, moveSubtree.',
         parameters: {
           type: 'object',
           properties: {
@@ -612,6 +618,8 @@ export function getWritingTools(): ToolDef[] {
                   text: { type: 'string' },
                   x: { type: 'number' },
                   y: { type: 'number' },
+                  width: { type: 'number' },
+                  height: { type: 'number' },
                   shape: {
                     type: 'string',
                     description: 'ellipse=hub/theme; rounded=beat; rect=character/fact'
@@ -630,12 +638,31 @@ export function getWritingTools(): ToolDef[] {
                   text: { type: 'string' },
                   x: { type: 'number' },
                   y: { type: 'number' },
+                  width: { type: 'number' },
+                  height: { type: 'number' },
+                  shape: { type: 'string' },
                   note: { type: 'string' }
                 },
                 required: ['id']
               }
             },
             removeNodeIds: { type: 'array', items: { type: 'string' } },
+            removeSubtree: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Root node ids: delete each root and all descendants + all touching edges'
+            },
+            moveSubtree: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  rootId: { type: 'string' },
+                  newParentId: { type: 'string', description: 'Attach subtree root under this parent' }
+                },
+                required: ['rootId', 'newParentId']
+              }
+            },
             connect: {
               type: 'array',
               items: {
@@ -760,6 +787,144 @@ export function getWritingTools(): ToolDef[] {
             maxChars: { type: 'number' }
           },
           required: ['url']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'git_status',
+        description:
+          'WHEN: start of any Git/backup/commit/push task, or after writes — inventory branch, remotes, dirty paths. CALL even in a brand-new chat (do not rely on prior messages). Side effects: may auto-init workspace Git (repoCreated); may append .kentucky/ to .gitignore. Next: git_diff / git_add→git_commit→git_push.',
+        parameters: { type: 'object', properties: {} }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'git_diff',
+        description:
+          'WHEN: inspect one file before commit/discard. Show git diff for path. Missing/directory → error. staged=true = --cached only (no untracked full-file fallback).',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Workspace-relative or absolute file path' },
+            staged: { type: 'boolean' }
+          },
+          required: ['path']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'git_pull',
+        description:
+          'WHEN: user asks to sync/pull/fetch最新. Pull from configured remote. Fails clearly if no remote. Optional ffOnly. Never invent pull results.',
+        parameters: {
+          type: 'object',
+          properties: {
+            remote: { type: 'string', description: 'Remote name (default: git pull with no remote args)' },
+            branch: { type: 'string', description: 'Branch (requires remote)' },
+            ffOnly: { type: 'boolean', description: 'If true, pass --ff-only' }
+          }
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'git_push',
+        description:
+          'WHEN: after commit, or user asks 推送/push/备份到远程. Push to configured remote. Never --force. Optional setUpstream (-u) requires branch. Local-path remotes: auto-create missing bare (`git init --bare`) before push.',
+        parameters: {
+          type: 'object',
+          properties: {
+            remote: { type: 'string', description: 'Remote name (default: first remote)' },
+            branch: { type: 'string' },
+            setUpstream: {
+              type: 'boolean',
+              description: 'If true, git push -u <remote> <branch> (branch required)'
+            }
+          }
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'git_add',
+        description:
+          'WHEN: stage before commit. git add immediately (auto + highlight card). all=true → add -A; else paths[]. Next: git_commit.',
+        parameters: {
+          type: 'object',
+          properties: {
+            all: { type: 'boolean', description: 'If true, git add -A' },
+            paths: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Workspace-relative paths to stage (ignored if all=true)'
+            }
+          }
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'git_commit',
+        description:
+          'WHEN: user asks 提交/commit/保存版本. git commit -m immediately (auto + highlight card). Stage first via git_add if needed. Next: git_push if remote exists.',
+        parameters: {
+          type: 'object',
+          properties: {
+            message: { type: 'string', description: 'Commit message' }
+          },
+          required: ['message']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'git_remote_add',
+        description:
+          'WHEN: no remotes / user gives a URL or local bare path. git remote add immediately. URL: https/ssh/git@/file:///local path (spaces OK). Missing local folder → auto git init --bare. Next: git_push.',
+        parameters: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Remote name (e.g. origin)' },
+            url: { type: 'string', description: 'Remote URL or local path to bare/repo' }
+          },
+          required: ['name', 'url']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'git_remote_remove',
+        description:
+          'WHEN: drop a bad/placeholder remote before re-adding. git remote remove immediately (highlight card).',
+        parameters: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Remote name (e.g. origin)' }
+          },
+          required: ['name']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'git_log',
+        description: 'WHEN: show recent commits. Read-only. Optional maxCount ≤50.',
+        parameters: {
+          type: 'object',
+          properties: {
+            maxCount: { type: 'number' }
+          }
         }
       }
     },
@@ -991,6 +1156,12 @@ export interface ToolContext {
     gate?: { reason: string; kind: string; otherTurnPaths: number }
     writeDisk?: boolean
   }
+  /** Run an Agent Git write immediately; UI shows a highlight card (no Confirm). */
+  onGitOp: (
+    op: Omit<GitPendingOp, 'status' | 'messageId' | 'resultNote' | 'error'> & {
+      status?: 'pending'
+    }
+  ) => Promise<GitPendingOp>
   onPlan: (
     steps: Array<{ id: string; text: string; status: 'pending' | 'in_progress' | 'done' }>,
     planFileRel?: string
@@ -1124,7 +1295,18 @@ function allocateLineIds(
       .split('/')
       .pop()
       ?.replace(/\.dialogue\.csv$/i, '') || 'line'
-  let seq = existing.length + 1
+  // Prefer continuing d01/d02… when the file already uses that pattern (or is empty).
+  const simpleRe = /^d(\d+)$/i
+  let preferSimple = existing.length === 0
+  let maxSimple = 0
+  for (const l of existing) {
+    const m = simpleRe.exec(l.id)
+    if (m) {
+      preferSimple = true
+      maxSimple = Math.max(maxSimple, parseInt(m[1], 10) || 0)
+    }
+  }
+  let seq = preferSimple ? maxSimple + 1 : existing.length + 1
   const added: DialogueLine[] = []
   for (const row of incoming) {
     const speaker = String(row.speaker || '').trim()
@@ -1133,7 +1315,9 @@ function allocateLineIds(
     let id = String(row.id || '').trim()
     if (!id || used.has(id)) {
       do {
-        id = `${stem}_${speaker}_${String(seq).padStart(3, '0')}`
+        id = preferSimple
+          ? `d${String(seq).padStart(2, '0')}`
+          : `${stem}_${speaker}_${String(seq).padStart(3, '0')}`
         seq += 1
       } while (used.has(id))
     }
@@ -1202,10 +1386,13 @@ export async function runTool(
         const rel = typeof args.path === 'string' ? args.path : '.'
         const abs = resolveWorkspacePath(ctx.workspaceRoot, rel === '.' ? '' : rel)
         const target = rel === '.' || rel === '' ? ctx.workspaceRoot : abs
-        const entries = readdirSync(target, { withFileTypes: true }).map((d) => ({
-          name: d.name,
-          type: d.isDirectory() ? 'dir' : 'file'
-        }))
+        // Hide VCS / dot machinery (parity with explorer: name.startsWith('.'))
+        const entries = readdirSync(target, { withFileTypes: true })
+          .filter((d) => !d.name.startsWith('.') && d.name !== 'node_modules')
+          .map((d) => ({
+            name: d.name,
+            type: d.isDirectory() ? 'dir' : 'file'
+          }))
         return JSON.stringify({ path: toRel(ctx.workspaceRoot, target) || '.', entries })
       }
       case 'read_file': {
@@ -1417,6 +1604,24 @@ export async function runTool(
           changeCount: added.length
         }
         const result = emitProposal(ctx, proposal) as Record<string, unknown>
+        result.addedLineIds = added.map((l) => l.id)
+        const charsAbs = join(ctx.workspaceRoot, 'characters.csv')
+        const castIds = existsSync(charsAbs)
+          ? new Set(parseCharactersCsv(readFileSync(charsAbs, 'utf-8')).map((c) => c.id))
+          : new Set<string>()
+        const unknownSpeakers = Array.from(
+          new Set(
+            added
+              .map((l) => (l.speaker || '').trim())
+              .filter((sp) => sp && !castIds.has(sp))
+          )
+        )
+        if (unknownSpeakers.length) {
+          result.warnings = [
+            `Unregistered speaker id(s): ${unknownSpeakers.join(', ')}. Upsert characters.csv or run dialogue_cast_check.`
+          ]
+        }
+        result.addedLines = added.map((l) => ({ id: l.id, speaker: l.speaker, text: l.text }))
         if (createdHeader) {
           result.createdFile = true
           result.headerNote =
@@ -1424,37 +1629,76 @@ export async function runTool(
         }
         result.columnOrder =
           'id,speaker,text,note,emotion,scene,condition,audio,focus_node,font_size,text_color'
+        result.idNote =
+          'Use addedLineIds for propose_set_dialogue_choices. Do not guess dNN unless you passed lines[].id.'
         return JSON.stringify(result)
       }
       case 'propose_dialogue_performance': {
         const path = String(args.path || '')
         const abs = resolveWorkspacePath(ctx.workspaceRoot, path)
+        if (!existsSync(abs)) return JSON.stringify({ error: 'File not found' })
         const before = readFileSync(abs, 'utf-8')
         const parsed = parseDialogueCsv(before)
         const updates = (args.updates as Array<Record<string, string>>) || []
         const byId = new Map(parsed.lines.map((l) => [l.id, { ...l }]))
+        const warnings: string[] = []
+        const hexColor = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
         for (const u of updates) {
           const cur = byId.get(u.id)
-          if (!cur) continue
+          if (!cur) {
+            warnings.push(`unknown line id ${u.id}`)
+            continue
+          }
           const next = { ...cur }
-          for (const key of ['focus_node', 'font_size', 'text_color', 'emotion'] as const) {
-            if (u[key] !== undefined) next[key] = u[key]
+          if (u.focus_node !== undefined) next.focus_node = u.focus_node
+          if (u.emotion !== undefined) next.emotion = u.emotion
+          if (u.font_size !== undefined) {
+            const fs = String(u.font_size).trim()
+            if (!fs || /^\d+(\.\d+)?$/.test(fs)) {
+              next.font_size = fs
+            } else {
+              warnings.push(`font_size rejected for ${u.id}: "${u.font_size}" (need number or empty)`)
+            }
+          }
+          if (u.text_color !== undefined) {
+            const tc = String(u.text_color).trim()
+            if (!tc || hexColor.test(tc)) {
+              next.text_color = tc
+            } else {
+              warnings.push(
+                `text_color rejected for ${u.id}: "${u.text_color}" (need #RGB/#RRGGBB/#RRGGBBAA or empty; not characters.color)`
+              )
+            }
           }
           byId.set(u.id, next)
         }
         const lines = parsed.lines.map((l) => byId.get(l.id) || l)
+        const after = serializeDialogueCsv(lines)
+        if (after === before && warnings.length) {
+          return JSON.stringify({
+            ok: false,
+            written: false,
+            pending: false,
+            warnings,
+            error: 'No valid performance field changes',
+            toolApi: TOOL_API_VERSION
+          })
+        }
         const proposal: FileProposal = {
           id: randomUUID(),
           path: toRel(ctx.workspaceRoot, abs),
           absPath: abs,
           before,
-          after: serializeDialogueCsv(lines),
+          after,
           summary: String(args.summary || `Performance fields ${path}`),
           status: 'pending',
           kind: 'dialogue_performance',
           changeCount: updates.length
         }
-        return JSON.stringify(emitProposal(ctx, proposal))
+        return JSON.stringify({
+          ...emitProposal(ctx, proposal),
+          ...(warnings.length ? { warnings } : {})
+        })
       }
       case 'propose_reorder_dialogue_lines': {
         const path = String(args.path || '')
@@ -1462,6 +1706,7 @@ export async function runTool(
         if (!existsSync(abs)) return JSON.stringify({ error: 'File not found' })
         const before = readFileSync(abs, 'utf-8')
         const parsed = parseDialogueCsv(before)
+        const openingBefore = parsed.lines[0]?.id || null
         const order = (args.order as string[]) || []
         const byId = new Map(parsed.lines.map((l) => [l.id, l]))
         const seen = new Set<string>()
@@ -1475,6 +1720,8 @@ export async function runTool(
         for (const line of parsed.lines) {
           if (!seen.has(line.id)) ordered.push(line)
         }
+        const openingAfter = ordered[0]?.id || null
+        const openingChanged = Boolean(openingBefore && openingAfter && openingBefore !== openingAfter)
         const proposal: FileProposal = {
           id: randomUUID(),
           path: toRel(ctx.workspaceRoot, abs),
@@ -1486,7 +1733,15 @@ export async function runTool(
           kind: 'dialogue',
           changeCount: ordered.length
         }
-        return JSON.stringify(emitProposal(ctx, proposal))
+        return JSON.stringify({
+          ...emitProposal(ctx, proposal),
+          openingId: openingAfter,
+          openingBefore,
+          openingChanged,
+          note: openingChanged
+            ? `CSV first row is opening: ${openingBefore} → ${openingAfter}. Include the intended opening id first in order if you did not mean to change it.`
+            : undefined
+        })
       }
       case 'propose_set_dialogue_choices': {
         const path = String(args.path || '')
@@ -1499,11 +1754,14 @@ export async function runTool(
         if (mode === 'merge') {
           const cur = loadChoicesBeside(abs)
           next = { version: 1, nodes: { ...cur.nodes, ...incoming.nodes } }
-          // Explicit empty options array on a key clears that node in merge
+          // Explicit empty options[] or null on a key clears that node in merge
           if (args.nodes && typeof args.nodes === 'object') {
             for (const [k, v] of Object.entries(args.nodes as Record<string, unknown>)) {
+              if (v == null) {
+                delete next.nodes[k]
+                continue
+              }
               if (
-                v &&
                 typeof v === 'object' &&
                 Array.isArray((v as { options?: unknown }).options) &&
                 (v as { options: unknown[] }).options.length === 0
@@ -1968,27 +2226,92 @@ export async function runTool(
             height: 56
           }
           if (typeof n.note === 'string') node.note = n.note
+          if (typeof n.width === 'number') node.width = n.width
+          if (typeof n.height === 'number') node.height = n.height
           doc.nodes.push(node)
           i += 1
         }
+        const skipped: string[] = []
         const updateNodes = (args.updateNodes as Array<Record<string, unknown>>) || []
         for (const u of updateNodes) {
           const id = String(u.id)
           const node = doc.nodes.find((n) => n.id === id)
-          if (!node) continue
+          if (!node) {
+            skipped.push(`updateNodes: unknown id ${id}`)
+            continue
+          }
           if (typeof u.text === 'string') node.text = u.text
           if (typeof u.x === 'number') node.x = u.x
           if (typeof u.y === 'number') node.y = u.y
           if (typeof u.note === 'string') node.note = u.note
+          if (typeof u.width === 'number') node.width = u.width
+          if (typeof u.height === 'number') node.height = u.height
+          if (typeof u.shape === 'string' && ['rect', 'rounded', 'ellipse'].includes(u.shape)) {
+            node.shape = u.shape as KMindGraphNode['shape']
+          }
+        }
+        const collectDescendants = (rootId: string): Set<string> => {
+          const out = new Set<string>([rootId])
+          let changed = true
+          while (changed) {
+            changed = false
+            for (const e of doc.edges) {
+              if (out.has(e.source) && !out.has(e.target)) {
+                out.add(e.target)
+                changed = true
+              }
+            }
+          }
+          return out
         }
         const removeIds = new Set((args.removeNodeIds as string[]) || [])
+        for (const root of (args.removeSubtree as string[]) || []) {
+          const rid = String(root)
+          if (!doc.nodes.some((n) => n.id === rid)) {
+            skipped.push(`removeSubtree: unknown root ${rid}`)
+            continue
+          }
+          for (const id of Array.from(collectDescendants(rid))) removeIds.add(id)
+        }
         if (removeIds.size) {
           doc.nodes = doc.nodes.filter((n) => !removeIds.has(n.id))
           doc.edges = doc.edges.filter((e) => !removeIds.has(e.source) && !removeIds.has(e.target))
         }
+        const moves = (args.moveSubtree as Array<{ rootId: string; newParentId: string }>) || []
+        for (const m of moves) {
+          const rootId = String(m.rootId || '')
+          const newParentId = String(m.newParentId || '')
+          if (!rootId || !newParentId) {
+            skipped.push('moveSubtree: missing rootId or newParentId')
+            continue
+          }
+          const rootOk = doc.nodes.some((n) => n.id === rootId)
+          const parentOk = doc.nodes.some((n) => n.id === newParentId)
+          if (!rootOk && !parentOk) {
+            skipped.push(`moveSubtree: unknown root ${rootId} and unknown parent ${newParentId}`)
+            continue
+          }
+          if (!rootOk) {
+            skipped.push(`moveSubtree: unknown root ${rootId}`)
+            continue
+          }
+          if (!parentOk) {
+            skipped.push(`moveSubtree: unknown parent ${newParentId} (root ${rootId} ok)`)
+            continue
+          }
+          // Drop edges into the root from old parents; keep subtree internal edges
+          doc.edges = doc.edges.filter((e) => e.target !== rootId)
+          doc.edges.push({ id: newEdgeId(), source: newParentId, target: rootId })
+        }
         const connect = (args.connect as Array<{ source: string; target: string }>) || []
         for (const c of connect) {
-          if (!doc.nodes.some((n) => n.id === c.source) || !doc.nodes.some((n) => n.id === c.target)) {
+          const srcOk = doc.nodes.some((n) => n.id === c.source)
+          const tgtOk = doc.nodes.some((n) => n.id === c.target)
+          if (!srcOk || !tgtOk) {
+            const bits: string[] = []
+            if (!srcOk) bits.push(`unknown source ${c.source}`)
+            if (!tgtOk) bits.push(`unknown target ${c.target}`)
+            skipped.push(`connect: ${bits.join('; ')}`)
             continue
           }
           doc.edges.push({
@@ -2019,7 +2342,14 @@ export async function runTool(
           autoLayout,
           rankdir,
           nodeCount: doc.nodes.length,
-          edgeCount: doc.edges.length
+          edgeCount: doc.edges.length,
+          ...(skipped.length
+            ? {
+                skipped,
+                warnings: skipped,
+                note: `${skipped.length} edit op(s) skipped (unknown node ids). Read kmind and retry with valid ids.`
+              }
+            : {})
         })
       }
       case 'layout_kmind': {
@@ -2436,6 +2766,194 @@ export async function runTool(
         const page = await fetchPageExcerpt(url, Math.min(12_000, Math.max(500, maxChars)))
         return JSON.stringify(page)
       }
+      case 'git_status': {
+        const { gitStatusSummary } = await import('../git/gitService')
+        const summary = await gitStatusSummary(ctx.workspaceRoot)
+        const notes = [
+          'Commit/add/remote_add auto-execute (highlight card in chat). Discard remains Source Control UI. git_pull/git_push run immediately (no force).',
+          summary.repoCreated
+            ? 'Side effect: auto-created Git repo at workspace root (kentucky.autoInit; .git hidden in explorer).'
+            : summary.gitignoreUpdated
+              ? 'Side effect: appended .kentucky/ to .gitignore (ensureKentuckyGitignore).'
+              : 'May auto-init workspace Git if missing, and may append .kentucky/ to .gitignore (not pure read-only).'
+        ]
+        return JSON.stringify({
+          ...summary,
+          toolApi: TOOL_API_VERSION,
+          note: notes.join(' ')
+        })
+      }
+      case 'git_diff': {
+        const { gitDiff } = await import('../git/gitService')
+        const path = String(args.path || '')
+        const staged = Boolean(args.staged)
+        const r = await gitDiff(ctx.workspaceRoot, path, staged)
+        return JSON.stringify({ ...r, toolApi: TOOL_API_VERSION })
+      }
+      case 'git_pull': {
+        const { gitPull } = await import('../git/gitService')
+        const r = await gitPull(ctx.workspaceRoot, {
+          remote: args.remote != null ? String(args.remote) : undefined,
+          branch: args.branch != null ? String(args.branch) : undefined,
+          ffOnly: Boolean(args.ffOnly)
+        })
+        return JSON.stringify({ ...r, toolApi: TOOL_API_VERSION })
+      }
+      case 'git_push': {
+        const { gitPush } = await import('../git/gitService')
+        const r = await gitPush(ctx.workspaceRoot, {
+          remote: args.remote != null ? String(args.remote) : undefined,
+          branch: args.branch != null ? String(args.branch) : undefined,
+          setUpstream: Boolean(args.setUpstream)
+        })
+        return JSON.stringify({ ...r, toolApi: TOOL_API_VERSION })
+      }
+      case 'git_add': {
+        const all = Boolean(args.all)
+        const paths = Array.isArray(args.paths)
+          ? args.paths.map(String).map((p) => p.trim()).filter(Boolean)
+          : []
+        if (!all && !paths.length) {
+          return JSON.stringify({
+            ok: false,
+            error: 'Provide all=true or non-empty paths[]',
+            toolApi: TOOL_API_VERSION
+          })
+        }
+        const summary = all ? 'git add -A' : `git add (${paths.length} path${paths.length === 1 ? '' : 's'})`
+        const detail = all
+          ? 'Stage all changes in the working tree (respecting .gitignore).'
+          : paths.map((p) => `• ${p}`).join('\n')
+        const op = await ctx.onGitOp({
+          id: randomUUID(),
+          kind: 'add',
+          summary,
+          detail,
+          params: all ? { all: true } : { paths }
+        })
+        return JSON.stringify({
+          ok: op.status === 'applied',
+          pending: false,
+          executed: op.status === 'applied',
+          opId: op.id,
+          kind: op.kind,
+          summary: op.summary,
+          resultNote: op.resultNote,
+          error: op.error,
+          reviewHint:
+            op.status === 'applied'
+              ? 'Git add executed — see highlight card.'
+              : `Git add failed: ${op.error || 'unknown'}`,
+          toolApi: TOOL_API_VERSION
+        })
+      }
+      case 'git_commit': {
+        const message = String(args.message || '').trim()
+        if (!message) {
+          return JSON.stringify({
+            ok: false,
+            error: 'Commit message required',
+            toolApi: TOOL_API_VERSION
+          })
+        }
+        const op = await ctx.onGitOp({
+          id: randomUUID(),
+          kind: 'commit',
+          summary: 'git commit',
+          detail: message,
+          params: { message }
+        })
+        return JSON.stringify({
+          ok: op.status === 'applied',
+          pending: false,
+          executed: op.status === 'applied',
+          opId: op.id,
+          kind: op.kind,
+          summary: op.summary,
+          message,
+          resultNote: op.resultNote,
+          error: op.error,
+          reviewHint:
+            op.status === 'applied'
+              ? 'Git commit executed — see highlight card.'
+              : `Git commit failed: ${op.error || 'unknown'}`,
+          toolApi: TOOL_API_VERSION
+        })
+      }
+      case 'git_remote_add': {
+        const remote = String(args.name || '').trim()
+        const url = String(args.url || '').trim()
+        if (!remote || !url) {
+          return JSON.stringify({
+            ok: false,
+            error: 'name and url required',
+            toolApi: TOOL_API_VERSION
+          })
+        }
+        const op = await ctx.onGitOp({
+          id: randomUUID(),
+          kind: 'remote_add',
+          summary: `git remote add ${remote}`,
+          detail: url,
+          params: { remote, url }
+        })
+        return JSON.stringify({
+          ok: op.status === 'applied',
+          pending: false,
+          executed: op.status === 'applied',
+          opId: op.id,
+          kind: op.kind,
+          summary: op.summary,
+          remote,
+          url,
+          resultNote: op.resultNote,
+          error: op.error,
+          reviewHint:
+            op.status === 'applied'
+              ? 'Git remote add executed — see highlight card.'
+              : `Git remote add failed: ${op.error || 'unknown'}`,
+          toolApi: TOOL_API_VERSION
+        })
+      }
+      case 'git_remote_remove': {
+        const remote = String(args.name || '').trim()
+        if (!remote) {
+          return JSON.stringify({
+            ok: false,
+            error: 'name required',
+            toolApi: TOOL_API_VERSION
+          })
+        }
+        const op = await ctx.onGitOp({
+          id: randomUUID(),
+          kind: 'remote_remove',
+          summary: `git remote remove ${remote}`,
+          detail: remote,
+          params: { remote }
+        })
+        return JSON.stringify({
+          ok: op.status === 'applied',
+          pending: false,
+          executed: op.status === 'applied',
+          opId: op.id,
+          kind: op.kind,
+          summary: op.summary,
+          remote,
+          resultNote: op.resultNote,
+          error: op.error,
+          reviewHint:
+            op.status === 'applied'
+              ? 'Git remote remove executed — see highlight card.'
+              : `Git remote remove failed: ${op.error || 'unknown'}`,
+          toolApi: TOOL_API_VERSION
+        })
+      }
+      case 'git_log': {
+        const { gitLog } = await import('../git/gitService')
+        const maxCount = typeof args.maxCount === 'number' ? args.maxCount : 20
+        const r = await gitLog(ctx.workspaceRoot, { maxCount })
+        return JSON.stringify({ ...r, toolApi: TOOL_API_VERSION })
+      }
       default:
         return JSON.stringify({ error: `Unknown tool: ${name}` })
     }
@@ -2454,13 +2972,14 @@ export function applyProposalToDisk(proposal: FileProposal): void {
     proposal.absPath.replace(/\\/g, '/').toLowerCase().endsWith('.dialogue.choices.json')
   ) {
     if (existsSync(proposal.absPath)) unlinkSync(proposal.absPath)
-    docApplyExternalWrite(proposal.absPath, '')
+    docApplyAgentWrite(proposal.absPath, '', proposal.before)
     return
   }
   writeFileSync(proposal.absPath, proposal.after, 'utf-8')
   // Keep DocumentHub on the RAW bytes (not TipTap-reserialized) so open tabs /
   // subsequent read_file+patch stay format-faithful for tables & blockquotes.
-  docApplyExternalWrite(proposal.absPath, proposal.after)
+  // Preserve original baseline → yellow dirty until user Ctrl+S.
+  docApplyAgentWrite(proposal.absPath, proposal.after, proposal.before)
 }
 
 export type AgentToolMode = 'ask' | 'plan' | 'outline' | 'agent'
@@ -2481,6 +3000,11 @@ const PLAN_TOOLS = new Set([
   'web_search',
   'web_research',
   'web_fetch',
+  'git_status',
+  'git_diff',
+  'git_pull',
+  'git_push',
+  'git_log',
   'open_in_editor',
   'read_story_state',
   'read_foreshadow',
@@ -2571,8 +3095,8 @@ export function modeSystemPrefix(mode: AgentToolMode): string {
       ].join('\n')
     default:
       return [
-        'MODE: Agent — full writing tools with review rules as below.',
-        'If a workspace plan file is linked (see Editor context), read it first and follow it. Soft: call update_plan_step as you finish todos (updates checkboxes in plans/*.plan.md).'
+        'MODE: Agent — full writing tools. All file writes auto-apply to disk immediately (no Accept). Files stay yellow-dirty until the user Ctrl+S. Mistakes: user discards via Source Control. Soft: call update_plan_step as you finish todos.',
+        GIT_AGENT_PLAYBOOK
       ].join('\n')
   }
 }
@@ -2592,6 +3116,11 @@ export function LITERARY_SYSTEM_PROMPT(
     'Never run shell commands. Stay inside the opened workspace for file edits.',
     'Workspace structure: use workspace_mkdir / workspace_copy / workspace_move / workspace_delete (Node FS, not shell) for folders and archival moves. Prefer move/copy tools over reading files and rewriting them with propose_write_file.',
     WRITE_GATE_SUMMARY,
+    mode === 'agent'
+      ? GIT_AGENT_PLAYBOOK
+      : mode === 'plan' || mode === 'outline'
+        ? 'Git (read/sync in this mode): git_status / git_diff / git_log / git_pull / git_push. For git_add/git_commit/git_remote_* switch to Agent mode. Live “Git (L5)” is in Editor context each turn.'
+        : '',
     webOn
       ? 'Web search tools are ENABLED. Prefer web_research / web_search; results include snippet + excerpt (fetched page text). If facts are still missing, call web_fetch on the best URL. Cite title+URL from tool results only — never invent sources.'
       : 'Web search is DISABLED in settings. Do not claim you searched the web; answer from context/knowledge and suggest enabling Web search in Settings if needed.',

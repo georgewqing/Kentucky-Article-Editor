@@ -107,6 +107,8 @@ interface AppState {
   toggleSidebar: () => void
   setSidebarWidth: (w: number) => void
   setActiveView: (v: ActiveView) => void
+  /** Show welcome without closing workspaces; parks the active session first. */
+  goHome: () => void
   showToast: (message: string, type?: 'error' | 'info') => void
   clearToast: () => void
 
@@ -114,6 +116,7 @@ interface AppState {
   addRecent: (path: string) => void
   removeRecent: (path: string) => void
 
+  /** Open or switch to a folder; always additive (same as activity-bar +). */
   openWorkspace: (path: string) => Promise<void>
   switchWorkspace: (id: string) => Promise<void>
   addWorkspaceViaDialog: () => Promise<void>
@@ -347,6 +350,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSidebarWidth: (w) => set({ sidebarWidth: Math.min(480, Math.max(160, w)) }),
   setActiveView: (v) => set({ activeView: v }),
 
+  goHome: () => {
+    const parked = snapshotActiveSession(get())
+    set({ openWorkspaces: parked, activeView: 'home' })
+  },
+
   showToast: (message, type = 'error') => {
     const id = Date.now()
     set({ toast: { id, message, type } })
@@ -384,6 +392,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   openWorkspace: async (path) => {
     const platform = getPlatform()
+    // Park current mirrors first so returning to welcome never drops an open project.
+    const parkedEarly = snapshotActiveSession(get())
+    if (parkedEarly !== get().openWorkspaces) {
+      set({ openWorkspaces: parkedEarly })
+    }
+
     const existing = get().openWorkspaces.find((w) => pathsEqual(w.path, path))
     if (existing) {
       await get().switchWorkspace(existing.id)
@@ -396,12 +410,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       const id = newWorkspaceId()
       const session: WorkspaceSession = { id, ...emptySessionFields(path, tree) }
       const parked = snapshotActiveSession(get())
-      set({
-        openWorkspaces: [...parked, session],
-        ...mirrorsFromSession(session),
-        activeView: 'explorer',
-        sidebarVisible: true
-      })
+      const already = parked.find((w) => pathsEqual(w.path, path))
+      if (already) {
+        set({
+          openWorkspaces: parked,
+          ...mirrorsFromSession(already),
+          activeView: 'explorer',
+          sidebarVisible: true
+        })
+      } else {
+        set({
+          openWorkspaces: [...parked, session],
+          ...mirrorsFromSession(session),
+          activeView: 'explorer',
+          sidebarVisible: true
+        })
+      }
       if (get().windowRole === 'main') {
         void platform.reportWorkspace(path)
       }

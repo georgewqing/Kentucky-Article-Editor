@@ -8,8 +8,9 @@ import {
   statSync,
   rmSync
 } from 'fs'
-import { dirname, join } from 'path'
+import { dirname, join, resolve, relative, isAbsolute } from 'path'
 import { asStringArray, dumpYamlDoc, parseYamlDoc } from './yamlUtil'
+import { resolveWorkspacePath, WorkspacePathError } from './workspacePath'
 
 export const REVISIONS_DIR = 'revisions'
 export const REVISIONS_MANIFEST = 'revisions/manifest.yaml'
@@ -101,33 +102,96 @@ export function saveManifest(workspaceRoot: string, doc: RevisionsManifest): str
 }
 
 export function snapDir(workspaceRoot: string, id: string): string {
-  return join(workspaceRoot, REVISIONS_DIR, 'snaps', id)
+  const safe = String(id || '').trim()
+  if (!safe || /[\\/]/.test(safe) || safe.includes('..')) {
+    throw new WorkspacePathError('Invalid revision snapshot id')
+  }
+  return join(workspaceRoot, REVISIONS_DIR, 'snaps', safe)
+}
+
+function snapshotTime(s: RevisionSnapMeta, index: number): number {
+  const t = Date.parse(s.createdAt || '')
+  return Number.isFinite(t) ? t : index
+}
+
+function oldestSnapshotIndex(snaps: RevisionSnapMeta[]): number {
+  let best = 0
+  let bestTime = Number.POSITIVE_INFINITY
+  for (let i = 0; i < snaps.length; i++) {
+    const t = snapshotTime(snaps[i], i)
+    if (t < bestTime) {
+      bestTime = t
+      best = i
+    }
+  }
+  return best
+}
+
+function removeSnapshotAt(
+  workspaceRoot: string,
+  manifest: RevisionsManifest,
+  index: number
+): RevisionSnapMeta | null {
+  if (index < 0 || index >= manifest.snapshots.length) return null
+  const [removed] = manifest.snapshots.splice(index, 1)
+  try {
+    rmSync(snapDir(workspaceRoot, removed.id), { recursive: true, force: true })
+  } catch {
+    /* missing or invalid id — drop the manifest row anyway */
+  }
+  return removed
+}
+
+/** Drop oldest snaps until count is below max (ring buffer). */
+export function evictOldestSnapshots(
+  workspaceRoot: string,
+  manifest: RevisionsManifest,
+  maxSnaps: number
+): string[] {
+  const cap = Math.max(1, Math.floor(maxSnaps))
+  const evicted: string[] = []
+  while (manifest.snapshots.length >= cap) {
+    const i = oldestSnapshotIndex(manifest.snapshots)
+    const gone = removeSnapshotAt(workspaceRoot, manifest, i)
+    if (!gone) break
+    evicted.push(gone.id)
+  }
+  return evicted
 }
 
 export function createRevisionSnapshot(
   workspaceRoot: string,
   paths: string[],
   opts: { label?: string; note?: string; maxSnaps: number }
-): { ok: true; id: string; manifest: RevisionsManifest } | { ok: false; error: string } {
+): {
+  ok: true
+  id: string
+  manifest: RevisionsManifest
+  evicted: string[]
+} | { ok: false; error: string } {
   const manifest = loadManifest(workspaceRoot)
-  if (manifest.snapshots.length >= opts.maxSnaps) {
-    return {
-      ok: false,
-      error: `Revision limit reached (${opts.maxSnaps}). Delete an old snapshot before creating another.`
-    }
-  }
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')
   const id = `${stamp}_${(opts.label || 'snap').replace(/[^\w\u4e00-\u9fff-]+/g, '_').slice(0, 40)}`
   const destRoot = join(snapDir(workspaceRoot, id), 'files')
   mkdirSync(destRoot, { recursive: true })
   const copied: string[] = []
   for (const rel of paths) {
-    const from = join(workspaceRoot, rel)
+    let from: string
+    let safeRel: string
+    try {
+      from = resolveWorkspacePath(workspaceRoot, rel)
+      safeRel = relative(resolve(workspaceRoot), from).split(/[/\\]/).join('/')
+      if (!safeRel || safeRel.startsWith('..') || isAbsolute(safeRel)) continue
+      // Ensure snap dest stays under destRoot
+      resolveWorkspacePath(destRoot, safeRel)
+    } catch {
+      continue
+    }
     if (!existsSync(from) || !statSync(from).isFile()) continue
-    const to = join(destRoot, rel)
+    const to = join(destRoot, safeRel)
     mkdirSync(dirname(to), { recursive: true })
     cpSync(from, to)
-    copied.push(rel.replace(/\\/g, '/'))
+    copied.push(safeRel)
   }
   if (!copied.length) {
     rmSync(snapDir(workspaceRoot, id), { recursive: true, force: true })
@@ -141,9 +205,10 @@ export function createRevisionSnapshot(
     createdAt: new Date().toISOString()
   }
   writeFileSync(join(snapDir(workspaceRoot, id), 'meta.yaml'), dumpYamlDoc(meta), 'utf-8')
+  const evicted = evictOldestSnapshots(workspaceRoot, manifest, opts.maxSnaps)
   manifest.snapshots.push(meta)
   saveManifest(workspaceRoot, manifest)
-  return { ok: true, id, manifest }
+  return { ok: true, id, manifest, evicted }
 }
 
 export function listSnapshotFiles(

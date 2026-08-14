@@ -11,13 +11,15 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/renderer/src/*"]
+      "@/*": ["src/renderer/src/*"],
+      "@shared/*": ["src/shared/*"]
     }
   },
   "include": [
     "electron.vite.config.ts",
     "src/main/**/*",
     "src/preload/**/*",
-    "src/common/**/*"
+    "src/common/**/*",
+    "src/shared/**/*"
   ]
 }

@@ -61,6 +61,10 @@ export async function streamChatCompletion(opts: {
   if (opts.tools && opts.tools.length > 0 && settings.agentEnabled) {
     body.tools = opts.tools
     body.tool_choice = 'auto'
+  } else {
+    // Ask / tools-off: omit tools. Some gateways reuse the previous turn's
+    // tool list unless tool_choice is explicitly none.
+    body.tool_choice = 'none'
   }
 
   let res: Response

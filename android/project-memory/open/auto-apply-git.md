@@ -1,12 +1,12 @@
 # 契约：Auto-apply + Git + kmind 子树（U13–U18）
 
-> **状态**：OPEN · **本大版本 Android 不实施**（仅契约镜像；**无** `android/src` Git 代码）  
+> **状态**：OPEN · **要实施**（U13–U18 均为 BOARD ❌；Git 用 isomorphic-git，无 `android/src` Git 代码前勿假装完成）  
 > **Win 实现真源**：[`../../win/project-memory/AGENT-GIT.md`](../../win/project-memory/AGENT-GIT.md)  
-> **指纹（须与 Win 当前一致）**：`toolApi: "2026-08-12-l"`  
-> **进度**：[`../BOARD.md`](../BOARD.md) U13–U18 均为 ⏭  
-> **移植顺序**：U14 → U13 → U18 → U15 → U16/U17（U16 或永久跳过）
+> **指纹（须与 Win 当前一致）**：`toolApi: "2026-08-14-a"`  
+> **进度**：[`../BOARD.md`](../BOARD.md) U13–U18 均为 ❌  
+> **移植顺序**：U14 → U13 → U18 → U15 → U16/U17（Git = isomorphic-git）
 
-**分工勿混：** Win `AGENT-GIT.md` = 已实现说明；本文 = Android 他日移植时的对照契约。改行为先改 Win，再同步本文指纹与表格。
+**分工勿混：** Win `AGENT-GIT.md` = 已实现说明；本文 = Android 移植对照契约。改行为先改 Win，再同步本文指纹与表格。
 
 ## 1. U13 · 去掉 Accept / 只读变更反馈
 
@@ -18,7 +18,7 @@
 
 ### 1.2 Win 文件 → Android
 
-| Win | Android（他日） |
+| Win | Android |
 |-----|-----------------|
 | `win/src/renderer/src/ai/AiPanel.tsx` | `android/src/ai/AiPanel.tsx`（或等价 Agent 面板） |
 | `win/src/renderer/src/ai/proposalDiff.ts` | 同构拷贝（含 `computeChangeRanges`） |
@@ -55,7 +55,7 @@ Git 工作树必须等于磁盘。旧默认 `applyWritesToDisk: false` 与 SCM *
 |----|------|
 | `decideAutoApply` | **恒 `auto: true`**（reason/kind 仅遥测） |
 | `shouldPersistAutoToDisk` | **恒 `true`** |
-| `TOOL_API_VERSION` | `"2026-08-12-l"` |
+| `TOOL_API_VERSION` | `"2026-08-14-a"` |
 | Agent Git | 打开工作区 **自动 ensure**；`git_*` **全部立即执行**（无 force）；`git_add`/`git_commit`/`git_remote_add` → **高亮结果卡 + Toast**（无 Confirm）；discard 仍 SCM UI |
 | `WRITE_GATE_SUMMARY` / `proposalToolNote` | 已写盘；勿提 Accept；误改 → SCM |
 
@@ -175,7 +175,7 @@ node_modules/
 - 新建：整份写入。  
 - 已有仓：`ensureKentuckyGitignore(repoRoot)` 若缺 `.kentucky/` 则追加（`git init` 与 `git_status` summary 均调用）。
 
-### 4.4 Agent 工具契约（`toolApi >= 2026-08-12-l`）
+### 4.4 Agent 工具契约（`toolApi >= 2026-08-12-p`）
 
 | 工具 | 入参 | 成功形状（要点） | 失败 |
 |------|------|------------------|------|
@@ -206,7 +206,7 @@ Win：`win/src/main/git/gitService.ts` · `registerGitIpc.ts` · `tools.ts` · `
 - reorder → `openingChanged`  
 - performance：`font_size` 数字或空；`text_color` hex 或空  
 - append / voice：未注册 id → `warnings`（仍可写）
-- **OPEN**：无产品拍板缺口（Win `-g`…`-l` 已关 §七）；Android 仍 ⏭ 不写代码，移植时跟 Win `AGENT-GIT.md` + 本文。
+- **OPEN**：Win `-g`…`-l` 已关 §七；Android 代码未写，移植时跟 Win `AGENT-GIT.md` + 本文。
 
 ### 4.6 验收
 
@@ -251,7 +251,7 @@ Android：`ai-runtime` 同构 kmind 编辑。
 
 | 风险 | 说明 |
 |------|------|
-| **无系统 Git** | 平板通常无 `git` CLI。选项：(a) 本版永久跳过 U16/U17；(b) 嵌入 isomorphic-git / libgit2；(c) 仅「会话 before 还原」弱替代。**开移植前必须产品拍板** |
+| **无系统 Git** | 平板通常无 `git` CLI。**已拍板**：isomorphic-git（走 `WorkspaceIo`）。禁止 `execFile('git')`，禁止永久跳过 |
 | **pull/push 凭据** | 真机无交互式 credential helper 时 push/pull 易失败；须产品定「仅本机已配 SSH/凭据」或降级关掉 Agent push/pull |
 | **SAF / 内容 URI** | 无稳定「工作区根路径」时 findGitRoot / status porcelain 路径映射困难 |
 | **杀进程** | 始终写盘有利于防丢；须确认 WorkspaceIo 在 auto 路径真写 SAF |
@@ -263,15 +263,15 @@ Android：`ai-runtime` 同构 kmind 编辑。
 
 ---
 
-## 7. 他日移植验收清单（Android）
+## 7. 移植验收清单（Android）
 
 - [ ] U14：Agent 写后磁盘正确；黄●；Ctrl+S 清脏  
 - [ ] U13：无 Accept UI；旧 pending 迁移  
 - [ ] U15：文本编辑器高亮（能力范围内）  
 - [ ] U18：kmind 子树 / shape + 非法 id → skipped  
-- [ ] U16/U17：若做 Git——probe、ensure `.kentucky/`、`git_diff` 缺路径报错、staged 语义；pull/push 凭据策略已定  
+- [ ] U16/U17：isomorphic-git；ensure `.kentucky/`；`git_diff` 缺路径报错；staged 语义；pull/push 凭据策略已定  
 - [ ] 冒烟对等：unknown_character、openingChanged、performance 校验、append/voice warnings  
-- [ ] `toolApi` 与 Win 当前字符串一致（现 `2026-08-12-l`）  
+- [ ] `toolApi` 与 Win 当前字符串一致（现 `2026-08-14-a`）  
 - [ ] 不 `import` `win/`
 
 全部通过：本文 → **CLOSED**；勾选 [`../BOARD.md`](../BOARD.md)；`changelog.md` 留一条。

@@ -4,13 +4,19 @@ import {
   readdirSync,
   readFileSync,
   writeFileSync,
+  copyFileSync,
   cpSync,
   statSync
 } from 'fs'
 import { join, basename } from 'path'
 import { shell } from 'electron'
 import { getAiSkillsDir } from './appBodyPaths'
-import { loadAiSettings, saveAiSettings } from './aiSettings'
+import {
+  loadAiSettings,
+  saveAiSettings,
+  loadSeenBundledSkillIds,
+  saveSeenBundledSkillIds
+} from './aiSettings'
 
 export interface SkillMeta {
   id: string
@@ -24,6 +30,18 @@ export interface SkillDetail extends SkillMeta {
   body: string
   extraFiles: Record<string, string>
 }
+
+/** Factory game-design skills shipped in resources/ai-skills. */
+export const BUNDLED_GAME_SKILL_IDS = [
+  'game-brainstorm',
+  'game-gdd',
+  'game-narrative',
+  'game-systems',
+  'game-numbers',
+  'game-levels',
+  'game-store',
+  'game-consistency'
+] as const
 
 const SAMPLE_ID = 'literary-voice'
 const SAMPLE_SKILL = `---
@@ -73,14 +91,86 @@ function parseFrontmatter(raw: string): { name: string; description: string; bod
   return { name, description, body }
 }
 
+function bundledSkillsRoot(): string | null {
+  const candidates: string[] = []
+  if (typeof process.resourcesPath === 'string' && process.resourcesPath) {
+    candidates.push(join(process.resourcesPath, 'ai-skills'))
+  }
+  candidates.push(join(__dirname, '../../resources/ai-skills'))
+  for (const c of candidates) {
+    try {
+      if (existsSync(c) && statSync(c).isDirectory()) return c
+    } catch {
+      /* skip */
+    }
+  }
+  return null
+}
+
+const BUNDLED_SKILL_FILES = ['SKILL.md', 'examples.md', 'reference.md'] as const
+
+function seedBundledGameSkills(destRoot: string): void {
+  const srcRoot = bundledSkillsRoot()
+  if (!srcRoot) return
+  const present: string[] = []
+  for (const id of BUNDLED_GAME_SKILL_IDS) {
+    const srcDir = join(srcRoot, id)
+    const destDir = join(destRoot, id)
+    let hasSkill = false
+    for (const file of BUNDLED_SKILL_FILES) {
+      const srcFile = join(srcDir, file)
+      const destFile = join(destDir, file)
+      try {
+        if (!existsSync(srcFile) || !statSync(srcFile).isFile()) continue
+        if (!existsSync(destFile)) {
+          if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true })
+          copyFileSync(srcFile, destFile)
+        }
+        if (file === 'SKILL.md' && existsSync(destFile)) hasSkill = true
+      } catch {
+        /* skip one file; do not fail the whole seed */
+      }
+    }
+    if (hasSkill) present.push(id)
+  }
+  welcomeUnseenBundled(present)
+}
+
+/**
+ * Append never-seen bundled ids to the whitelist. Disabled skills stay off:
+ * once an id is in seenBundledSkillIds, a later launch must not re-enable it.
+ */
+function welcomeUnseenBundled(presentIds: string[]): void {
+  if (!presentIds.length) return
+  const seen = loadSeenBundledSkillIds()
+  const seenSet = new Set(seen)
+  const unseen = presentIds.filter((id) => !seenSet.has(id))
+  const nextSeen = Array.from(new Set(seen.concat(presentIds)))
+  if (unseen.length) {
+    const enabled = loadAiSettings().enabledSkillIds
+    if (enabled !== null) {
+      const next = [...enabled]
+      for (const id of unseen) {
+        if (!next.includes(id)) next.push(id)
+      }
+      saveAiSettings({ enabledSkillIds: next })
+    }
+  }
+  if (nextSeen.length !== seen.length || unseen.length) {
+    saveSeenBundledSkillIds(nextSeen)
+  }
+}
+
 export function ensureSkillsDir(): string {
   const dir = getAiSkillsDir()
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   const sampleDir = join(dir, SAMPLE_ID)
   const sampleFile = join(sampleDir, 'SKILL.md')
   if (!existsSync(sampleFile)) {
     if (!existsSync(sampleDir)) mkdirSync(sampleDir, { recursive: true })
     writeFileSync(sampleFile, SAMPLE_SKILL, 'utf-8')
   }
+  seedBundledGameSkills(dir)
   return dir
 }
 

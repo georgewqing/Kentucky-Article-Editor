@@ -1,10 +1,12 @@
 import { create } from 'zustand'
 import type { DocSnapshot, FileEntry, WindowRole } from '@/platform'
 import { getPlatform } from '@/platform'
+import { askConfirm } from '@/state/confirmDialogStore'
 import { createEmptyKMind, serializeKMind, assetsDirForKmind, type KMindNodeLink } from '@/editors/kmind'
 import { contentIsDirty } from '../../../common/kmindDirty'
 import { flushActiveMindmapViewport } from '@/editors/mindmapViewportFlush'
 import { flushActiveDialogueSidecars } from '@/editors/dialogueSidecarFlush'
+import { flushStoryboardForSave, forgetStoryboardJson } from '@/editors/storyboardDocFlush'
 import {
   emptyDialogueCsv,
   isDialoguePath,
@@ -18,7 +20,7 @@ import {
 import i18n from '@/i18n'
 import { askUnsavedConfirm } from '@/state/unsavedDialogStore'
 
-export type EditorKind = 'text' | 'mindmap' | 'dialogue' | 'characters'
+export type EditorKind = 'text' | 'mindmap' | 'dialogue' | 'characters' | 'storyboard' | 'image' | 'video' | 'pdf'
 export type ActiveView = 'explorer' | 'settings' | 'home' | 'scm'
 
 export interface LinePickSession {
@@ -160,10 +162,13 @@ interface AppState {
   enableSplit: (tabId?: string) => void
   disableSplit: () => void
   setSplitTab: (id: string) => void
+  /** Move tab `id` so it sits at `insertBefore` (0 = first; tabs.length = last). */
+  reorderTabs: (id: string, insertBefore: number) => void
 
   createFile: (name: string, parentDir?: string) => Promise<void>
   createFolder: (name: string, parentDir?: string) => Promise<void>
   createMindMap: (name: string, parentDir?: string) => Promise<void>
+  createStoryboard: (name: string, parentDir?: string) => Promise<void>
   createDialogue: (
     opts: { godotScene: string; dialogueId: string; fileName?: string },
     parentDir?: string
@@ -182,7 +187,17 @@ const RECENT_KEY = 'kentucky.recentFolders'
 function detectKind(path: string): EditorKind {
   if (isDialoguePath(path)) return 'dialogue'
   if (isCharactersPath(path)) return 'characters'
-  return getPlatform().extname(path) === '.kmind' ? 'mindmap' : 'text'
+  const ext = getPlatform().extname(path).toLowerCase()
+  if (ext === '.kmind') return 'mindmap'
+  if (ext === '.kyboard') return 'storyboard'
+  if (ext === '.png') return 'image'
+  if (ext === '.mp4') return 'video'
+  if (ext === '.pdf') return 'pdf'
+  return 'text'
+}
+
+function isMediaPreviewKind(kind: EditorKind): boolean {
+  return kind === 'image' || kind === 'video' || kind === 'pdf'
 }
 
 function tabIdFor(path: string): string {
@@ -420,6 +435,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().addRecent(path)
       return
     }
+    const prev = get().workspacePath
+    if (get().windowRole === 'main') {
+      const reported = await platform.reportWorkspace(path)
+      if (!reported?.ok) {
+        get().showToast(i18n.t('errors.unsafeWorkspace'))
+        return
+      }
+    }
     try {
       const tree = await platform.readDir(path)
       get().addRecent(path)
@@ -442,13 +465,13 @@ export const useAppStore = create<AppState>((set, get) => ({
           sidebarVisible: true
         })
       }
-      if (get().windowRole === 'main') {
-        void platform.reportWorkspace(path)
-      }
       void notifyWorkspaceChanged(path)
       // Auto-register local Git at workspace root (`.git` hidden in explorer).
       void platform.gitEnsure(path).catch(() => undefined)
     } catch {
+      if (get().windowRole === 'main') {
+        void platform.reportWorkspace(prev)
+      }
       get().showToast(i18n.t('errors.loadTreeFailed'))
     }
   },
@@ -582,10 +605,29 @@ export const useAppStore = create<AppState>((set, get) => ({
     const existing = get().tabs.find((t) => pathsEqual(t.path, path))
     if (existing) {
       set({ activeTabId: existing.id, activeView: 'explorer' })
-      void getPlatform().docOpen(path)
+      if (!isMediaPreviewKind(existing.kind)) void getPlatform().docOpen(path)
       return
     }
     const platform = getPlatform()
+    const kind = detectKind(path)
+    if (isMediaPreviewKind(kind)) {
+      const tab: OpenTab = {
+        id: tabIdFor(path),
+        path,
+        title: platform.basename(path),
+        kind,
+        content: '',
+        originalContent: '',
+        dirty: false,
+        docRev: 1
+      }
+      set((s) => ({
+        tabs: [...s.tabs, tab],
+        activeTabId: tab.id,
+        activeView: 'explorer'
+      }))
+      return
+    }
     try {
       const snap = await platform.docOpen(path)
       if (!snap) {
@@ -822,9 +864,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!tabId) return false
     const tab = get().tabs.find((t) => t.id === tabId)
     if (!tab) return false
+    // PNG preview is read-only — nothing to flush through DocumentHub.
+    if (isMediaPreviewKind(tab.kind)) return true
     // Mind map: fold current pan/zoom into buffer before writing disk.
     if (tab.kind === 'mindmap') flushActiveMindmapViewport()
     if (tab.kind === 'dialogue') await flushActiveDialogueSidecars()
+    if (tab.kind === 'storyboard') {
+      const json = flushStoryboardForSave(tab.id)
+      if (json) {
+        set((s) => ({
+          tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, content: json } : t))
+        }))
+      }
+    }
     const latest = get().tabs.find((t) => t.id === tabId)
     if (!latest) return false
     try {
@@ -874,6 +926,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   discardTab: async (id) => {
     const tab = get().tabs.find((t) => t.id === id)
     if (!tab || !tab.dirty) return
+    forgetStoryboardJson(id)
     const snap = await getPlatform().docDiscard(tab.path)
     applyingFromHub = true
     try {
@@ -916,7 +969,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         await get().discardTab(id)
       }
     }
-    void getPlatform().docUnsubscribe(tab.path)
+    if (!isMediaPreviewKind(tab.kind)) void getPlatform().docUnsubscribe(tab.path)
+    forgetStoryboardJson(id)
     set((s) => {
       const tabs = s.tabs.filter((t) => t.id !== id)
       let activeTabId = s.activeTabId
@@ -986,6 +1040,19 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setSplitTab: (id) => set({ splitTabId: id }),
 
+  reorderTabs: (id, insertBefore) => {
+    const tabs = get().tabs
+    const from = tabs.findIndex((t) => t.id === id)
+    if (from < 0) return
+    let dest = Math.max(0, Math.min(insertBefore, tabs.length))
+    if (from < dest) dest -= 1
+    if (dest === from) return
+    const next = [...tabs]
+    const [item] = next.splice(from, 1)
+    next.splice(dest, 0, item)
+    set({ tabs: next })
+  },
+
   createFile: async (name, parentDir) => {
     const { workspacePath } = get()
     const base = parentDir ?? workspacePath
@@ -1026,6 +1093,30 @@ export const useAppStore = create<AppState>((set, get) => ({
     const rootText = i18n.t('editor.mindMapRoot')
     try {
       await platform.writeFile(path, serializeKMind(createEmptyKMind(rootText)))
+      await get().refreshTree()
+      await get().openFile(path)
+    } catch {
+      get().showToast(i18n.t('errors.createFailed'))
+    }
+  },
+
+  createStoryboard: async (name, parentDir) => {
+    const { workspacePath } = get()
+    const base = parentDir ?? workspacePath
+    if (!base) return
+    const platform = getPlatform()
+    let fileName = name.trim() || 'storyboard'
+    if (!fileName.toLowerCase().endsWith('.kyboard')) fileName += '.kyboard'
+    const path = platform.joinPath(base, fileName)
+    try {
+      const { createEmptyKyboard, serializeKyboard, suggestLayout } = await import(
+        '@shared/kyboardSchema'
+      )
+      const layout = suggestLayout(6, 'landscape')
+      const doc = createEmptyKyboard(layout)
+      await platform.writeFile(path, serializeKyboard(doc))
+      const assets = path.replace(/\.kyboard$/i, '.kyboard.assets')
+      await platform.mkdir(assets)
       await get().refreshTree()
       await get().openFile(path)
     } catch {
@@ -1217,9 +1308,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   deleteEntry: async (targetPath) => {
-    if (!window.confirm(i18n.t('explorer.confirmDelete', { name: getPlatform().basename(targetPath) }))) {
-      return
-    }
+    const ok = await askConfirm({
+      title: i18n.t('explorer.delete'),
+      message: i18n.t('explorer.confirmDelete', { name: getPlatform().basename(targetPath) }),
+      confirmLabel: i18n.t('explorer.delete'),
+      danger: true
+    })
+    if (!ok) return
     try {
       const tabs = get().tabs.filter(
         (t) => t.path === targetPath || t.path.startsWith(targetPath + '\\') || t.path.startsWith(targetPath + '/')

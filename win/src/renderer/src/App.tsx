@@ -13,21 +13,6 @@ export default function App() {
   useKeyboardShortcuts()
 
   useEffect(() => {
-    const el = document.getElementById('boot-splash')
-    if (!el) return
-    const start = window.requestAnimationFrame(() => {
-      el.classList.add('boot-splash-out')
-    })
-    const removeId = window.setTimeout(() => {
-      el.remove()
-    }, 480)
-    return () => {
-      window.cancelAnimationFrame(start)
-      window.clearTimeout(removeId)
-    }
-  }, [])
-
-  useEffect(() => {
     const platform = getPlatform()
     void platform.setMenuLocale(getStoredLocale())
 
@@ -41,11 +26,21 @@ export default function App() {
     const offSave = platform.onMenuSave(() => {
       void useAppStore.getState().saveTab()
     })
+    const offExportPdf = platform.onMenuExportPdf(() => {
+      void import('@/export/exportPdf').then((m) => m.exportActiveTabToPdf())
+    })
     const offNewWin = platform.onMenuNewWindow(() => {
       void useAppStore.getState().spawnNewWindow()
     })
     const offNewMain = platform.onMenuNewMainWindow(() => {
       void useAppStore.getState().spawnNewMainWindow()
+    })
+    const offOpenDoc = platform.onOpenDocument((payload) => {
+      if (useAppStore.getState().windowRole === 'float') return
+      void (async () => {
+        await useAppStore.getState().openWorkspace(payload.workspacePath)
+        await useAppStore.getState().openFile(payload.filePath)
+      })()
     })
     const offDoc = platform.onDocApply((snap) => {
       useAppStore.getState().applyDocSnapshot(snap)
@@ -62,8 +57,10 @@ export default function App() {
     return () => {
       offOpen()
       offSave()
+      offExportPdf()
       offNewWin()
       offNewMain()
+      offOpenDoc()
       offDoc()
       offClose()
       i18n.off('languageChanged', onLang)

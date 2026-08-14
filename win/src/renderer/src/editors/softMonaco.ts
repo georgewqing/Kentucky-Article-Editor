@@ -1,5 +1,6 @@
 import type { editor } from 'monaco-editor'
 import type * as MonacoNS from 'monaco-editor'
+import { DARK_ELEV_2 } from '@shared/theme'
 
 export const SOFT_MONACO_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   minimap: { enabled: false },
@@ -41,14 +42,14 @@ export function defineKentuckyMonacoThemes(monaco: typeof MonacoNS): void {
     inherit: true,
     rules: [],
     colors: {
-      'editor.background': '#1e1e1e',
+      'editor.background': DARK_ELEV_2,
       'editorLineNumber.foreground': '#ffffff28',
       'editorLineNumber.activeForeground': '#ffffff55',
       'editor.lineHighlightBackground': '#00000000',
       'editor.lineHighlightBorder': '#00000000',
       'editorIndentGuide.background1': '#00000000',
       'editorIndentGuide.activeBackground1': '#00000000',
-      'editorGutter.background': '#1e1e1e'
+      'editorGutter.background': DARK_ELEV_2
     }
   })
 

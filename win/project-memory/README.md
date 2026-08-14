@@ -1,34 +1,95 @@
-# KENTUCKY — 项目记忆（给后续对话 / 新 Agent）
+# Kentucky Win — AI 交接入口
 
-本目录记录产品决策、架构与改动历史，**上下文重置后请先读这里**，再改代码。
+> **先扫本页「现状」和「硬规则」，再按任务打开其它文件。**  
+> [`changelog.md`](./changelog.md) 是历史，**不是**当前契约。旧节里的 `toolApi` 以当时为准。
 
-当前主线：
+工作区容器 `Kentucky/` 含两个软件根：`win/`（本 Electron 应用）与 `android/`（独立 Capacitor）。**禁止**互相 `import`。
 
-1. **写作** — `.md` TipTap WYSIWYG + Monaco 源码；软化非 md 文本编辑  
-2. **思维导图** — `.kmind` v2 自由白板（React Flow；链接 / 插图 / 参考图 / 批注）  
-3. **台词对话** — 节点图画布编辑 `.dialogue.csv`（11 列）+ `*.dialogue.choices.json`（播放图）+ `characters.csv`（含 `operable`）+ meta/layout；检视器可设唯一开场；Godot 协议 **v1.3** 见 extras；执行器 [ai_river_godot](https://github.com/CCFOX12/ai_river_godot)
-4. **工作台** — 文件夹工作区、活动栏起始页/资源管理器切换、叠加主题色滚动条、多窗口（DocumentHub）、设置主题、灰白应用图标、中英 i18n；Toast/Dialog 短动效（Emil）+ `prefers-reduced-motion`
-5. **AI 代理人（v0.2.0）** — OpenAI 兼容；右侧 Cursor 式侧栏；自动写入；黄/蓝脏新建标记；本体 `data/` 存会话与密钥；**Git SCM + Agent `git_*`**（见 [AGENT-GIT.md](./AGENT-GIT.md)）  
+---
 
-| 文档 | 内容 |
+## 现状（2026-08-14）
+
+| 键 | 值 |
+|----|-----|
+| 软件根 | `win/` · `package.json` **0.3.0** |
+| 壳 | Electron 37 + electron-vite · React 19 · Zustand |
+| 当前 `toolApi` | **`2026-08-14-a`**（`proposalGate.ts` `TOOL_API_VERSION`） |
+| 沙箱 | `ipcSandbox.ts` + `workspacePath.ts`（changelog §121–§122） |
+| Agent 写盘 | **始终自动写盘**；无 Accept。黄● = 相对上次 Ctrl+S。改动卡只读 |
+| Git | 工作区根自动 `git init`（**不向上**找父仓）；Agent `git_*` 立即执行、无 force |
+| 分镜头 | `.kyboard` 已发版；粗剪须 `persistDoc` + Save 前 flush（§155） |
+| Android | 独立根 `../android/` · **0.2.0** · **Win 已有功能全部要移植**（壳不照搬）；入口 [`../../android/project-memory/PORTING-WIN-TO-ANDROID.md`](../../android/project-memory/PORTING-WIN-TO-ANDROID.md) |
+
+改协议 / preload / CSP / 导航锁 / IPC 沙箱后必须**完整退出 Electron**。`Ctrl+R` / F5 热重载不够。
+
+---
+
+## 硬规则
+
+1. 渲染层只走 `getPlatform()`，禁止 `require('fs')` 或散落 `window.kentucky`。
+2. 新 IPC / `kentucky-file` / Git / Agent 路径必须过 `ipcSandbox` + `workspacePath`。禁止回退裸 `fs:*`。
+3. **不要**把盘符根、`C:\Users`、用户主目录当工作区打开（产品拒绝）。
+4. Agent：**Ask 不执行工具**；Agent 模式写盘无 Accept；`commitProposal` 必须把提案 upsert 进 `session.proposals`（status=`applied`）。
+5. `.kyboard` 变更必须 `persistDoc`（写盘 **且** 更新 `tab.content`）。只 `writeFile` 会让 Ctrl+S 用打开时缓冲盖掉时间线。
+6. 分镜：**无**一键铺轨；导入不上 V1；改序后 `repackVideoClipStartsMut`（禁止改序后再 `packVideoClipsMut`）。
+7. 契约 bump 才改 `TOOL_API_VERSION`。未 bump 的主进程改动仍须完整退出。
+8. 勿用 `window.prompt` / `window.confirm`；确认走应用内对话框。
+9. 勿加 `framer-motion` / `ffmpeg-static`。
+10. 安卓移植：读 [`../../android/project-memory/PORTING-WIN-TO-ANDROID.md`](../../android/project-memory/PORTING-WIN-TO-ANDROID.md)，禁止整目录覆盖 `android/src`。
+
+---
+
+## 按任务读什么
+
+| 你要做的事 | 读（按序） |
+|------------|------------|
+| 清空上下文续聊 | 本页「现状」→ 本表对应行 |
+| 改工作台 / 标签 / 多窗 | [`architecture.md`](./architecture.md) · [`product-decisions.md`](./product-decisions.md) · [`gotchas.md`](./gotchas.md)「标签栏 / 分屏」 |
+| 改 Markdown / 导图 / 台词 | architecture 对应节 · product-decisions · extras Godot v1.3 |
+| 改分镜 / ffmpeg / 预览 | **[`STORYBOARD.md`](./STORYBOARD.md)**（单一真源） |
+| 改 Agent 工具 / 门禁 | [`AGENT-TOOL-FEEDBACK.md`](./AGENT-TOOL-FEEDBACK.md) · `proposalGate.ts` · [`SESSION-TOOL-FEEDBACK.md`](./SESSION-TOOL-FEEDBACK.md) |
+| 改 Git / SCM | **[`AGENT-GIT.md`](./AGENT-GIT.md)** |
+| 改 IPC / 协议 / 工作区根 | **[`SECURITY-AUDIT.md`](./SECURITY-AUDIT.md)**「现契约详解」 |
+| 怎么跑 / 打包 / 打开方式 | [`how-to-run.md`](./how-to-run.md) |
+| 文学记忆 / 游戏 skill | [`REQ-literary-agent-capability-upgrade.md`](./REQ-literary-agent-capability-upgrade.md) · [`REQ-indie-game-skills.md`](./REQ-indie-game-skills.md) |
+| 移植 Android | [`../../android/project-memory/README.md`](../../android/project-memory/README.md) → **PORTING** → [`BOARD.md`](../../android/project-memory/BOARD.md) |
+| 「为什么以前那样」 | [`changelog.md`](./changelog.md) 对应节 |
+
+---
+
+## 文档地图
+
+| 文件 | 角色 |
 |------|------|
-| [architecture.md](./architecture.md) | 技术栈、目录、数据流、关键模块（含 ToastLayer / 开场解析） |
-| [product-decisions.md](./product-decisions.md) | 需求 grill 结论（已定稿，勿擅自推翻） |
-| [AGENT-GIT.md](./AGENT-GIT.md) | **Agent / SCM Git 完整记录**（契约 · 自动建仓/裸仓 · L5 · 指纹 §80–89） |
-| [changelog.md](./changelog.md) | 时间线（**§80–§89**：SCM → pull/push → 自动 Git 写 → L5） |
-| [gotchas.md](./gotchas.md) | 踩坑与约束（Electron prompt、TipTap、MiniMap、台词 CSV、**Git**、动效离开态等） |
-| [how-to-run.md](./how-to-run.md) | 本地运行 / Cursor F5 调试 / **Godot 台词热编辑** |
-| [SESSION-TOOL-FEEDBACK.md](./SESSION-TOOL-FEEDBACK.md) | 工具反馈**多轮会话交接**（短；重启验证清单） |
-| [AGENT-TOOL-FEEDBACK.md](./AGENT-TOOL-FEEDBACK.md) | **Agent 工具反馈总清单**（缺陷表 / 契约 / Win 已修 / Android 待对齐） |
-| [AGENT-TOOL-TEST-BASELINE.md](./AGENT-TOOL-TEST-BASELINE.md) | **干净测试结论基线**（9 项实证通过 + P1/P2 残留） |
-| [REQ-literary-agent-capability-upgrade.md](./REQ-literary-agent-capability-upgrade.md) | 文学 Agent 能力升级需求提案归档（M1–M4） |
-| [../../android/project-memory/README.md](../../android/project-memory/README.md) | **Android 入口**（读序 / 硬规则） |
-| [../../android/project-memory/BOARD.md](../../android/project-memory/BOARD.md) | **Android 进度板**（W/H/U/A） |
-| [../../android/project-memory/open/literary-memory.md](../../android/project-memory/open/literary-memory.md) | Android 详约：Round H |
-| [../../android/project-memory/open/agent-ui.md](../../android/project-memory/open/agent-ui.md) | Android 详约：`/` + 上下文用量 |
-| [extras/godot-kentucky-dialogue](../extras/godot-kentucky-dialogue/README.md) | **Godot 接入协议 v1.3**（choices、`operable`、显式开场→CSV 首行、§4.2 作者注意；本仓不含插件） |
-| [ai_river_godot](https://github.com/CCFOX12/ai_river_godot) | Godot 执行器参考实现（AI River；独立仓库） |
+| **本页** | 现状 + 硬规则 + 读序 |
+| [architecture.md](./architecture.md) | 当前技术栈、目录、数据流、模块索引 |
+| [product-decisions.md](./product-decisions.md) | 已定稿产品表；勿擅自推翻 |
+| [gotchas.md](./gotchas.md) | 当前踩坑；改相关功能必读 |
+| [how-to-run.md](./how-to-run.md) | 运行 / F5 / dist / ffmpeg / 危险工作区 |
+| [changelog.md](./changelog.md) | 按对话演进的历史（§1–§161） |
+| [STORYBOARD.md](./STORYBOARD.md) | `.kyboard` 完整契约 |
+| [AGENT-GIT.md](./AGENT-GIT.md) | Git SCM + Agent `git_*` |
+| [SECURITY-AUDIT.md](./SECURITY-AUDIT.md) | 本机沙箱；禁止回退清单 |
+| [AGENT-TOOL-FEEDBACK.md](./AGENT-TOOL-FEEDBACK.md) | 工具缺陷总表（Win 已修 / Android 待对齐） |
+| [AGENT-TOOL-TEST-BASELINE.md](./AGENT-TOOL-TEST-BASELINE.md) | 干净仓实证基线 |
+| [SESSION-TOOL-FEEDBACK.md](./SESSION-TOOL-FEEDBACK.md) | 短交接 + 回归清单 |
+| [REQ-literary-agent-capability-upgrade.md](./REQ-literary-agent-capability-upgrade.md) | 文学记忆需求归档 |
+| [REQ-indie-game-skills.md](./REQ-indie-game-skills.md) | 8 个游戏策划 skill |
+| [../extras/godot-kentucky-dialogue/README.md](../extras/godot-kentucky-dialogue/README.md) | Godot 协议 **v1.3** |
+
+---
+
+## 模块一句话
+
+| 模块 | 磁盘 / 入口 |
+|------|----------------|
+| 工作台 | 打开本地文件夹；多标签（滚轮横滑、拖动改序）；分屏各栏「此栏」菜单；多窗 DocumentHub；活动栏 home/explorer/scm/settings/AI |
+| `.md` | TipTap WYSIWYG + Monaco；无分屏预览 |
+| `.kmind` v2 | React Flow；viewport 不脏；保存前 flush |
+| `.dialogue.csv` | 11 列 + choices/layout sidecar；`characters.csv` 工作区根 |
+| `.kyboard` | 稿纸 + NLE；`persistDoc`；无 AI 工具 |
+| PNG/MP4/PDF | 只读预览；`isMediaPreviewKind`；不进 DocumentHub |
+| PDF 导出 | UI printToPDF；Agent 仅 `.md` → `export_workspace_pdf` |
+| Agent | OpenAI 兼容；Ask/Plan/Outline/Agent；本体 `dev-data/data/` 或 exe 旁 `data/` |
 
 根目录另有简版 [README.md](../README.md)。详细以本目录为准。
-
-> 工作区容器：`Kentucky/win` 为本软件根；同级 `Kentucky/android` 为安卓软件根（互不共享源码）。

@@ -53,9 +53,12 @@ import {
 } from './kmind'
 import { setMindmapViewportFlush } from './mindmapViewportFlush'
 import { useSettingsStore } from '@/state/settingsStore'
+import { useFittedMenuPos } from '@/workbench/fitContextMenu'
 import { getPlatform } from '@/platform'
 import type { FileEntry } from '@/platform'
 import { Link2, ChevronRight, ChevronDown } from 'lucide-react'
+import { toJpeg, toPng } from 'html-to-image'
+import { registerKmindCapture, exportPathToPdf } from '@/export/exportPdf'
 
 const MINIMAP_SIZE = { width: 168, height: 110 } as const
 const DEFAULT_NODE_W = 160
@@ -63,6 +66,40 @@ const DEFAULT_NODE_H = 48
 const IMAGE_NODE_W = 200
 const IMAGE_NODE_H = 168
 const REF_IMAGE_MAX = 220
+const PRINT_HTML_BUDGET = 1_800_000
+
+function filterFlowChrome(domNode: HTMLElement): boolean {
+  const cls = typeof domNode.className === 'string' ? domNode.className : ''
+  if (cls.includes('react-flow__minimap')) return false
+  if (cls.includes('react-flow__controls')) return false
+  if (cls.includes('react-flow__attribution')) return false
+  return true
+}
+
+async function rasterizeFlowViewport(
+  el: HTMLElement,
+  bounds: { width: number; height: number }
+): Promise<string> {
+  const maxEdge = 4096
+  let ratio = Math.min(2, maxEdge / Math.max(bounds.width, bounds.height, 1))
+  for (let i = 0; i < 5; i++) {
+    const dataUrl = await toPng(el, {
+      backgroundColor: '#ffffff',
+      pixelRatio: ratio,
+      cacheBust: false,
+      filter: filterFlowChrome
+    })
+    if (dataUrl.length <= PRINT_HTML_BUDGET) return dataUrl
+    ratio *= 0.55
+  }
+  return toJpeg(el, {
+    backgroundColor: '#ffffff',
+    pixelRatio: Math.min(1.2, ratio),
+    quality: 0.82,
+    cacheBust: false,
+    filter: filterFlowChrome
+  })
+}
 
 type KMindNodeData = {
   text: string
@@ -100,7 +137,7 @@ function useFlowChromeTheme() {
   return useMemo(() => {
     const css = getComputedStyle(document.documentElement)
     const gray =
-      css.getPropertyValue('--bg-elev-3').trim() || (themeMode === 'dark' ? '#242424' : '#eeeeee')
+      css.getPropertyValue('--bg-elev-3').trim() || (themeMode === 'dark' ? '#1C1C1C' : '#eeeeee')
     return {
       // SVG fill does not reliably inherit near-invisible CSS borders; use a real grid color.
       dotColor: themeMode === 'dark' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.18)',
@@ -749,6 +786,7 @@ function MindMapCanvas({ tabId }: { tabId: string }) {
   const skipSerializeRef = useRef(true)
   const lastJsonRef = useRef('')
   const viewportRef = useRef({ x: 0, y: 0, zoom: 1 })
+  const hostRef = useRef<HTMLDivElement>(null)
   const zoom = useStore((s) => s.transform[2])
   // connectionRadius is in flow units; scale up when zoomed out so screen hit size stays usable.
   const connectionRadius = Math.max(28, Math.round(56 / Math.max(zoom, 0.08)))
@@ -772,7 +810,10 @@ function MindMapCanvas({ tabId }: { tabId: string }) {
 
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
+  const nodesRef = useRef(nodes)
+  nodesRef.current = nodes
   const [menu, setMenu] = useState<CtxMenu>(null)
+  const { menuRef, menuPos } = useFittedMenuPos(Boolean(menu), menu?.x ?? 0, menu?.y ?? 0)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
 
@@ -861,6 +902,27 @@ function MindMapCanvas({ tabId }: { tabId: string }) {
     flushViewportToStore()
     await saveTab(tabId)
   }, [flushViewportToStore, saveTab, tabId])
+
+  useEffect(() => {
+    if (!tab?.path) return
+    return registerKmindCapture(tab.path, async () => {
+      const current = nodesRef.current
+      if (current.length === 0) throw new Error('EMPTY')
+      const prev = { ...viewportRef.current }
+      await fitView({ padding: 0.08, duration: 0 })
+      await new Promise<void>((r) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => r()))
+      })
+      const el = hostRef.current?.querySelector('.react-flow') as HTMLElement | null
+      if (!el) throw new Error('no flow')
+      const bounds = getNodesBounds(current)
+      try {
+        return await rasterizeFlowViewport(el, bounds)
+      } finally {
+        await setViewport(prev)
+      }
+    })
+  }, [tab?.path, fitView, setViewport])
 
   const addNodeAt = useCallback(
     (x: number, y: number): string => {
@@ -1370,7 +1432,7 @@ function MindMapCanvas({ tabId }: { tabId: string }) {
 
   return (
     <MindMapActionsCtx.Provider value={mindActions}>
-    <div className="mindmap-host">
+    <div className="mindmap-host" ref={hostRef}>
       <div className="mindmap-toolbar">
         <button
           type="button"
@@ -1418,6 +1480,14 @@ function MindMapCanvas({ tabId }: { tabId: string }) {
         </button>
         <button type="button" onClick={() => void flushViewportAndSave()}>
           {t('editor.save')}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (tab?.path) void exportPathToPdf(tab.path)
+          }}
+        >
+          {t('pdf.export')}
         </button>
       </div>
 
@@ -1479,8 +1549,9 @@ function MindMapCanvas({ tabId }: { tabId: string }) {
 
       {menu ? (
         <div
+          ref={menuRef}
           className="ctx-menu"
-          style={{ left: menu.x, top: menu.y }}
+          style={{ left: menuPos.x, top: menuPos.y }}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
           onContextMenu={(e) => e.preventDefault()}

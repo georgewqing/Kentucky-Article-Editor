@@ -22,14 +22,16 @@ Architecture and decision notes: [`project-memory/`](./project-memory/README.md)
 - **Dialogue / 台词:** Node-graph `*.dialogue.csv` (11 cols) + `*.dialogue.choices.json` play graph (empty option text: operable speaker waits confirm, NPC auto-advances) + Kentucky-only `*.dialogue.layout.json`; root `characters.csv` (`operable` column); meta `*.dialogue.meta.json`. Protocol **v1.3**: [`extras/godot-kentucky-dialogue/README.md`](./extras/godot-kentucky-dialogue/README.md). Godot executor: [ai_river_godot](https://github.com/CCFOX12/ai_river_godot). / 节点式台词图；choices 播放图；`characters.operable`；契约 **v1.3**。
 - **Multi-window / 多窗口:** Blender-style **New Window** (slim single-file editor) and **New Main Window** (full workbench, same workspace, empty tabs); same-path buffers shared live across windows; in-app unsaved dialog (Save / Don’t Save / Cancel). / Blender 式新建窗口/新建主窗口；同路径正文跨窗实时共享；应用内未保存对话框。
 - **Split view / 分屏:** Side-by-side editor panes. / 编辑器左右分栏。
-- **Settings / 设置:** Dark/light, accent (presets + picker), font size, Chinese/English UI; menus follow locale; startup splash follows saved accent; **AI** (OpenAI-compatible URL/key/model, agent tools, Apply mode). / 深色/浅色、主体色、字号、中英 UI；启动闪屏跟主体色；**AI** 设置。
-- **AI writing agent / AI 写作代理人 (v0.2.0):** Right Cursor-like panel (`Ctrl+L`); streaming chat; propose→Apply file edits (Markdown/dialogue/characters/`.kmind`); multi-session history + encrypted key in app-body `data/` (not in project, not AppData); context usage bar; **optional Skills** (`data/ai-skills/`) and **optional web search** (off by default; DuckDuckGo multi-query research); no Shell. / 右侧 Cursor 式对话栏；可选 Skills 与联网搜索（默认关）；无 Shell。
+- **Storyboard / 分镜头 (v0.3.0):** `.kyboard` sheet + simplified NLE; workspace `.png` / `.mp4` / `.pdf` preview. Android will port these (not shipped there yet). / 分镜头稿本 + 简化时间线；工作区可预览 PNG/MP4/PDF。安卓要移植，尚未落地。
+- **Settings / 设置:** Dark/light, accent (presets + picker), font size, Chinese/English UI; menus follow locale; startup splash follows saved accent; **AI** (OpenAI-compatible URL/key/model, agent tools). / 深色/浅色、主体色、字号、中英 UI；启动闪屏跟主体色；**AI** 设置。
+- **AI writing agent / AI 写作代理人 (since v0.2.0):** Right Cursor-like panel (`Ctrl+L`); Ask / Plan / Agent; Agent **auto-writes** (no Accept); read-only change cards; multi-session history + encrypted key in app-body `data/`; optional Skills and web search (off by default); Git tools on desktop. / 右侧对话栏；Agent 始终写盘、无 Accept；可选 Skills 与联网搜索；桌面含 Git 工具。
+- **Source Control / Git:** Auto `git init` at the opened folder root (does not walk up); SCM pane + Agent `git_*` (no force). / 打开的文件夹根自动建仓；不向上找父仓。
 - **Platform / 平台抽象:** Renderer talks to the filesystem only through `Platform` (Electron preload). Android is a **separate software root** (`../android/`), not bundled here. / 渲染层经 `Platform` 访问文件系统；安卓为独立软件根，不在本目录。
 
 ## Out of scope (for now) / 明确不做（现阶段）
 
 - Split Markdown preview (WYSIWYG is the reading surface); auto-sync between article and mind map / Markdown 左右分屏预览、正文 ↔ 导图自动同步
-- Command palette / extensions / Git / cloud sync / 命令面板、扩展、Git、云同步
+- Command palette / extensions / cloud sync / 命令面板、扩展、云同步
 - AI: billing UI, Shell tools, cloud key sync; Brave/Tavily live search (DDG optional search is in-app) / AI 费用账单、Shell、云同步密钥；Brave/Tavily 尚未接通（DuckDuckGo 可选搜索已内置）
 - Phone-narrow layouts / 手机窄屏布局
 - Switching files inside a slim window; syncing caret/selection across windows / 精简窗内换文件、跨窗同步光标/选区
@@ -65,7 +67,7 @@ Build output is in `out/`. / 产物在 `out/`。
 npm run dist
 ```
 
-Produces a **single** file: `release/KENTUCKY-0.2.0-portable.exe`. Double-click to run—no unzip step for the user. Size is large (Chromium + app). / 生成单个 `release/KENTUCKY-0.2.0-portable.exe`，下载后双击即可，用户无需解压；体积较大（含 Chromium）。
+Default ship is a **folder** `release/KENTUCKY-0.3.0/` (contains `KENTUCKY.exe`). Optional `npm run dist:portable` builds a single-file exe. / 默认目录版 `release/KENTUCKY-0.3.0/`；可选便携单文件。
 
 If Electron/NSIS downloads time out in China, set mirrors first: / 国内下载超时可先设镜像：
 

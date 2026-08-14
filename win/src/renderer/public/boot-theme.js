@@ -57,8 +57,8 @@
   var rgb = hexToRgb(accent)
   var root = document.documentElement
   root.dataset.bootTheme = dark ? 'dark' : 'light'
-  root.style.setProperty('--boot-bg', dark ? '#141414' : '#f3f3f3')
-  root.style.setProperty('--boot-elev', dark ? '#242424' : '#eeeeee')
+  root.style.setProperty('--boot-bg', dark ? '#0A0A0A' : '#f3f3f3')
+  root.style.setProperty('--boot-elev', dark ? '#1C1C1C' : '#eeeeee')
   root.style.setProperty('--boot-fg', dark ? '#f0f0f0' : '#111111')
   root.style.setProperty('--boot-accent', accent)
   root.style.setProperty(

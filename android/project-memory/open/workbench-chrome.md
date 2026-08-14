@@ -52,7 +52,7 @@ composerAttachments: string[]  // 相对路径；目录带尾 /
 addComposerAttachment / removeComposerAttachment  // 按去尾 / 去重
 ```
 
-`aiSend.editor.attachedPaths` = 本轮纸夹挂载（可与 `@` mentions 合并进 `mentionedPaths`）。
+`aiSend.editor.attachedPaths` = 本轮纸夹挂载（**不要**再并进 `mentionedPaths`；chip 走 CRITICAL + user 绑定）。
 
 `ChatMessage.attachedPaths?: string[]` 持久化到会话 JSON。
 
@@ -60,7 +60,7 @@ addComposerAttachment / removeComposerAttachment  // 按去尾 / 去重
 
 ### 2.4 Runtime：目录挂载上下文
 
-对 `mentionedPaths` / 挂载路径：
+对挂载路径（及非 chip 的 `@mentions`）：
 
 - 若为**文件**：读正文（既有截断策略）。
 - 若为**目录**：浅层列表（跳过 `.git` / `node_modules`，最多 ~48 项），形如：
@@ -71,7 +71,7 @@ Mounted directory chapters/
 [file] notes.md
 ```
 
-Win：`agentLoop.readWorkspaceMention`（`readAbsSafe` 先去尾 `/`）。
+Win：`agentLoop.readWorkspaceMention`（`readAbsSafe` 先去尾 `/`）+ `formatUserContentForApi`（API user 前缀）+ `buildMountedFilesHint`（CRITICAL）。有挂载时 Editor context 置顶 PRIMARY SUBJECT，省略活动文件正文。
 
 ### 2.5 气泡
 

@@ -34,6 +34,7 @@ export interface Platform {
   rename(oldPath: string, newPath: string): Promise<void>
   delete(targetPath: string): Promise<void>
   exists(targetPath: string): Promise<boolean>
+  isDirectory(targetPath: string): Promise<boolean>
   copyFile(src: string, dest: string): Promise<void>
   toMediaUrl(filePath: string): Promise<string>
   /** Reveal path in the OS file manager (Explorer / Finder). */
@@ -54,11 +55,13 @@ export interface Platform {
   runMenuAction(action: string): Promise<void>
   onMenuOpenFolder(cb: () => void): () => void
   onMenuSave(cb: () => void): () => void
+  onMenuExportPdf(cb: () => void): () => void
   onMenuNewWindow(cb: () => void): () => void
   onMenuNewMainWindow(cb: () => void): () => void
+  onOpenDocument(cb: (payload: { workspacePath: string; filePath: string }) => void): () => void
 
   getWindowBootstrap(): Promise<WindowBootstrap>
-  reportWorkspace(workspacePath: string | null): Promise<void>
+  reportWorkspace(workspacePath: string | null): Promise<{ ok: boolean; error?: string }>
   newMainWindow(workspacePath?: string | null): Promise<void>
   newFloatWindow(payload: {
     filePath: string
@@ -157,18 +160,70 @@ export interface Platform {
   aiRevealSkillsDir(): Promise<boolean>
   aiImportSkillFolder(): Promise<{ ok: boolean; id?: string; error?: string }>
   onAiEvent(channel: string, cb: (payload: unknown) => void): () => void
+
+  storyboardGenerateBlank(payload: {
+    workspaceRoot: string
+    kyboardAbsPath: string
+    layout: unknown
+    fileName?: string
+    targetDirAbs?: string
+  }): Promise<unknown>
+  storyboardImportSheet(payload: {
+    workspaceRoot: string
+    kyboardAbsPath: string
+    sourceAbs: string
+  }): Promise<unknown>
+  storyboardSliceSheet(payload: unknown): Promise<unknown>
+  storyboardSheetSize(layout: unknown): Promise<{ width: number; height: number }>
+  storyboardExportMp4(payload: {
+    workspaceRoot: string
+    doc: unknown
+    outAbsPath: string
+  }): Promise<unknown>
+  openPngDialog(): Promise<string | null>
+  openMp3Dialog(): Promise<string | null>
+  saveMp4Dialog(opts?: string | { defaultPath?: string }): Promise<string | null>
+  savePngDialog(opts?: string | { defaultPath?: string }): Promise<string | null>
+  savePdfDialog(opts?: string | { defaultPath?: string }): Promise<string | null>
+  exportPdf(payload: {
+    destAbs: string
+    html: string
+    landscape?: boolean
+  }): Promise<{ ok: boolean; path?: string; error?: string }>
+  onStoryboardExportProgress(cb: (payload: { pct: number }) => void): () => void
 }
 
 function joinPath(...parts: string[]): string {
   if (parts.length === 0) return ''
   const isWin = parts[0].includes('\\') || /^[A-Za-z]:/.test(parts[0])
   const sep = isWin ? '\\' : '/'
-  let result = parts[0].replace(/[/\\]+$/, '')
-  for (let i = 1; i < parts.length; i++) {
-    const p = parts[i].replace(/^[/\\]+/, '').replace(/[/\\]+$/, '')
-    if (p) result = result + sep + p
+  const drive = /^[A-Za-z]:/.exec(parts[0].replace(/\//g, '\\'))
+  const joined = parts
+    .map((p, i) => {
+      let s = p.replace(/[/\\]+/g, sep)
+      if (i === 0) return s.replace(new RegExp(`[${sep === '\\' ? '\\\\' : '/'}]+$`), '')
+      return s.replace(new RegExp(`^[${sep === '\\' ? '\\\\' : '/'}]+|[${sep === '\\' ? '\\\\' : '/'}]+$`, 'g'), '')
+    })
+    .filter(Boolean)
+    .join(sep)
+  const rawSegs = joined.split(/[/\\]+/)
+  const out: string[] = []
+  for (const s of rawSegs) {
+    if (!s || s === '.') continue
+    if (s === '..') {
+      if (out.length === 0) continue
+      if (drive && out.length === 1 && /^[A-Za-z]:$/.test(out[0])) continue
+      out.pop()
+      continue
+    }
+    out.push(s)
   }
-  return result
+  if (out.length === 0) return drive ? drive[0] + sep : ''
+  if (drive && /^[A-Za-z]:$/.test(out[0])) {
+    return out[0] + sep + out.slice(1).join(sep)
+  }
+  const prefix = joined.startsWith(sep) ? sep : ''
+  return prefix + out.join(sep)
 }
 
 function basename(filePath: string): string {
@@ -227,6 +282,7 @@ export function createElectronPlatform(): Platform {
       await api.delete(targetPath)
     },
     exists: (targetPath) => api.exists(targetPath),
+    isDirectory: (targetPath) => api.isDirectory(targetPath),
     copyFile: async (src, dest) => {
       await api.copyFile(src, dest)
     },
@@ -254,12 +310,14 @@ export function createElectronPlatform(): Platform {
     },
     onMenuOpenFolder: (cb) => api.onMenuOpenFolder(cb),
     onMenuSave: (cb) => api.onMenuSave(cb),
+    onMenuExportPdf: (cb) => api.onMenuExportPdf(cb),
     onMenuNewWindow: (cb) => api.onMenuNewWindow(cb),
     onMenuNewMainWindow: (cb) => api.onMenuNewMainWindow(cb),
+    onOpenDocument: (cb) => api.onOpenDocument(cb),
 
     getWindowBootstrap: () => api.getWindowBootstrap(),
     reportWorkspace: async (workspacePath) => {
-      await api.reportWorkspace(workspacePath)
+      return api.reportWorkspace(workspacePath)
     },
     newMainWindow: async (workspacePath) => {
       await api.newMainWindow(workspacePath)
@@ -329,7 +387,20 @@ export function createElectronPlatform(): Platform {
     aiSetSkillEnabled: (id, enabled) => api.aiSetSkillEnabled(id, enabled),
     aiRevealSkillsDir: () => api.aiRevealSkillsDir(),
     aiImportSkillFolder: () => api.aiImportSkillFolder(),
-    onAiEvent: (channel, cb) => api.onAiEvent(channel, cb)
+    onAiEvent: (channel, cb) => api.onAiEvent(channel, cb),
+
+    storyboardGenerateBlank: (payload) => api.storyboardGenerateBlank(payload),
+    storyboardImportSheet: (payload) => api.storyboardImportSheet(payload),
+    storyboardSliceSheet: (payload) => api.storyboardSliceSheet(payload),
+    storyboardSheetSize: (layout) => api.storyboardSheetSize(layout),
+    storyboardExportMp4: (payload) => api.storyboardExportMp4(payload),
+    openPngDialog: () => api.openPngDialog(),
+    openMp3Dialog: () => api.openMp3Dialog(),
+    saveMp4Dialog: (defaultName) => api.saveMp4Dialog(defaultName),
+    savePngDialog: (defaultName) => api.savePngDialog(defaultName),
+    savePdfDialog: (opts) => api.savePdfDialog(opts),
+    exportPdf: (payload) => api.exportPdf(payload),
+    onStoryboardExportProgress: (cb) => api.onStoryboardExportProgress(cb)
   }
 }
 
@@ -348,6 +419,7 @@ export function createBrowserStubPlatform(): Platform {
     rename: async () => undefined,
     delete: async () => undefined,
     exists: async () => false,
+    isDirectory: async () => false,
     copyFile: async () => undefined,
     toMediaUrl: async (filePath) => filePath,
     showItemInFolder: async () => undefined,
@@ -365,10 +437,12 @@ export function createBrowserStubPlatform(): Platform {
     runMenuAction: async () => undefined,
     onMenuOpenFolder: () => () => undefined,
     onMenuSave: () => () => undefined,
+    onMenuExportPdf: () => () => undefined,
     onMenuNewWindow: () => () => undefined,
     onMenuNewMainWindow: () => () => undefined,
+    onOpenDocument: () => () => undefined,
     getWindowBootstrap: async () => ({ role: 'main', workspacePath: null, filePath: null }),
-    reportWorkspace: async () => undefined,
+    reportWorkspace: async () => ({ ok: true }),
     newMainWindow: async () => undefined,
     newFloatWindow: async () => undefined,
     docOpen: async (filePath) => {
@@ -480,7 +554,20 @@ export function createBrowserStubPlatform(): Platform {
     aiSetSkillEnabled: async () => [],
     aiRevealSkillsDir: async () => true,
     aiImportSkillFolder: async () => ({ ok: false, error: 'Not available' }),
-    onAiEvent: () => () => undefined
+    onAiEvent: () => () => undefined,
+
+    storyboardGenerateBlank: async () => ({ ok: false, error: 'Not available' }),
+    storyboardImportSheet: async () => ({ ok: false, error: 'Not available' }),
+    storyboardSliceSheet: async () => ({ ok: false, error: 'Not available' }),
+    storyboardSheetSize: async () => ({ width: 0, height: 0 }),
+    storyboardExportMp4: async () => ({ ok: false, error: 'Not available' }),
+    openPngDialog: async () => null,
+    openMp3Dialog: async () => null,
+    saveMp4Dialog: async () => null,
+    savePngDialog: async () => null,
+    savePdfDialog: async () => null,
+    exportPdf: async () => ({ ok: false, error: 'PRINT_FAILED' }),
+    onStoryboardExportProgress: () => () => undefined
   }
 }
 

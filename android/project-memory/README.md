@@ -1,7 +1,8 @@
 # Kentucky Android — project memory
 
-> **AI 入口**。先读本页 → 做 Win 对齐时再读 [`BOARD.md`](./BOARD.md) + [`PORTING-WIN-TO-ANDROID.md`](./PORTING-WIN-TO-ANDROID.md)。  
-> 版本：`0.2.0` · 独立软件根 · 勿 `import ../win`
+> **AI 入口**。先读本页 → 做 Win 对齐时再读 [`PORTING-WIN-TO-ANDROID.md`](./PORTING-WIN-TO-ANDROID.md)（能力矩阵）+ [`BOARD.md`](./BOARD.md)。  
+> 版本：`0.2.0` · 独立软件根 · 勿 `import ../win`  
+> Win 真源：[`../win/project-memory/README.md`](../win/project-memory/README.md)（当前 Win **0.3.0** · `toolApi: 2026-08-14-a`）
 
 ## 硬规则（每次动手前）
 
@@ -19,18 +20,19 @@
 | 从 Win 搬功能 | [`PORTING-WIN-TO-ANDROID.md`](./PORTING-WIN-TO-ANDROID.md) → 阶段分类 → [`BOARD.md`](./BOARD.md) 对应 ID |
 | 实现某一 OPEN 项 | `BOARD` 行内「详约」列 → `open/*.md` |
 | 踩坑 / 禁止项 | [`gotchas.md`](./gotchas.md) |
+| 改标签栏 / 分屏 | architecture「标签栏 / 分屏」→ gotchas 同名节 → Win [`architecture.md`](../win/project-memory/architecture.md) 同名节 |
 | 产品边界 | [`product-decisions.md`](./product-decisions.md) |
 | 结构 / Platform | [`architecture.md`](./architecture.md) |
 | 怎么跑 | [`how-to-run.md`](./how-to-run.md) |
 | 历史改动 | [`changelog.md`](./changelog.md) |
 | Win 工具总清单（源真） | [`../win/project-memory/AGENT-TOOL-FEEDBACK.md`](../win/project-memory/AGENT-TOOL-FEEDBACK.md) |
-| Win Git 完整记录（源真） | [`../win/project-memory/AGENT-GIT.md`](../win/project-memory/AGENT-GIT.md) |
+| Win 分镜 / Git | [`../win/project-memory/STORYBOARD.md`](../win/project-memory/STORYBOARD.md) · [`../win/project-memory/AGENT-GIT.md`](../win/project-memory/AGENT-GIT.md) |
 
-## 现状（2026-08-12）
+## 现状（2026-08-14）
 
-- **骨架**：0.2.0 已对齐 Win 主能力（编辑器 / 对话 v1.3 / SAF / `ai-runtime` / 单窗平板 chrome）。
-- **Win 超前未移植**：Agent 工具反馈 W*、文学记忆 H*、UI U1–U18 — 进度见 [`BOARD.md`](./BOARD.md)。
-- **本大版本不移植**：U13–U18（去 Accept / 始终写盘 / Git / kmind 子树）— Win 已落地至 `toolApi: 2026-08-12-l`；**契约镜像** [`open/auto-apply-git.md`](./open/auto-apply-git.md)；Win 完整记录 [`../win/project-memory/AGENT-GIT.md`](../win/project-memory/AGENT-GIT.md)。Android **无** Git 实现代码。
+- **拍板**：**Win 已有产品功能全部要移植**（分镜、PDF、Git、恒写盘、媒体预览都算）。壳不照搬：单窗、无 AppMenuBar、SAF、无 HKCU。详见 [`PORTING-WIN-TO-ANDROID.md`](./PORTING-WIN-TO-ANDROID.md) §0。
+- **骨架**：0.2.0 已有写作 / kmind / 对话 v1.3 / SAF / `ai-runtime` / 单窗平板 chrome。标签栏滚轮/改序与分屏「此栏」菜单已对齐 Win §160–§161。**尚未**对齐 Win 0.3.0 超集。
+- **未移植（都要做）**：W* / H* / U1–U18 / A3–A6。进度 [`BOARD.md`](./BOARD.md)。对齐 Agent 时直接按 Win **现行恒写盘**。
 - **待真机验收**：MD↔AI 触控板分流 — [`open/trackpad-scroll.md`](./open/trackpad-scroll.md)。
 - **历史脏文件**：工作区里已 mangled 的台词副本需人工整理（代码不自动修内容）。
 
@@ -40,7 +42,7 @@
 project-memory/
   README.md                 ← 你在这里
   BOARD.md                  ← 唯一进度板（W / H / U / A）
-  PORTING-WIN-TO-ANDROID.md ← 操作规程
+  PORTING-WIN-TO-ANDROID.md ← Win→Android 能力矩阵 + 操作规程（AI 扫描）
   architecture.md | product-decisions.md | gotchas.md | how-to-run.md | changelog.md
   open/                     ← 详约（按需打开，勿当进度板）
     literary-memory.md      H1–H4

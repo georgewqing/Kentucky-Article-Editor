@@ -27,6 +27,8 @@ export interface ChatMessage {
   attachmentPreviews?: AttachmentPreview[]
   /** Slash skill id invoked for this user turn (composer chip). */
   skillId?: string
+  /** API-only expansion at send time (mounts + this turn's Editor context / skill). Replay this; do not re-read disk or rebuild L5. Not shown in the UI bubble. */
+  apiContent?: string
 }
 
 export interface PlanStep {
@@ -196,8 +198,9 @@ export function deleteSession(id: string): void {
   if (existsSync(p)) unlinkSync(p)
 }
 
-export function estimateTokensFromText(text: string): number {
+export function estimateTokensFromText(text: string | null | undefined): number {
   // Rough: ~4 chars / token for mixed CJK+Latin
+  if (typeof text !== 'string' || !text) return 0
   return Math.max(1, Math.ceil(text.length / 4))
 }
 

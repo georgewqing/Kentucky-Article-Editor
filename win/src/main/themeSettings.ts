@@ -1,4 +1,5 @@
-import { app } from 'electron'
+import { app, nativeTheme } from 'electron'
+import { DARK_BG, DARK_ELEV_3, LIGHT_BG } from '../shared/theme'
 import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
 
@@ -53,7 +54,27 @@ export function writeSplashTheme(partial: Partial<SplashThemeSettings>): SplashT
 }
 
 export function splashBackgroundColor(theme: SplashThemeSettings): string {
-  return theme.themeMode === 'light' ? '#f3f3f3' : '#141414'
+  return theme.themeMode === 'light' ? LIGHT_BG : DARK_BG
+}
+
+export const TITLEBAR_OVERLAY_MAIN = 30
+export const TITLEBAR_OVERLAY_FLOAT = 32
+
+/** Windows DWM caption / caption-button colors. Call before creating windows. */
+export function applyNativeThemeSource(theme: SplashThemeSettings = readSplashTheme()): void {
+  nativeTheme.themeSource = theme.themeMode === 'light' ? 'light' : 'dark'
+}
+
+export function titleBarOverlayFor(
+  theme: SplashThemeSettings,
+  isFloat: boolean
+): { color: string; symbolColor: string; height: number } {
+  const dark = theme.themeMode !== 'light'
+  return {
+    color: splashBackgroundColor(theme),
+    symbolColor: dark ? '#f0f0f0' : '#111111',
+    height: isFloat ? TITLEBAR_OVERLAY_FLOAT : TITLEBAR_OVERLAY_MAIN
+  }
 }
 
 /** Hex accent → CSS vars for the splash window (injected from main; no reliance on stale boot-theme.js). */
@@ -69,8 +90,8 @@ export function splashThemeCssVars(theme: SplashThemeSettings): Record<string, s
   const b = n & 255
   return {
     bootTheme: dark ? 'dark' : 'light',
-    '--boot-bg': dark ? '#141414' : '#f3f3f3',
-    '--boot-elev': dark ? '#242424' : '#eeeeee',
+    '--boot-bg': dark ? DARK_BG : LIGHT_BG,
+    '--boot-elev': dark ? DARK_ELEV_3 : '#eeeeee',
     '--boot-fg': dark ? '#f0f0f0' : '#111111',
     '--boot-accent': accent,
     '--boot-accent-soft': `rgba(${r}, ${g}, ${b}, 0.22)`,

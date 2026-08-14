@@ -122,7 +122,7 @@ function useDialogueChrome() {
   return useMemo(() => {
     const css = getComputedStyle(document.documentElement)
     const gray =
-      css.getPropertyValue('--bg-elev-3').trim() || (themeMode === 'dark' ? '#242424' : '#eeeeee')
+      css.getPropertyValue('--bg-elev-3').trim() || (themeMode === 'dark' ? '#1C1C1C' : '#eeeeee')
     return {
       minimap: {
         bgColor: gray,

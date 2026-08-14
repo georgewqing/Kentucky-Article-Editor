@@ -412,7 +412,12 @@ export const useAiStore = create<AiState>((set, get) => ({
         absNorm.toLowerCase().startsWith(rootNorm + '/') || absNorm.toLowerCase() === rootNorm
       if (inside) {
         const rel = platform.relativeTo(ws, abs)
-        if (rel) get().addComposerAttachment(rel)
+        if (rel) {
+          const withSlash = (await platform.isDirectory(abs))
+            ? rel.replace(/\/+$/, '') + '/'
+            : rel.replace(/\/+$/, '')
+          get().addComposerAttachment(withSlash)
+        }
         continue
       }
       // Outside workspace: copy into .kentucky/refs/ so agent tools stay sandboxed.
@@ -549,29 +554,24 @@ export const useAiStore = create<AiState>((set, get) => ({
   },
 
   refreshContextUsage: async () => {
-    const id = get().session?.id
-    if (!id) {
-      // Still show fixed overhead (system/tools) with empty conversation.
-      const usage = await getPlatform().aiContextUsage('', get().agentMode)
+    try {
+      const id = get().session?.id
+      const usage = await getPlatform().aiContextUsage(id || '', get().agentMode)
       set({
         contextUsed: usage.used,
         contextLimit: usage.limit,
         contextBuckets: usage.buckets || []
       })
-      return
+    } catch (err) {
+      console.error(err)
     }
-    const usage = await getPlatform().aiContextUsage(id, get().agentMode)
-    set({
-      contextUsed: usage.used,
-      contextLimit: usage.limit,
-      contextBuckets: usage.buckets || []
-    })
   },
 
   send: async (text, opts) => {
     const draftText = (text ?? get().draft).trim()
     const chipSkill = get().composerSkillId?.trim() || null
-    if ((!draftText && !chipSkill) || get().streaming) return
+    const pendingAttachments = get().composerAttachments
+    if ((!draftText && !chipSkill && !pendingAttachments.length) || get().streaming) return
     let session = get().session
     if (!session) {
       await get().newChat()
@@ -616,7 +616,7 @@ export const useAiStore = create<AiState>((set, get) => ({
         .join('\n')
     }
 
-    const attachments = get().composerAttachments
+    const attachments = pendingAttachments
     set({
       streaming: true,
       error: null,
@@ -627,8 +627,9 @@ export const useAiStore = create<AiState>((set, get) => ({
       composerAttachments: [],
       composerSkillId: null
     })
+    // @mentions only — composer chips go via attachedPaths (CRITICAL + user-message bind).
     const fromAt = Array.from(sendText.matchAll(/@([^\s@]+)/g)).map((m) => m[1])
-    const mentions = Array.from(new Set([...fromAt, ...attachments].map((p) => p.replace(/\\/g, '/'))))
+    const mentions = Array.from(new Set(fromAt.map((p) => p.replace(/\\/g, '/'))))
     await getPlatform().aiSend({
       sessionId: session.id,
       text: sendText,
@@ -803,13 +804,25 @@ export const useAiStore = create<AiState>((set, get) => ({
       }),
       p.onAiEvent('ai:proposal', (payload) => {
         const data = payload as {
+          sessionId?: string
           proposal: AiProposal
           autoApplied?: boolean
           writeDisk?: boolean
           isNew?: boolean
         }
         if (!data.proposal) return
-        // R1: only sync editor when auto-applied; pending waits for Accept.
+        const cur = get().session
+        if (cur && (!data.sessionId || cur.id === data.sessionId)) {
+          const recorded: AiProposal = {
+            ...data.proposal,
+            status: data.autoApplied ? 'applied' : data.proposal.status
+          }
+          const prev = cur.proposals || []
+          const proposals = prev.some((x) => x.id === recorded.id)
+            ? prev.map((x) => (x.id === recorded.id ? recorded : x))
+            : [...prev, recorded]
+          set({ session: { ...cur, proposals } })
+        }
         if (data.autoApplied) {
           void get().syncAppliedFile(data.proposal, data.writeDisk === true, data.isNew === true)
         }

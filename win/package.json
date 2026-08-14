@@ -1,6 +1,6 @@
 {
   "name": "kentucky",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "KENTUCKY - local Markdown writing + freeform mind maps + AI writing agent",
   "main": "./out/main/index.js",
   "author": "leyang chen",
@@ -10,9 +10,10 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
-    "dist": "npm run build && electron-builder --win dir && node scripts/rename-unpacked.js",
-    "dist:dir": "npm run build && electron-builder --win dir && node scripts/rename-unpacked.js",
-    "dist:portable": "npm run build && electron-builder --win portable"
+    "ensure-ffmpeg": "node scripts/ensure-ffmpeg.js",
+    "dist": "node scripts/ensure-ffmpeg.js && npm run build && electron-builder --win dir && node scripts/rename-unpacked.js",
+    "dist:dir": "node scripts/ensure-ffmpeg.js && npm run build && electron-builder --win dir && node scripts/rename-unpacked.js",
+    "dist:portable": "node scripts/ensure-ffmpeg.js && npm run build && electron-builder --win portable"
   },
   "build": {
     "appId": "com.ccfox12.kentucky",
@@ -27,8 +28,27 @@
       "out/**/*"
     ],
     "asar": true,
+    "extraResources": [
+      {
+        "from": "resources/ffmpeg/ffmpeg.exe",
+        "to": "ffmpeg/ffmpeg.exe"
+      },
+      {
+        "from": "resources/ai-skills",
+        "to": "ai-skills"
+      }
+    ],
     "win": {
       "icon": "build/icon.png",
+      "fileAssociations": [
+        {
+          "ext": "md",
+          "name": "Markdown",
+          "description": "Markdown Document",
+          "mimeType": "text/markdown",
+          "role": "Editor"
+        }
+      ],
       "target": [
         {
           "target": "dir",
@@ -58,10 +78,13 @@
     "@tiptap/react": "^3.29.2",
     "@tiptap/starter-kit": "^3.29.2",
     "@xyflow/react": "^12.11.2",
+    "html-to-image": "^1.11.13",
     "i18next": "^25.3.2",
     "js-yaml": "^5.2.3",
     "lucide-react": "^1.28.0",
     "monaco-editor": "^0.56.0",
+    "pdfjs-dist": "^5.4.296",
+    "pngjs": "^7.0.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-i18next": "^15.6.0",
@@ -71,6 +94,7 @@
   "devDependencies": {
     "@types/dagre": "^0.7.54",
     "@types/js-yaml": "^4.0.9",
+    "@types/pngjs": "^6.0.5",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",

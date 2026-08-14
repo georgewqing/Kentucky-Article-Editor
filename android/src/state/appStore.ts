@@ -156,6 +156,7 @@ interface AppState {
   enableSplit: (tabId?: string) => void
   disableSplit: () => void
   setSplitTab: (id: string) => void
+  reorderTabs: (id: string, insertBefore: number) => void
 
   createFile: (name: string, parentDir?: string) => Promise<void>
   createFolder: (name: string, parentDir?: string) => Promise<void>
@@ -960,6 +961,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   disableSplit: () => set({ splitEnabled: false, splitTabId: null }),
 
   setSplitTab: (id) => set({ splitTabId: id }),
+
+  reorderTabs: (id, insertBefore) => {
+    const tabs = get().tabs
+    const from = tabs.findIndex((t) => t.id === id)
+    if (from < 0) return
+    let dest = Math.max(0, Math.min(insertBefore, tabs.length))
+    if (from < dest) dest -= 1
+    if (dest === from) return
+    const next = [...tabs]
+    const [item] = next.splice(from, 1)
+    next.splice(dest, 0, item)
+    set({ tabs: next })
+  },
 
   createFile: async (name, parentDir) => {
     const { workspacePath } = get()

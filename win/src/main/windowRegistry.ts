@@ -52,6 +52,19 @@ export function countMainWindowsWithWorkspace(all: BrowserWindow[], workspacePat
   return n
 }
 
+export function listWorkspaceRoots(): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const meta of Array.from(metaById.values())) {
+    if (!meta.workspacePath) continue
+    const k = meta.workspacePath.replace(/\//g, '\\').toLowerCase()
+    if (seen.has(k)) continue
+    seen.add(k)
+    out.push(meta.workspacePath)
+  }
+  return out
+}
+
 export function floatWindowsForWorkspace(all: BrowserWindow[], workspacePath: string): BrowserWindow[] {
   const key = workspacePath.replace(/\//g, '\\').toLowerCase()
   const out: BrowserWindow[] = []

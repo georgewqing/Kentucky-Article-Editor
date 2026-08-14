@@ -200,7 +200,7 @@ html, body, #root { width:100%; height:100%; min-width:100%; min-height:100%; }
 
 ## 7. 验收清单
 
-指纹：任意写入类工具结果 `toolApi` 与 Win 当前一致（至少 `2026-08-11-j`）。
+指纹：任意写入类工具结果 `toolApi` 与 Win 当前一致（现 `2026-08-14-a`）。
 
 1. 输入 `/` → 菜单出现 Skills（若有启用 skill）+ Commands；点 skill 得到 `/id `；菜单**无可见滑块**但仍可滚轮滑动  
 2. 仅发 `/literary-voice`（或其它 id）→ 本轮 agent 应调用 `read_skill`（或至少收到 turnSystemHint）  

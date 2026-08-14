@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FilePlus, FolderPlus, MessagesSquare, RefreshCw, Waypoints } from 'lucide-react'
+import { FilePlus, FolderPlus, MessagesSquare, RefreshCw, Waypoints, Clapperboard } from 'lucide-react'
 import { useAppStore } from '@/state/appStore'
 import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 import { FileTree } from './FileTree'
@@ -8,10 +8,11 @@ import { ScmPane } from './ScmPane'
 import {
   CREATE_FILE_EXT,
   CREATE_MINDMAP_EXT,
+  CREATE_STORYBOARD_EXT,
   applyStemKeepExt
 } from './explorerNames'
 
-type CreateKind = 'file' | 'folder' | 'mindmap' | 'dialogue' | null
+type CreateKind = 'file' | 'folder' | 'mindmap' | 'dialogue' | 'storyboard' | null
 
 const actionIcon = { size: 14, strokeWidth: 2, absoluteStrokeWidth: false } as const
 
@@ -27,6 +28,7 @@ export function Sidebar() {
   const createFolder = useAppStore((s) => s.createFolder)
   const createMindMap = useAppStore((s) => s.createMindMap)
   const createDialogue = useAppStore((s) => s.createDialogue)
+  const createStoryboard = useAppStore((s) => s.createStoryboard)
   const dragging = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const sceneInputRef = useRef<HTMLInputElement>(null)
@@ -41,7 +43,13 @@ export function Sidebar() {
   const [dialogueId, setDialogueId] = useState('')
 
   const createExt =
-    createKind === 'file' ? CREATE_FILE_EXT : createKind === 'mindmap' ? CREATE_MINDMAP_EXT : ''
+    createKind === 'file'
+      ? CREATE_FILE_EXT
+      : createKind === 'mindmap'
+        ? CREATE_MINDMAP_EXT
+        : createKind === 'storyboard'
+          ? CREATE_STORYBOARD_EXT
+          : ''
 
   const openCreate = (kind: CreateKind, parentDir?: string) => {
     if (!workspacePath || !kind) return
@@ -52,10 +60,11 @@ export function Sidebar() {
       setDialogueId('')
       return
     }
-    const defaults: Record<'file' | 'folder' | 'mindmap', string> = {
+    const defaults: Record<'file' | 'folder' | 'mindmap' | 'storyboard', string> = {
       file: 'untitled',
       folder: 'folder',
-      mindmap: 'ideas'
+      mindmap: 'ideas',
+      storyboard: 'storyboard'
     }
     setCreateKind(kind)
     setName(defaults[kind])
@@ -66,7 +75,12 @@ export function Sidebar() {
       const id = window.setTimeout(() => sceneInputRef.current?.focus(), 0)
       return () => window.clearTimeout(id)
     }
-    if (createKind === 'file' || createKind === 'folder' || createKind === 'mindmap') {
+    if (
+      createKind === 'file' ||
+      createKind === 'folder' ||
+      createKind === 'mindmap' ||
+      createKind === 'storyboard'
+    ) {
       const id = window.setTimeout(() => {
         const el = inputRef.current
         if (!el) return
@@ -93,7 +107,14 @@ export function Sidebar() {
     }
     const kind = createKind
     const parent = createParent
-    const ext = kind === 'file' ? CREATE_FILE_EXT : kind === 'mindmap' ? CREATE_MINDMAP_EXT : ''
+    const ext =
+      kind === 'file'
+        ? CREATE_FILE_EXT
+        : kind === 'mindmap'
+          ? CREATE_MINDMAP_EXT
+          : kind === 'storyboard'
+            ? CREATE_STORYBOARD_EXT
+            : ''
     const trimmed = applyStemKeepExt(name, ext)
     if (!trimmed) {
       cancelCreate()
@@ -102,6 +123,7 @@ export function Sidebar() {
     cancelCreate()
     if (kind === 'file') await createFile(trimmed, parent)
     else if (kind === 'folder') await createFolder(trimmed, parent)
+    else if (kind === 'storyboard') await createStoryboard(trimmed, parent)
     else await createMindMap(trimmed, parent)
   }
 
@@ -120,7 +142,9 @@ export function Sidebar() {
       ? t('explorer.promptFileName')
       : createKind === 'folder'
         ? t('explorer.promptFolderName')
-        : t('explorer.promptMindMapName')
+        : createKind === 'storyboard'
+          ? t('explorer.promptStoryboardName')
+          : t('explorer.promptMindMapName')
 
   const onSashDown = (e: ReactMouseEvent) => {
     e.preventDefault()
@@ -141,7 +165,11 @@ export function Sidebar() {
     window.addEventListener('mouseup', onUp)
   }
 
-  const inlineCreate = createKind === 'file' || createKind === 'folder' || createKind === 'mindmap'
+  const inlineCreate =
+    createKind === 'file' ||
+    createKind === 'folder' ||
+    createKind === 'mindmap' ||
+    createKind === 'storyboard'
 
   if (activeView === 'scm') {
     return (
@@ -186,6 +214,15 @@ export function Sidebar() {
               onClick={() => openCreate('mindmap')}
             >
               <Waypoints {...actionIcon} />
+            </button>
+            <button
+              type="button"
+              title={t('explorer.newStoryboard')}
+              aria-label={t('explorer.newStoryboard')}
+              disabled={!workspacePath}
+              onClick={() => openCreate('storyboard')}
+            >
+              <Clapperboard {...actionIcon} />
             </button>
             <button
               type="button"

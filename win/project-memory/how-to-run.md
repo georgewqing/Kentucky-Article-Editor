@@ -37,6 +37,16 @@ cmd /c npm run dev
 
 若 F5 立刻失败且终端出现 `Invalid package config .../win/package.json`：多半是 `package.json` 含非 UTF-8 字节（例如错误编码的 `©`）。用纯 UTF-8 重存即可。
 
+## 本机安全 / 工作区（changelog §121）
+
+完整契约：[SECURITY-AUDIT.md](./SECURITY-AUDIT.md)。改 `kentucky-file`、preload、导航锁、`ipcSandbox` 后必须**整进程退出再开** Electron（F5 热重载不够）。
+
+**打开文件夹：** 选小说/项目**子文件夹**。不要把用户主目录、盘符根（`C:\`）、`C:\Users`、`C:\Windows` 当工作区——会 Toast「不能把盘符根、系统目录或用户主目录当作工作区打开」，工作区不切换。`Documents` 下的工程可以。
+
+**Git：** 只认该工作区根的 `.git`。打开某个 git 仓的子目录会在该层 `git init`（嵌套），不会去操作父仓。这是有意的。
+
+**分镜头：** 时间线超过 15 分钟无法导出 MP4。损坏/恶意 `.kyboard` 里带 `../` 的媒体路径会被拒绝。
+
 ## 构建 / 检查
 
 ```bash
@@ -52,9 +62,19 @@ npm run build
 npm run dist
 ```
 
-产物：`release/KENTUCKY-<version>/`（内含 `KENTUCKY.exe`）。把整个文件夹拷走即可，双击 exe 运行。体积含 Chromium，通常一百多 MB 起。
+产物：`release/KENTUCKY-<version>/`（内含 `KENTUCKY.exe`）。把整个文件夹拷走即可，双击 exe 运行。体积含 Chromium，通常一百多 MB 起。`dist` / `dist:dir` / `dist:portable` 会先跑 `ensure-ffmpeg`，把 `ffmpeg.exe` 打进安装包（`extraResources` → `ffmpeg/ffmpeg.exe`），否则用户导出 MP4 会 `FFMPEG_NOT_FOUND`。
 
 若仍要单文件 portable：`npm run dist:portable` → `release/KENTUCKY-<version>-portable.exe`。
+
+### 作为 .md 的「打开方式」
+
+`npm run dev` / F5 **不会**出现在系统打开方式里（避免把开发用的 electron.exe 登记成阅读器）。
+
+1. `npm run dist`，运行 `release/KENTUCKY-<version>/KENTUCKY.exe` **至少一次**（启动时写入当前用户 HKCU，不抢已有默认、不需管理员）。
+2. 资源管理器里对 `.md` 右键 → 打开方式 → 选择 KENTUCKY。要设默认再点「始终」。
+3. 双击会打开该文件所在文件夹为工作区并打开该标签。Kentucky 已在运行则交给现有窗口。
+
+portable 解压到 Temp 的路径不登记。换了安装目录后重新运行一次 exe 即可更新登记。
 
 国内若下载 Electron/NSIS 工具超时，可先设镜像再打包：
 
@@ -75,11 +95,11 @@ npm run dist
 | Ctrl+, | 打开设置 |
 | Ctrl+L | 打开/关闭右侧 AI 对话栏 |
 
-## AI 代理人（v0.2.0）
+## AI 代理人（0.2.0 起；当前 app 0.3.0）
 
 1. 设置 → **AI**：填写 OpenAI 兼容 Base URL、模型、API Key（加密存软件本体 `data/`，开发态为 `win/dev-data/data/`）。
 2. 活动栏 AI 图标或 `Ctrl+L` 打开右侧栏。
-3. 打开工作区后可启用代理人工具；文件变更**自动写入**（无需点 Apply）。可选「改完直接写盘」或「改完标黄待 Ctrl+S」。
+3. **Ask** 不执行工具、不写盘。**Agent** 始终自动写盘（无 Accept）。黄● = 相对上次 Ctrl+S。只读变更卡来自 `session.proposals`。
 4. 改过的文件标签/侧栏为**黄 ●**，新建为**蓝 ●**；保存后圆点消失。AI 改多文件时**不切换**当前编辑页。
 5. 等待回复时有「思考中 / 正在调用工具」指示；上下文占用见顶栏进度条；接近满时请新建对话。
 6. 浮窗（精简窗）不带 AI 栏。
@@ -125,3 +145,41 @@ YourGodotProject/
 保存注意：画布未加载完时不要依赖立刻 `Ctrl+S` 写盘；若提示图与缓冲区不一致，先确认画布已显示台词再保存（防空覆盖）。
 
 类比：Kentucky ≈ 外部 DCC；Godot 读盘——联动靠路径，不是进程间推送。
+
+## 分镜头稿本 / 简化 PR（v0.3.0）
+
+完整说明：[STORYBOARD.md](./STORYBOARD.md)（polish 至 **§119**；改序/persist **§150–§155**；安全上限 **§121**）。
+
+1. 打开工作区 → Explorer **新建分镜头稿本**（或右键目录）。窗口底部右键时菜单应翻到光标上方，勿被裁切。
+2. **稿纸**：设格数 / 推算行列 →（可选）改**生成文件夹**与**文件名** → **生成空白拼图 PNG**。
+3. 在资源树打开生成的 `.png`：**滚轮缩放 / 拖拽平移**预览；再用外部绘图软件绘制。
+4. **导入并切片**（不上 V1）。已在列表但轨上没有：选中后可点 **接到时间线**。不要对同一张图再点追加。稿本链接栏切换多张；尺寸不符时默认拒绝，可确认强制缩放。
+5. **时间线**：从右侧缩略图 **拖到 V1** 才加入（可复用同一格）。V1 块身指针拖动改序（松手 `repackVideoClipStartsMut`）。检视器改时长；监视器拖/滚轮在**播放头**打镜头帧（**I** 钉住当前画面，**Alt+I** 删该时刻的帧；V1 **没有**默认头尾菱形，一帧=整段 hold）；A1–A4 加 MP3（空轨「添加音轨」，可拖边缘修剪）；滚轮横移时间线。**无**一键铺轨。粗剪后须走编辑器持久化（切标签 / Ctrl+S 不会盖回空轨）。
+6. **导出**：填写文件夹与文件名（默认跟工程名），或用「另存为…」。时间线超过 **15 分钟**会拒绝导出（防磁盘打满）。多轨会 amix 进 MP4。资源树点导出的 `.mp4` 可在应用内预览播放。
+
+BGM / MP4 预览 / `kentucky-file` 协议或 CSP / 安全沙箱变更后须 **完整退出再开 Electron**（热重载不够）。
+
+不要把用户主目录或盘符根当工作区打开（会提示换项目子文件夹）。恶意/损坏的 `.kyboard` 里带 `../` 的媒体路径会被拒绝，属正常。
+
+### MP4 / ffmpeg
+
+导出 MP4 需要可运行的 ffmpeg。从 Cursor 启动的 Electron **看不到**你后来改的系统 PATH，所以开发机执行一次：
+
+```powershell
+cd win
+npm run ensure-ffmpeg
+```
+
+脚本会把已有可运行的 `ffmpeg.exe` **复制**到 `win/resources/ffmpeg/`（gitignore）。找不到则 `winget install -e --id Gyan.FFmpeg.Essentials` 再复制。也可继续用 PATH，或：
+
+```powershell
+$env:KENTUCKY_FFMPEG="C:\path\to\ffmpeg.exe"
+```
+
+跑完后若应用已开，须**完整退出再开** Electron。打包 `npm run dist*` 会先跑 ensure-ffmpeg，并把 `resources/ffmpeg/ffmpeg.exe` 打进 `extraResources`（安装包内路径 `ffmpeg/ffmpeg.exe`）。**不要**加 `ffmpeg-static` npm 包（GitHub 下载易超时）。
+
+未找到时 Toast 为中文「未找到 ffmpeg…」（错误码 `FFMPEG_NOT_FOUND`），不会静默失败，也不会在主进程塞英文长句。
+
+### 工作区 MP4 预览
+
+资源树应能看见 `.mp4`（主进程 `TEXT_EXTS`）。点击用只读 `VideoPreviewEditor`（原生控件 + Reveal），**不会**当文本打开。拖进度依赖 `kentucky-file` 的 Range/206。改协议或 CSP 后须完整重启（见上）。jpg/webm 等尚未支持。

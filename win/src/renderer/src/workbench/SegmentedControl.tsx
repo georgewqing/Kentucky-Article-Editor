@@ -39,11 +39,8 @@ export function SegmentedControl<T extends string | boolean | number>({
     const layer = activeLayerRef.current
     if (!layer) return
     const buttons = layer.querySelectorAll<HTMLElement>('[data-value]')
-    let active: HTMLElement | null = null
     const target = String(value)
-    buttons.forEach((btn) => {
-      if (btn.dataset.value === target) active = btn
-    })
+    const active = Array.from(buttons).find((btn) => btn.dataset.value === target)
     if (!active) return
     const layerRect = layer.getBoundingClientRect()
     const btnRect = active.getBoundingClientRect()

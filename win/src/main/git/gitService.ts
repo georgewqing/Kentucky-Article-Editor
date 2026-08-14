@@ -3,10 +3,11 @@
  * Requires Git for Windows (or git on PATH / configured gitPath).
  */
 import { execFile } from 'child_process'
-import { existsSync, mkdirSync, writeFileSync, unlinkSync, rmSync, readFileSync } from 'fs'
-import { dirname, join, resolve, sep } from 'path'
+import { existsSync, mkdirSync, writeFileSync, unlinkSync, rmSync, readFileSync, lstatSync } from 'fs'
+import { dirname, join, resolve, relative, isAbsolute } from 'path'
 import { fileURLToPath } from 'url'
 import { promisify } from 'util'
+import { assertSafeExternalGitPath, assertSafeWorkspaceRoot, resolveWorkspacePath } from '../ai/workspacePath'
 
 const execFileAsync = promisify(execFile)
 
@@ -14,6 +15,26 @@ let configuredGitPath = 'git'
 
 export function setGitExecutable(path: string | null | undefined): void {
   configuredGitPath = path?.trim() || 'git'
+}
+
+/** Probe then keep the path only if stdout looks like Git. */
+export async function configureGitExecutable(path: string | null | undefined): Promise<GitProbe> {
+  const next = path?.trim() || 'git'
+  const previous = configuredGitPath
+  configuredGitPath = next
+  const probe = await probeGit()
+  const version = probe.version || ''
+  if (!probe.ok || !/^git version /i.test(version)) {
+    configuredGitPath = previous
+    return {
+      ok: false,
+      version: null,
+      error: probe.ok
+        ? 'Not a Git executable (expected "git version …")'
+        : probe.error || 'Not a Git executable'
+    }
+  }
+  return probe
 }
 
 export function getGitExecutable(): string {
@@ -45,16 +66,47 @@ export async function probeGit(): Promise<GitProbe> {
   }
 }
 
-/** Walk up from startDir looking for .git */
-export function findGitRoot(startDir: string): string | null {
-  let cur = resolve(startDir)
-  for (let i = 0; i < 40; i++) {
-    if (existsSync(join(cur, '.git'))) return cur
-    const parent = dirname(cur)
-    if (parent === cur) break
-    cur = parent
+/** This folder only. `.git` must be a directory — a gitdir file/symlink points at another repo. */
+export type WorkspaceGitKind = 'repo' | 'foreign' | 'none'
+
+export function inspectWorkspaceGit(startDir: string): WorkspaceGitKind {
+  const gitPath = join(resolve(startDir), '.git')
+  try {
+    if (!existsSync(gitPath)) return 'none'
+    const st = lstatSync(gitPath)
+    if (st.isDirectory()) return 'repo'
+    return 'foreign'
+  } catch {
+    return 'none'
   }
-  return null
+}
+
+/** Only the given folder itself — never walk into a parent repo. */
+export function findGitRoot(startDir: string): string | null {
+  const cur = resolve(startDir)
+  return inspectWorkspaceGit(cur) === 'repo' ? cur : null
+}
+
+function pathEscapesError(requested: string): string {
+  return `Path escapes workspace: ${requested}`
+}
+
+/** Resolve a tool/IPC path inside the workspace and as a repo-relative git path. */
+function resolveRepoRel(
+  workspaceRoot: string,
+  repoRoot: string,
+  requested: string
+): { abs: string; rel: string } | { error: string } {
+  try {
+    const abs = resolveWorkspacePath(workspaceRoot, requested)
+    const rel = relative(repoRoot, abs).replace(/\\/g, '/')
+    if (!rel || rel.startsWith('..') || isAbsolute(rel)) {
+      return { error: pathEscapesError(requested) }
+    }
+    return { abs, rel }
+  } catch {
+    return { error: pathEscapesError(requested) }
+  }
 }
 
 async function git(
@@ -74,11 +126,22 @@ async function git(
     })
     return { stdout: String(stdout), stderr: String(stderr), code: 0 }
   } catch (e: unknown) {
-    const err = e as { stdout?: string; stderr?: string; code?: number; message?: string }
+    const err = e as { stdout?: string | Buffer; stderr?: string | Buffer; code?: number; message?: string }
     if (opts?.allowFail) {
+      // Prefer real child streams. Empty stderr must NOT fall through to
+      // err.message ("Command failed: git …") — git often writes only to stdout
+      // (e.g. "nothing to commit, working tree clean").
+      const stdout = String(err.stdout ?? '')
+      const stderrChild = err.stderr != null ? String(err.stderr) : ''
+      const stderr =
+        stderrChild.trim().length > 0
+          ? stderrChild
+          : stdout.trim().length > 0
+            ? ''
+            : String(err.message || '')
       return {
-        stdout: String(err.stdout || ''),
-        stderr: String(err.stderr || err.message || ''),
+        stdout,
+        stderr,
         code: typeof err.code === 'number' ? err.code : 1
       }
     }
@@ -95,9 +158,10 @@ node_modules/
 *.temp
 ~$*
 .kentucky/
+revisions/
 `
 
-const KENTUCKY_GITIGNORE_LINES = ['.kentucky/'] as const
+const KENTUCKY_GITIGNORE_LINES = ['.kentucky/', 'revisions/'] as const
 
 /** Idempotently ensure Kentucky ignore entries exist (for repos init'd before they were added). */
 export function ensureKentuckyGitignore(repoRoot: string): { updated: boolean; path: string } {
@@ -170,8 +234,21 @@ export function unquoteGitPath(raw: string): string {
 
 export async function gitInit(workspaceRoot: string): Promise<{ ok: boolean; repoRoot: string; error?: string }> {
   const root = resolve(workspaceRoot)
-  if (findGitRoot(root)) {
-    return { ok: true, repoRoot: findGitRoot(root)! }
+  try {
+    assertSafeWorkspaceRoot(root)
+  } catch (e) {
+    return { ok: false, repoRoot: root, error: e instanceof Error ? e.message : String(e) }
+  }
+  const kind = inspectWorkspaceGit(root)
+  if (kind === 'repo') {
+    return { ok: true, repoRoot: root }
+  }
+  if (kind === 'foreign') {
+    return {
+      ok: false,
+      repoRoot: root,
+      error: 'This folder is a Git worktree or submodule of another repository'
+    }
   }
   try {
     await git(root, ['init'])
@@ -184,10 +261,8 @@ export async function gitInit(workspaceRoot: string): Promise<{ ok: boolean; rep
 }
 
 /**
- * Ensure the workspace is registered with a local Git repo.
- * - If an ancestor already has `.git`, reuse it (no nested init) and ensure `.gitignore`.
- * - If none: `git init` at the **workspace root** (Kentucky auto-managed).
- * `.git` stays hidden in the explorer (dotfiles filtered); users do not need to click Init.
+ * Ensure the workspace is registered with a local Git repo at **this folder**.
+ * Does not walk to a parent `.git`. A `.git` file (worktree/submodule pointer) is refused — no nested init.
  */
 export async function ensureWorkspaceGit(workspaceRoot: string): Promise<{
   ok: boolean
@@ -205,7 +280,26 @@ export async function ensureWorkspaceGit(workspaceRoot: string): Promise<{
     }
   }
   const root = resolve(workspaceRoot)
-  const existing = findGitRoot(root)
+  try {
+    assertSafeWorkspaceRoot(root)
+  } catch (e) {
+    return {
+      ok: false,
+      repoRoot: null,
+      created: false,
+      error: e instanceof Error ? e.message : String(e)
+    }
+  }
+  const kind = inspectWorkspaceGit(root)
+  if (kind === 'foreign') {
+    return {
+      ok: false,
+      repoRoot: null,
+      created: false,
+      error: 'This folder is a Git worktree or submodule of another repository'
+    }
+  }
+  const existing = kind === 'repo' ? root : null
   if (existing) {
     ensureKentuckyGitignore(existing)
     return { ok: true, repoRoot: existing, created: false }
@@ -318,12 +412,9 @@ export async function gitDiff(
 ): Promise<{ ok: boolean; diff: string; error?: string; note?: string }> {
   const repoRoot = findGitRoot(workspaceRoot)
   if (!repoRoot) return { ok: false, diff: '', error: 'Not a git repository' }
-  const abs = relOrAbs.includes(':') || relOrAbs.startsWith('/') || relOrAbs.startsWith('\\')
-    ? resolve(relOrAbs)
-    : join(repoRoot, ...relOrAbs.replace(/\\/g, '/').split('/'))
-  const rel = abs.startsWith(repoRoot)
-    ? abs.slice(repoRoot.length).replace(/^[/\\]/, '').replace(/\\/g, '/')
-    : relOrAbs.replace(/\\/g, '/')
+  const resolved = resolveRepoRel(workspaceRoot, repoRoot, relOrAbs)
+  if ('error' in resolved) return { ok: false, diff: '', error: resolved.error }
+  const { abs, rel } = resolved
 
   if (!existsSync(abs)) {
     return { ok: false, diff: '', error: `Path not found: ${rel}` }
@@ -384,11 +475,12 @@ export async function gitStage(
   if (!repoRoot) return { ok: false, error: 'Not a git repository' }
   if (!relPaths.length) return { ok: false, error: 'No paths to stage' }
   try {
-    const rels = relPaths.map((p) =>
-      p.replace(/\\/g, '/').startsWith(repoRoot.replace(/\\/g, '/'))
-        ? p.slice(repoRoot.length).replace(/^[/\\]+/, '').replace(/\\/g, '/')
-        : p.replace(/\\/g, '/')
-    )
+    const rels: string[] = []
+    for (const p of relPaths) {
+      const resolved = resolveRepoRel(workspaceRoot, repoRoot, p)
+      if ('error' in resolved) return { ok: false, error: resolved.error }
+      rels.push(resolved.rel)
+    }
     const r = await git(repoRoot, ['add', '--', ...rels], { allowFail: true })
     if (r.code !== 0) {
       return { ok: false, error: r.stderr.trim() || r.stdout.trim() || 'git add failed' }
@@ -416,12 +508,32 @@ export async function gitUnstage(workspaceRoot: string, relPaths: string[]): Pro
   const repoRoot = findGitRoot(workspaceRoot)
   if (!repoRoot) return { ok: false, error: 'Not a git repository' }
   try {
-    const rels = relPaths.map((p) => p.replace(/\\/g, '/'))
+    const rels: string[] = []
+    for (const p of relPaths) {
+      const resolved = resolveRepoRel(workspaceRoot, repoRoot, p)
+      if ('error' in resolved) return { ok: false, error: resolved.error }
+      rels.push(resolved.rel)
+    }
     await git(repoRoot, ['restore', '--staged', '--', ...rels], { allowFail: true })
     return { ok: true }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) }
   }
+}
+
+/** Map empty-index / clean-tree commit failures to agent-readable errors (GIT-1). */
+export function formatGitCommitFailure(stdout: string, stderr: string): string {
+  const combined = `${stdout}\n${stderr}`
+  const lower = combined.toLowerCase()
+  if (/nothing to commit/.test(lower) && /working tree clean/.test(lower)) {
+    return 'Nothing to commit — working tree clean (no staged or unstaged changes). Call git_status; do not retry commit until there are changes.'
+  }
+  if (/no changes added to commit|nothing to commit/.test(lower)) {
+    return 'Nothing staged to commit. Run git_add first (working tree may still have unstaged/untracked files). Note: one git_commit always commits the whole index — split commits with add→commit per batch.'
+  }
+  const trimmed = stderr.trim() || stdout.trim()
+  if (trimmed) return trimmed.slice(0, 2000)
+  return 'git commit failed'
 }
 
 export async function gitCommit(
@@ -434,8 +546,11 @@ export async function gitCommit(
   if (!repoRoot) return { ok: false, error: 'Not a git repository' }
   const r = await git(repoRoot, ['commit', '-m', msg], { allowFail: true })
   if (r.code !== 0) {
-    const err = r.stderr.trim() || r.stdout.trim() || 'git commit failed'
-    return { ok: false, error: err, stdout: r.stdout.slice(0, 4000) }
+    return {
+      ok: false,
+      error: formatGitCommitFailure(r.stdout, r.stderr),
+      stdout: r.stdout.slice(0, 4000)
+    }
   }
   return { ok: true, stdout: r.stdout.slice(0, 4000) }
 }
@@ -491,6 +606,16 @@ export async function ensureLocalBareRepo(
   absPath: string
 ): Promise<{ ok: boolean; created: boolean; path: string; error?: string }> {
   const target = resolve(absPath)
+  try {
+    assertSafeExternalGitPath(target)
+  } catch (e) {
+    return {
+      ok: false,
+      created: false,
+      path: target,
+      error: e instanceof Error ? e.message : String(e)
+    }
+  }
   if (!target || target.length < 2) {
     return { ok: false, created: false, path: target, error: 'Invalid bare repo path' }
   }
@@ -660,8 +785,9 @@ export async function gitDiscard(
 ): Promise<{ ok: boolean; deleted?: boolean; error?: string }> {
   const repoRoot = findGitRoot(workspaceRoot)
   if (!repoRoot) return { ok: false, error: 'Not a git repository' }
-  const abs = resolve(absPath)
-  const rel = abs.slice(repoRoot.length).replace(/^[/\\]/, '').replace(/\\/g, '/')
+  const resolved = resolveRepoRel(workspaceRoot, repoRoot, absPath)
+  if ('error' in resolved) return { ok: false, error: resolved.error }
+  const { abs, rel } = resolved
   const st = await gitStatus(workspaceRoot)
   const file = st.files.find(
     (f) => f.relPath === rel || resolve(f.path) === abs
@@ -733,20 +859,38 @@ export async function buildGitL5Summary(workspaceRoot: string | null): Promise<s
       .map((f) => f.path)
       .join(', ')
     const n = typeof summary.fileCount === 'number' ? summary.fileCount : files.length
+    const envDoc = findWorkspaceGitEnvDoc(workspaceRoot)
     const lines = [
-      'Git (L5 — live each turn; call git_* tools — do not invent status from chat memory):',
+      'Git (L5 — snapshot at the start of this user turn; call git_* tools for current status — do not invent status from chat memory):',
       summary.error && !summary.repoRoot
         ? `- unavailable: ${String(summary.error)}`
         : `- repo: ${summary.repoRoot || 'none'} · branch: ${summary.branch || '—'} · remotes: ${
             remotes.length ? remotes.join(', ') : '(none)'
           } · dirty: ${n}${sample ? ` [${sample}${n > 10 ? ', …' : ''}]` : ''}`,
+      envDoc
+        ? `- Workspace Git env doc found: ${envDoc} — in a new chat, read_file it first, then git_status. Do not use remotes from other workspaces.`
+        : '- No workspace Git env doc in this root (optional agent-GIT环境说明.md / AGENT-GIT-ENV.md). Discover remotes only via git_status; never invent URLs from other folders or prior chats.',
       '- Prefer tools: git_status → (git_diff) → git_add → git_commit → git_push. Remotes: git_remote_add / git_remote_remove. History: git_log. Sync: git_pull.',
-      '- New chat OK: this L5 is enough context; still invoke git_* when the user asks about version control / backup / push / commit.'
+      '- One commit = whole index; empty index → Nothing to commit (check git_status). Paths are always relative to THIS workspace root.'
     ]
     return lines.join('\n')
   } catch {
     return null
   }
+}
+
+/** Workspace-root cheat sheet so new chats inherit remotes / branch recipes. */
+export function findWorkspaceGitEnvDoc(workspaceRoot: string): string | null {
+  const candidates = [
+    'agent-GIT环境说明.md',
+    'agent-Git环境说明.md',
+    'AGENT-GIT-ENV.md',
+    'agent-git-env.md'
+  ]
+  for (const name of candidates) {
+    if (existsSync(join(workspaceRoot, name))) return name
+  }
+  return null
 }
 
 export async function gitRemoteList(

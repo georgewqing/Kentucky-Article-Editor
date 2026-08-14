@@ -1,0 +1,469 @@
+/* --- Storyboard NLE timeline (overrides earlier sparse layout) --- */
+.storyboard-timeline.storyboard-timeline-nle {
+  gap: 0;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.storyboard-transport-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated, var(--bg)) 88%, var(--fg) 4%);
+  flex-shrink: 0;
+}
+
+.storyboard-transport-controls,
+.storyboard-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.storyboard-transport-controls .btn.is-active {
+  outline: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.storyboard-timecode-lg {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  min-width: 11em;
+}
+
+.storyboard-nle-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+}
+
+.storyboard-nle-body > .storyboard-monitor-row,
+.storyboard-nle-body > .storyboard-timeline-dock,
+.storyboard-nle-body > .storyboard-split-handle {
+  min-width: 0;
+}
+
+.storyboard-split-handle {
+  cursor: row-resize;
+  background: color-mix(in srgb, var(--border) 70%, transparent);
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+}
+
+.storyboard-split-handle:hover,
+.storyboard-split-handle:active {
+  background: var(--accent);
+}
+
+.storyboard-timeline-nle .storyboard-monitor-row {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  padding: 8px;
+  gap: 8px;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) minmax(220px, 280px);
+  align-items: stretch;
+  max-height: none;
+}
+
+.storyboard-nle-tools {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+  flex-shrink: 0;
+}
+
+.storyboard-nle-tool {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 0;
+}
+
+.storyboard-nle-tool:hover {
+  color: var(--fg-bright, var(--fg));
+  background: var(--bg-hover);
+}
+
+.storyboard-nle-tool.is-active {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  outline: 1px solid var(--accent);
+}
+
+.storyboard-panel-bin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.storyboard-panel-bin-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.storyboard-bin-thumb {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 80%, var(--bg-elev-2, var(--bg)) 20%);
+  color: var(--fg);
+  cursor: grab;
+  overflow: hidden;
+  text-align: left;
+}
+
+.storyboard-bin-thumb:active {
+  cursor: grabbing;
+}
+
+.storyboard-bin-thumb img,
+.storyboard-bin-thumb .storyboard-panel-chip-placeholder {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: color-mix(in srgb, var(--bg) 88%, #000 12%);
+}
+
+.storyboard-bin-thumb span {
+  font-size: 10px;
+  padding: 0 6px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+}
+
+.storyboard-bin-drop-caret {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  background: var(--accent);
+  pointer-events: none;
+  z-index: 8;
+  transform: translateX(-1px);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bg) 40%, transparent);
+}
+.storyboard-timeline-nle .storyboard-monitor {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.storyboard-monitor-frame {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0a0a;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.storyboard-timeline-nle .storyboard-monitor-canvas {
+  /* Override global 16/9 so the frame fills the split pane instead of clipping */
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: unset;
+  object-fit: contain;
+  border-radius: 0;
+  cursor: grab;
+  touch-action: none;
+}
+
+.storyboard-timeline-nle .storyboard-monitor-canvas:active {
+  cursor: grabbing;
+}
+
+.storyboard-monitor-tc {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  background: rgba(0, 0, 0, 0.55);
+  color: #f2f2f2;
+  pointer-events: none;
+}
+
+.storyboard-timeline-nle .storyboard-inspector {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.storyboard-timeline-dock {
+  min-height: 248px;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated, var(--bg)) 94%, #000 6%);
+  overflow: hidden;
+}
+
+.storyboard-timeline-scroll {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  position: relative;
+  min-height: 0;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge */
+}
+
+.storyboard-timeline-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.storyboard-timeline-inner {
+  position: relative;
+  min-height: 100%;
+  padding-bottom: 8px;
+}
+
+.storyboard-ruler {
+  position: relative;
+  height: 28px;
+  margin-left: 36px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  cursor: ew-resize;
+  user-select: none;
+  touch-action: none;
+}
+
+.storyboard-ruler-tick {
+  position: absolute;
+  top: 12px;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--fg) 22%, transparent);
+  pointer-events: none;
+}
+
+.storyboard-ruler-tick.is-major {
+  top: 4px;
+  background: color-mix(in srgb, var(--fg) 45%, transparent);
+}
+
+.storyboard-ruler-tick span {
+  position: absolute;
+  left: 3px;
+  top: -1px;
+  font-size: 10px;
+  color: var(--fg-muted, var(--muted));
+  white-space: nowrap;
+}
+
+.storyboard-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: 36px;
+  background: #e85d4c;
+  z-index: 5;
+  pointer-events: none;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.storyboard-playhead::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 12px;
+  background: #e85d4c;
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
+  pointer-events: auto;
+}
+
+.storyboard-timeline-nle .storyboard-tracks {
+  align-items: stretch;
+  gap: 6px 0;
+  padding: 6px 0 4px;
+}
+
+.storyboard-timeline-nle .storyboard-track-label {
+  font-weight: 700;
+  justify-content: center;
+  display: flex;
+  align-items: center;
+}
+
+.storyboard-track-v1 {
+  height: 60px;
+}
+
+.storyboard-track-v1.is-blade {
+  cursor: cell;
+}
+
+.storyboard-track-v1.is-clip-reorder {
+  cursor: grabbing;
+}
+
+.storyboard-timeline-nle .storyboard-track-lane {
+  overflow: visible;
+  margin-right: 8px;
+}
+
+.storyboard-timeline-nle .storyboard-track-audio {
+  height: 40px;
+}
+
+.storyboard-clip-thumb {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.storyboard-timeline-nle .storyboard-clip {
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 12%, transparent);
+  touch-action: none;
+  user-select: none;
+}
+
+.storyboard-timeline-nle .storyboard-clip-hit {
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+  touch-action: none;
+}
+
+.storyboard-clip.is-reorder-source {
+  opacity: 0.38;
+}
+
+.storyboard-clip.storyboard-clip-reorder-ghost {
+  position: fixed;
+  top: auto;
+  bottom: auto;
+  z-index: 80;
+  pointer-events: none;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.storyboard-track-v1.is-clip-reorder .storyboard-clip-edge,
+.storyboard-track-v1.is-clip-reorder .storyboard-clip-camkey {
+  pointer-events: none;
+}
+
+.storyboard-timeline-nle .storyboard-clip.audio {
+  pointer-events: auto;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 35%, #243038),
+    color-mix(in srgb, var(--accent) 18%, #1a2228)
+  );
+}
+
+.storyboard-cam-live {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--fg-muted, var(--muted));
+  font-variant-numeric: tabular-nums;
+}
+
+.storyboard-cam-key-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.storyboard-cam-key-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.storyboard-cam-key-chip {
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated, var(--bg)) 80%, var(--fg) 6%);
+  color: inherit;
+  border-radius: 999px;
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.storyboard-cam-key-chip.is-near {
+  outline: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.storyboard-clip-camkey {
+  position: absolute;
+  top: 3px;
+  z-index: 3;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 1px;
+  background: #e8c547;
+  transform: translateX(-50%) rotate(45deg);
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.storyboard-clip-camkey.is-on {
+  background: var(--accent);
+}

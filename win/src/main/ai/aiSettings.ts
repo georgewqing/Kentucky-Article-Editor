@@ -69,13 +69,28 @@ const DEFAULTS: Omit<AiPublicSettings, 'baseUrl' | 'model' | 'contextWindow' | '
   gitPath: ''
 }
 
-function loadGlobalRaw(): Partial<AiPublicSettings> {
+type AiSettingsFile = Partial<AiPublicSettings> & {
+  /** Bundled skill ids already welcomed into the whitelist. Never re-enable after the user turns one off. */
+  seenBundledSkillIds?: string[]
+}
+
+function loadGlobalRaw(): AiSettingsFile {
   try {
     if (!existsSync(getAiSettingsPath())) return {}
-    return JSON.parse(readFileSync(getAiSettingsPath(), 'utf-8')) as Partial<AiPublicSettings>
+    return JSON.parse(readFileSync(getAiSettingsPath(), 'utf-8')) as AiSettingsFile
   } catch {
     return {}
   }
+}
+
+export function loadSeenBundledSkillIds(): string[] {
+  const raw = loadGlobalRaw().seenBundledSkillIds
+  if (!Array.isArray(raw)) return []
+  return raw.map(String).filter(Boolean)
+}
+
+export function saveSeenBundledSkillIds(ids: string[]): void {
+  writeGlobal({ seenBundledSkillIds: Array.from(new Set(ids)) })
 }
 
 function writeGlobal(partial: Record<string, unknown>): void {

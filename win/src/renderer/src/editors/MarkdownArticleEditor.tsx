@@ -18,7 +18,9 @@ import { useSettingsStore } from '@/state/settingsStore'
 import { useAiStore } from '@/state/aiStore'
 import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 import { MarkdownToolbar } from './MarkdownToolbar'
+import { registerMdHtmlGetter, exportPathToPdf } from '@/export/exportPdf'
 import { countArticleWords } from './wordCount'
+import { markdownToPrintHtml } from '@/export/markdownToPrintHtml'
 import { SOFT_MONACO_OPTIONS, defineKentuckyMonacoThemes } from './softMonaco'
 import { bindMonacoLinePick, resolveArticleLineEl } from './monacoLineNav'
 
@@ -157,6 +159,14 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
     if (!editor) return
     editor.setEditable(!picking)
   }, [editor, picking])
+
+  useEffect(() => {
+    if (!tab?.path || !editor) return
+    return registerMdHtmlGetter(tab.path, () => {
+      if (mode === 'source') return markdownToPrintHtml(tab.content)
+      return editor.getHTML()
+    })
+  }, [tab?.path, tab?.content, editor, mode])
 
   useEffect(() => {
     if (!picking || !tab || !editor) return
@@ -388,6 +398,9 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
           wordCount={wordCount}
           onModeChange={onModeChange}
           onRequestLink={openLinkDialog}
+          onExportPdf={() => {
+            if (tab?.path) void exportPathToPdf(tab.path)
+          }}
         />
       ) : null}
 

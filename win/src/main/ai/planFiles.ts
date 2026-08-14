@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { PlanStep } from './chatSessions'
+import { resolveWorkspacePath } from './workspacePath'
 
 export const PLANS_DIR = 'plans'
 
@@ -137,10 +138,9 @@ export function writePlanFile(workspaceRoot: string, slug: string, markdown: str
 }
 
 export function readPlanFile(workspaceRoot: string, relPath: string): string | null {
-  const parts = relPath.replace(/\\/g, '/').split('/').filter(Boolean)
-  const abs = join(workspaceRoot, ...parts)
-  if (!existsSync(abs)) return null
   try {
+    const abs = resolveWorkspacePath(workspaceRoot, relPath)
+    if (!existsSync(abs)) return null
     return readFileSync(abs, 'utf-8')
   } catch {
     return null

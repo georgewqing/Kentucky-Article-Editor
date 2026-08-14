@@ -27,7 +27,7 @@ export type FileProposalEx = FileProposal & {
 }
 
 /** Bump when write-gate / tool result shape changes — agents can detect stale main process. */
-export const TOOL_API_VERSION = '2026-08-12-l'
+export const TOOL_API_VERSION = '2026-08-14-a'
 
 const MEMORY_KINDS = new Set<ProposalKind>([
   'story_state',
@@ -184,15 +184,19 @@ export function proposalToolNote(autoApplied: boolean): string {
 
 /** One-line rules for tool descriptions / system prompt. */
 export const WRITE_GATE_SUMMARY =
-  'Write gate: ALL agent file writes auto-apply and ALWAYS hit disk immediately (Git working tree). Yellow dirty = unsaved vs last Ctrl+S baseline — not Accept. No Accept/Reject cards for files. Results include written/pending/reviewHint/gateDetail/toolApi. Story conflicts are WARN-only. UI shows readonly change cards with diff. Git: workspace auto-inits; all git_* execute immediately (no force; no Confirm); write ops → highlight card + toast; local remote paths auto bare-init on add/push.'
+  'Write gate: ALL agent file writes auto-apply and ALWAYS hit disk immediately (Git working tree), sandboxed to the open workspace folder only (Path escapes workspace → refused). Yellow dirty = unsaved vs last Ctrl+S baseline — not Accept. No Accept/Reject cards for files. Results include written/pending/reviewHint/gateDetail/toolApi. Story conflicts are WARN-only. UI shows readonly change cards with diff. Git: workspace auto-inits; all git_* execute immediately (no force; no Confirm); write ops → highlight card + toast; local remote paths auto bare-init on add/push (never at drive root / Windows system dirs).'
 
 /** Standing Git instructions — apply in every chat (plus live Git L5 each turn). */
 export const GIT_AGENT_PLAYBOOK = [
   'Git tools (CRITICAL — use in every new chat; do not wait for prior conversation memory):',
-  '- Prefer git_* tools over guessing. Live snapshot is under Editor context as “Git (L5)”.',
+  '- Sandbox: all file tools (read/write/delete/move/copy/mkdir) are limited to the open workspace folder. Never ask for or invent paths outside it (other drives, C:\\Windows, etc.) — tools will refuse Path escapes workspace.',
+  '- Prefer git_* tools over guessing. Snapshot is under Editor context as “Git (L5)” (start of this user turn).',
+  '- THIS workspace only: remotes, URLs, and branch names come from Git (L5) + git_status (+ read_file an env doc ONLY if L5 names one in this root). Never invent or reuse paths from another folder, a prior chat, or examples.',
+  '- New chat: if L5 says a workspace Git env doc was found (agent-GIT环境说明.md / AGENT-GIT-ENV.md), read_file that exact name, then git_status. If none, skip — do not create or guess remotes.',
   '- Inventory: git_status. Detail: git_diff(path). History: git_log. Sync: git_pull / git_push.',
   '- Save work: git_add(all=true|paths[]) → git_commit(message) → git_push (optional setUpstream+branch). All auto; highlight cards appear in chat.',
-  '- Remotes: git_remote_add(name,url) accepts https/ssh/file/local paths (spaces OK); missing local bare auto-creates. git_remote_remove(name) drops bad remotes.',
+  '- One git_commit always commits the whole index (all staged paths). For separate commits: add→commit per batch — not several adds then one commit. Empty index → clear “Nothing to commit / Nothing staged” error; call git_status, do not spam commit.',
+  '- Remotes: git_remote_add(name,url) only with a URL the user gave or that appears in THIS workspace’s env doc / status. https/ssh/file/local paths (spaces OK); missing local bare auto-creates. git_remote_remove(name) drops bad remotes. After remove+re-add, next push use setUpstream=true + branch from git_status (e.g. master/main).',
   '- Never --force. Never claim success unless the tool result says ok/executed. File discard stays in Source Control UI.',
   '- User intent cues (备份/提交/推送/同步/remote/裸仓/commit/push) → call matching git_* in this turn.'
 ].join('\n')

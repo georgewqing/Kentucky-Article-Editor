@@ -12,94 +12,162 @@ import {
   gitPull,
   gitPush,
   gitRemoteList,
-  setGitExecutable,
+  configureGitExecutable,
   findGitRoot
 } from './gitService'
 import { docReloadFromDisk, docEvict } from '../documentHub'
 import { existsSync } from 'fs'
-import { loadAiSettings, saveAiSettings } from '../ai/aiSettings'
+import { saveAiSettings } from '../ai/aiSettings'
+import { requireSenderWorkspace } from '../ipcSandbox'
+import { resolveWorkspacePath } from '../ai/workspacePath'
+
+function gitErr(e: unknown): { ok: false; error: string } {
+  return {
+    ok: false,
+    error: e instanceof Error ? e.message : String(e)
+  }
+}
 
 export function registerGitIpc(): void {
-  try {
-    setGitExecutable(loadAiSettings().gitPath)
-  } catch {
-    /* ignore */
-  }
-
   ipcMain.handle('git:probe', async () => probeGit())
 
   ipcMain.handle('git:setPath', async (_e, gitPath: string | null) => {
     const path = (gitPath || '').trim()
-    setGitExecutable(path || null)
-    saveAiSettings({ gitPath: path })
-    return probeGit()
+    const probe = await configureGitExecutable(path || null)
+    if (probe.ok) saveAiSettings({ gitPath: path })
+    return probe
   })
 
-  ipcMain.handle('git:findRoot', (_e, workspaceRoot: string) => findGitRoot(workspaceRoot))
+  ipcMain.handle('git:findRoot', (e, workspaceRoot: string) => {
+    try {
+      const ws = requireSenderWorkspace(e, workspaceRoot)
+      return findGitRoot(ws)
+    } catch {
+      return null
+    }
+  })
 
-  ipcMain.handle('git:init', async (_e, workspaceRoot: string) => gitInit(workspaceRoot))
+  ipcMain.handle('git:init', async (e, workspaceRoot: string) => {
+    try {
+      return await gitInit(requireSenderWorkspace(e, workspaceRoot))
+    } catch (err) {
+      return gitErr(err)
+    }
+  })
 
-  ipcMain.handle('git:ensure', async (_e, workspaceRoot: string) => ensureWorkspaceGit(workspaceRoot))
+  ipcMain.handle('git:ensure', async (e, workspaceRoot: string) => {
+    try {
+      return await ensureWorkspaceGit(requireSenderWorkspace(e, workspaceRoot))
+    } catch (err) {
+      return { ok: false, repoRoot: null, created: false, error: gitErr(err).error }
+    }
+  })
 
-  ipcMain.handle('git:status', async (_e, workspaceRoot: string) => {
-    await ensureWorkspaceGit(workspaceRoot)
-    return gitStatus(workspaceRoot)
+  ipcMain.handle('git:status', async (e, workspaceRoot: string) => {
+    try {
+      const ws = requireSenderWorkspace(e, workspaceRoot)
+      await ensureWorkspaceGit(ws)
+      return gitStatus(ws)
+    } catch (err) {
+      return { repoRoot: null, branch: null, files: [], error: gitErr(err).error }
+    }
   })
 
   ipcMain.handle(
     'git:diff',
-    async (_e, workspaceRoot: string, path: string, staged?: boolean) =>
-      gitDiff(workspaceRoot, path, Boolean(staged))
+    async (e, workspaceRoot: string, path: string, staged?: boolean) => {
+      try {
+        return await gitDiff(requireSenderWorkspace(e, workspaceRoot), path, Boolean(staged))
+      } catch (err) {
+        return { ok: false, diff: '', error: gitErr(err).error }
+      }
+    }
   )
 
   ipcMain.handle(
     'git:pull',
     async (
-      _e,
+      e,
       workspaceRoot: string,
       opts?: { remote?: string; branch?: string; ffOnly?: boolean }
-    ) => gitPull(workspaceRoot, opts)
+    ) => {
+      try {
+        return await gitPull(requireSenderWorkspace(e, workspaceRoot), opts)
+      } catch (err) {
+        return gitErr(err)
+      }
+    }
   )
 
   ipcMain.handle(
     'git:push',
     async (
-      _e,
+      e,
       workspaceRoot: string,
       opts?: { remote?: string; branch?: string; setUpstream?: boolean }
-    ) => gitPush(workspaceRoot, opts)
+    ) => {
+      try {
+        return await gitPush(requireSenderWorkspace(e, workspaceRoot), opts)
+      } catch (err) {
+        return gitErr(err)
+      }
+    }
   )
 
-  ipcMain.handle('git:remotes', async (_e, workspaceRoot: string) => gitRemoteList(workspaceRoot))
+  ipcMain.handle('git:remotes', async (e, workspaceRoot: string) => {
+    try {
+      return await gitRemoteList(requireSenderWorkspace(e, workspaceRoot))
+    } catch (err) {
+      return { ok: false, remotes: [] as string[], error: gitErr(err).error }
+    }
+  })
 
-  ipcMain.handle('git:stage', async (_e, workspaceRoot: string, paths: string[]) =>
-    gitStage(workspaceRoot, paths || [])
-  )
+  ipcMain.handle('git:stage', async (e, workspaceRoot: string, paths: string[]) => {
+    try {
+      return await gitStage(requireSenderWorkspace(e, workspaceRoot), paths || [])
+    } catch (err) {
+      return gitErr(err)
+    }
+  })
 
-  ipcMain.handle('git:unstage', async (_e, workspaceRoot: string, paths: string[]) =>
-    gitUnstage(workspaceRoot, paths || [])
-  )
+  ipcMain.handle('git:unstage', async (e, workspaceRoot: string, paths: string[]) => {
+    try {
+      return await gitUnstage(requireSenderWorkspace(e, workspaceRoot), paths || [])
+    } catch (err) {
+      return gitErr(err)
+    }
+  })
 
-  ipcMain.handle('git:commit', async (_e, workspaceRoot: string, message: string) =>
-    gitCommit(workspaceRoot, message || '')
-  )
+  ipcMain.handle('git:commit', async (e, workspaceRoot: string, message: string) => {
+    try {
+      return await gitCommit(requireSenderWorkspace(e, workspaceRoot), message || '')
+    } catch (err) {
+      return gitErr(err)
+    }
+  })
 
   ipcMain.handle(
     'git:discard',
     async (
-      _e,
+      e,
       workspaceRoot: string,
       absPath: string,
       opts?: { untrackedConfirmed?: boolean }
     ) => {
-      const result = await gitDiscard(workspaceRoot, absPath, opts)
-      if (!result.ok) return result
-      if (result.deleted || !existsSync(absPath)) {
-        docEvict(absPath)
-      } else {
-        await docReloadFromDisk(absPath)
+      try {
+        const ws = requireSenderWorkspace(e, workspaceRoot)
+        const abs = resolveWorkspacePath(ws, absPath)
+        const result = await gitDiscard(ws, abs, opts)
+        if (!result.ok) return result
+        if (result.deleted || !existsSync(abs)) {
+          docEvict(abs)
+        } else {
+          await docReloadFromDisk(abs)
+        }
+        return result
+      } catch (err) {
+        return gitErr(err)
       }
-      return result
     }
   )
 }

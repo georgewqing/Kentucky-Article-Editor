@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; img-src data: blob: kentucky-file:; font-src data:;"
+    />
+    <title>KENTUCKY print</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #fff;
+        color: #111;
+        font-family: 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+      }
+      #root {
+        box-sizing: border-box;
+      }
+      .print-article {
+        padding: 18mm 16mm;
+        font-size: 11pt;
+        line-height: 1.55;
+        max-width: 100%;
+      }
+      .print-article h1 { font-size: 20pt; margin: 0 0 0.6em; }
+      .print-article h2 { font-size: 15pt; margin: 1.1em 0 0.45em; }
+      .print-article h3 { font-size: 13pt; margin: 1em 0 0.4em; }
+      .print-article p, .print-article li { margin: 0 0 0.55em; }
+      .print-article img { max-width: 100%; height: auto; }
+      .print-article pre, .print-article code {
+        font-family: Consolas, 'Cascadia Mono', monospace;
+        font-size: 9.5pt;
+      }
+      .print-article pre {
+        background: #f4f4f4;
+        padding: 10px 12px;
+        overflow: hidden;
+        white-space: pre-wrap;
+      }
+      .print-article table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 0 0 0.8em;
+      }
+      .print-article th,
+      .print-article td {
+        border: 1px solid #ccc;
+        padding: 4px 8px;
+        text-align: left;
+      }
+      .print-article a { color: #111; }
+      .print-board {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 8mm;
+        box-sizing: border-box;
+      }
+      .print-board img {
+        max-width: 100%;
+        max-height: 100vh;
+        object-fit: contain;
+      }
+      @page {
+        margin: 12mm;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getPlatform } from '@/platform'
 import { useAppStore } from '@/state/appStore'
+import appIcon from '@brand/icon.svg?url'
 
 type MenuItem =
   | { type: 'item'; id: string; label: string; shortcut?: string; disabled?: boolean }
@@ -21,6 +22,12 @@ export function AppMenuBar() {
     if (s.windowRole === 'float') return Boolean(s.tabs[0])
     return Boolean(s.workspacePath && s.activeTabId)
   })
+  const canExportPdf = useAppStore((s) => {
+    const tab = s.tabs.find((t) => t.id === s.activeTabId)
+    if (!tab) return false
+    const ext = getPlatform().extname(tab.path).toLowerCase()
+    return ext === '.md' || ext === '.kmind'
+  })
 
   const groups: MenuGroup[] = useMemo(
     () => [
@@ -30,6 +37,12 @@ export function AppMenuBar() {
         items: [
           { type: 'item', id: 'openFolder', label: t('menu.openFolder'), shortcut: 'Ctrl+O' },
           { type: 'item', id: 'save', label: t('menu.save'), shortcut: 'Ctrl+S' },
+          {
+            type: 'item',
+            id: 'exportPdf',
+            label: t('menu.exportPdf'),
+            disabled: !canExportPdf
+          },
           { type: 'sep' },
           { type: 'item', id: 'close', label: t('menu.closeWindow') }
         ]
@@ -82,7 +95,7 @@ export function AppMenuBar() {
         items: [{ type: 'item', id: 'learnMore', label: t('menu.learnMore') }]
       }
     ],
-    [t, canNewWindow]
+    [t, canNewWindow, canExportPdf]
   )
 
   useEffect(() => {
@@ -114,11 +127,22 @@ export function AppMenuBar() {
       void useAppStore.getState().spawnNewMainWindow()
       return
     }
+    if (actionId === 'exportPdf') {
+      void import('@/export/exportPdf').then((m) => m.exportActiveTabToPdf())
+      return
+    }
     void getPlatform().runMenuAction(actionId)
   }
 
   return (
     <div className="app-menu-bar" ref={rootRef} role="menubar">
+      <img
+        className="app-menu-logo"
+        src={appIcon}
+        alt=""
+        draggable={false}
+        aria-hidden="true"
+      />
       {groups.map((group) => {
         const open = openId === group.id
         return (

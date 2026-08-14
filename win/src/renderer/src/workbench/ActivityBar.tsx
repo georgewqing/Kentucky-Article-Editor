@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/state/appStore'
 import { useAiStore } from '@/state/aiStore'
 import { getPlatform } from '@/platform'
+import { useFittedMenuPos } from './fitContextMenu'
 
 function workspaceBadge(path: string): string {
   const name = getPlatform().basename(path) || '?'
@@ -30,6 +32,41 @@ export function ActivityBar() {
   const aiActive = aiVisible && !onHome
 
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
+  const { menuRef, menuPos } = useFittedMenuPos(Boolean(menu), menu?.x ?? 0, menu?.y ?? 0)
+  const barRef = useRef<HTMLElement>(null)
+  const [indicator, setIndicator] = useState({ y: 0, ready: false, slide: false })
+
+  const syncIndicator = useCallback((): void => {
+    const bar = barRef.current
+    if (!bar) return
+    const btn = bar.querySelector<HTMLElement>('[data-activity-view-active="true"]')
+    if (!btn) {
+      setIndicator((prev) => (prev.ready ? { ...prev, ready: false } : prev))
+      return
+    }
+    const y = btn.getBoundingClientRect().top - bar.getBoundingClientRect().top
+    setIndicator((prev) => {
+      const next = { y, ready: true, slide: prev.ready }
+      return prev.y === next.y && prev.ready === next.ready && prev.slide === next.slide ? prev : next
+    })
+  }, [])
+
+  useLayoutEffect(() => {
+    syncIndicator()
+  }, [syncIndicator, activeView, activeWorkspaceId, onHome, openWorkspaces, sidebarVisible])
+
+  useLayoutEffect(() => {
+    const bar = barRef.current
+    if (!bar) return
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => syncIndicator()) : null
+    ro?.observe(bar)
+    const scroll = bar.querySelector('.activity-workspaces-scroll')
+    scroll?.addEventListener('scroll', syncIndicator, { passive: true })
+    return () => {
+      ro?.disconnect()
+      scroll?.removeEventListener('scroll', syncIndicator)
+    }
+  }, [syncIndicator])
 
   useEffect(() => {
     if (!menu) return
@@ -62,10 +99,20 @@ export function ActivityBar() {
   }
 
   return (
-    <nav className="activity-bar" aria-label="Activity Bar">
+    <nav ref={barRef} className="activity-bar" aria-label="Activity Bar">
+      <div
+        className="activity-indicator"
+        aria-hidden
+        data-ready={indicator.ready ? 'true' : undefined}
+        data-slide={indicator.slide ? 'true' : undefined}
+        style={{ transform: `translateY(${indicator.y}px)` }}
+      />
       <button
         type="button"
         className={`activity-btn ${activeView === 'home' || (!workspacePath && activeView !== 'settings') ? 'active' : ''}`}
+        data-activity-view-active={
+          activeView === 'home' || (!workspacePath && activeView !== 'settings') ? 'true' : undefined
+        }
         title={t('activity.home')}
         aria-label={t('activity.home')}
         onClick={goHome}
@@ -76,7 +123,7 @@ export function ActivityBar() {
       </button>
       <button
         type="button"
-        className={`activity-btn ${aiActive ? 'active' : ''}`}
+        className={`activity-btn activity-ai ${aiActive ? 'active' : ''}`}
         title={t('activity.ai')}
         aria-label={t('activity.ai')}
         disabled={!workspacePath}
@@ -98,6 +145,7 @@ export function ActivityBar() {
                 key={ws.id}
                 type="button"
                 className={`activity-btn activity-ws-btn ${active ? 'active' : ''}`}
+                data-activity-view-active={active ? 'true' : undefined}
                 title={ws.path}
                 aria-label={label}
                 onClick={() => onProjectClick(ws.id)}
@@ -129,6 +177,7 @@ export function ActivityBar() {
       <button
         type="button"
         className={`activity-btn ${activeView === 'scm' && !onHome ? 'active' : ''}`}
+        data-activity-view-active={activeView === 'scm' && !onHome ? 'true' : undefined}
         title={t('scm.title')}
         aria-label={t('scm.title')}
         disabled={onHome}
@@ -150,6 +199,7 @@ export function ActivityBar() {
       <button
         type="button"
         className={`activity-btn ${activeView === 'settings' ? 'active' : ''}`}
+        data-activity-view-active={activeView === 'settings' ? 'true' : undefined}
         title={t('activity.settings')}
         aria-label={t('activity.settings')}
         onClick={() =>
@@ -163,26 +213,30 @@ export function ActivityBar() {
         </svg>
       </button>
 
-      {menu ? (
-        <div
-          className="ctx-menu"
-          style={{ left: menu.x, top: menu.y, position: 'fixed', zIndex: 1000 }}
-          onClick={(e) => e.stopPropagation()}
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          <button
-            type="button"
-            className="danger"
-            onClick={() => {
-              const id = menu.id
-              setMenu(null)
-              void closeWorkspaceById(id)
-            }}
-          >
-            {t('activity.closeWorkspace')}
-          </button>
-        </div>
-      ) : null}
+      {menu
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className="ctx-menu"
+              style={{ left: menuPos.x, top: menuPos.y }}
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              <button
+                type="button"
+                className="danger"
+                onClick={() => {
+                  const id = menu.id
+                  setMenu(null)
+                  void closeWorkspaceById(id)
+                }}
+              >
+                {t('activity.closeWorkspace')}
+              </button>
+            </div>,
+            document.body
+          )
+        : null}
     </nav>
   )
 }

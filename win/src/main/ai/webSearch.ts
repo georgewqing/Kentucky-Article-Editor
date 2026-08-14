@@ -208,6 +208,26 @@ function extractWeatherComCn(html: string): string | null {
   return lines.length ? lines.join('\n') : null
 }
 
+function isPrivateHttpUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, '')
+    if (host === 'localhost' || host === '::1' || host === '0.0.0.0') return true
+    if (host.endsWith('.local') || host.endsWith('.internal')) return true
+    const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(host)
+    if (!m) return false
+    const a = Number(m[1])
+    const b = Number(m[2])
+    if (a === 10 || a === 127) return true
+    if (a === 0) return true
+    if (a === 192 && b === 168) return true
+    if (a === 172 && b >= 16 && b <= 31) return true
+    if (a === 169 && b === 254) return true
+    return false
+  } catch {
+    return true
+  }
+}
+
 export async function fetchPageExcerpt(
   url: string,
   maxChars = 1800
@@ -215,6 +235,9 @@ export async function fetchPageExcerpt(
   const u = url.trim()
   if (!/^https?:\/\//i.test(u)) {
     return { url: u, text: '', error: 'Only http(s) URLs allowed' }
+  }
+  if (isPrivateHttpUrl(u)) {
+    return { url: u, text: '', error: 'Private/local URLs are not allowed' }
   }
   try {
     const html = await fetchText(u, 10_000)

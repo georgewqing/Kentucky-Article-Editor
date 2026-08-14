@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getPlatform } from '@/platform'
+import { useFittedMenuPos } from './fitContextMenu'
 
 type MenuState = {
   x: number
@@ -10,7 +11,7 @@ type MenuState = {
 }
 
 const SKIP_SELECTOR =
-  '.file-tree-wrap, .mindmap-host, .mindmap-canvas, .activity-bar, .app-menu-bar, .app-menu-dropdown, .ctx-menu, .ai-slash-menu, .ai-context-popover'
+  '.file-tree-wrap, .mindmap-host, .mindmap-canvas, .activity-bar, .app-menu-bar, .app-menu-dropdown, .ctx-menu, .ai-slash-menu, .ai-context-popover, .tab-bar, .pane-file-picker, .pane-file-menu'
 
 function selectionRoot(node: Node | null): HTMLElement | null {
   const el = node instanceof HTMLElement ? node : node?.parentElement
@@ -61,16 +62,6 @@ function selectAllIn(root: HTMLElement | null): void {
   document.execCommand('selectAll')
 }
 
-function clampMenuPosition(x: number, y: number, w: number, h: number): { x: number; y: number } {
-  const pad = 8
-  const maxX = window.innerWidth - w - pad
-  const maxY = window.innerHeight - h - pad
-  return {
-    x: Math.max(pad, Math.min(x, maxX)),
-    y: Math.max(pad, Math.min(y, maxY))
-  }
-}
-
 function modKeyLabel(): string {
   return /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'
 }
@@ -78,6 +69,7 @@ function modKeyLabel(): string {
 export function SelectionContextMenu() {
   const { t } = useTranslation()
   const [menu, setMenu] = useState<MenuState | null>(null)
+  const { menuRef, menuPos } = useFittedMenuPos(Boolean(menu), menu?.x ?? 0, menu?.y ?? 0)
   const mod = modKeyLabel()
 
   const close = useCallback(() => setMenu(null), [])
@@ -95,12 +87,9 @@ export function SelectionContextMenu() {
       e.preventDefault()
       e.stopPropagation()
 
-      const approxW = 220
-      const approxH = 120
-      const pos = clampMenuPosition(e.clientX, e.clientY, approxW, approxH)
       setMenu({
-        x: pos.x,
-        y: pos.y,
+        x: e.clientX,
+        y: e.clientY,
         text,
         root: selectionRoot(sel?.anchorNode ?? null)
       })
@@ -157,8 +146,9 @@ export function SelectionContextMenu() {
 
   return (
     <div
+      ref={menuRef}
       className="ctx-menu selection-ctx-menu"
-      style={{ left: menu.x, top: menu.y }}
+      style={{ left: menuPos.x, top: menuPos.y }}
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
       role="menu"

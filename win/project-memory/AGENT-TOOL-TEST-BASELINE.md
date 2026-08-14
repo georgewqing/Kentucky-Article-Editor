@@ -49,14 +49,14 @@
 
 ## 📚 四、Round H · 文学记忆（M1–M4）自测清单
 
-指纹：`toolApi: "2026-08-11-j"`
+指纹：`toolApi: "2026-08-14-a"`
 
 1. 空工作区随笔：`continuity_check` aspects timeline → `story_state_missing` info，**无** stale  
 2. `propose_upsert_story_state` 一章（含 sourcePath）→ 启用；L5 出现计数摘要 + 「Before write / After chapter」调用提示（无道具名）  
 3. 故意让 `current.props` 与 rollup 不一致 → `prop_table_conflict`；`assertions:[{prop,holder}]` 失败 → `assertion_failed`  
 4. `propose_upsert_foreshadow` open 项 → continuity foreshadow 出 `foreshadow_unpaid`；精确 dueBy=chapter.id 且后续章已写 → overdue  
 5. `compare_voice` / `proofread_check` / `reader_critique` 无全文 excerpts  
-6. `propose_create_revision` 至 maxRevisionSnaps → 报错拒建；restore 正文 pending Accept  
+6. `propose_create_revision` 满 maxRevisionSnaps → 删最旧再写入（结果 `evicted[]`）；restore 正文自动写盘（无 Accept）  
 7. **防遗忘**：系统提示含 `Story memory tools (CRITICAL…)`；对启用态章文件 `propose_write_text`/`propose_text_patch` 结果含 `memoryHint`（非 `reviewHint`），同轮应再调 upsert  
 8. **voice_anchor**：`propose_set_voice_anchor({default:{notes:"…"}})` 读回非空；误传 `narrator` 应落入 notes；结果含 `schemaHint`  
 9. **Agent UI**：`/` 菜单无可见滑块仍可滚；上下文弹层色条按 limit；消息区底部无横向滑块  

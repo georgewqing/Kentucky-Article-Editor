@@ -1,4 +1,4 @@
-import { join, normalize, relative, sep, dirname } from 'path'
+import { join, normalize, dirname, resolve } from 'path'
 import {
   existsSync,
   readdirSync,
@@ -48,6 +48,7 @@ import {
 } from './proposalGate'
 import { findGhostCharacterHits } from './ghostNames'
 import { listEnabledSkills, loadSkill } from './skills'
+import { DESIGN_AGENT_PLAYBOOK } from './designGddL5'
 import {
   runWebSearch,
   runWebResearch,
@@ -73,7 +74,9 @@ import {
   type LiteraryEmitCtx
 } from './literaryTools'
 import { loadAiSettings } from './aiSettings'
+import { REVISIONS_DIR } from './revisions'
 import { memoryToolsDisciplinePrompt, proseMemoryHint } from './memoryNudge'
+import { exportWorkspacePdf } from '../pdf/exportWorkspacePdf'
 
 export function getWritingTools(): ToolDef[] {
   return [
@@ -197,7 +200,7 @@ export function getWritingTools(): ToolDef[] {
       function: {
         name: 'propose_append_dialogue_lines',
         description:
-          'Insert new dialogue lines (speaker = character id). Creates *.dialogue.csv with standard 11-col header if missing. Default append; pass afterId to insert after that line. ≤5 lines may auto-apply. Prefer lines[].id (e.g. d04); if omitted, continues dNN when the file uses that pattern, else stem_speaker_NNN. Result includes addedLineIds — use those for choices, never guess. Does not edit choices. CALL read_voice_bank first for multi-speaker tone.',
+          'Insert new dialogue lines (speaker = character id). Creates *.dialogue.csv with standard 11-col header if missing. Default append; pass afterId to insert after that line. ≤5 lines may auto-apply. Empty text "" is valid (Godot v1.3 confirm-to-continue / silent beat) — pass the field, do not omit. Prefer lines[].id (e.g. d04); if omitted, continues dNN when the file uses that pattern, else stem_speaker_NNN. Result includes addedLineIds — use those for choices, never guess. Does not edit choices. CALL read_voice_bank first for multi-speaker tone.',
         parameters: {
           type: 'object',
           properties: {
@@ -216,7 +219,11 @@ export function getWritingTools(): ToolDef[] {
                     description: 'Optional stable line id (e.g. d04). Prefer setting this for choices.'
                   },
                   speaker: { type: 'string', description: 'Character id from characters.csv' },
-                  text: { type: 'string' },
+                  text: {
+                    type: 'string',
+                    description:
+                      'Line body. Empty string "" is valid (v1.3 confirm-to-continue). Do not omit the key.'
+                  },
                   emotion: { type: 'string' },
                   note: { type: 'string' },
                   scene: { type: 'string' }
@@ -795,7 +802,7 @@ export function getWritingTools(): ToolDef[] {
       function: {
         name: 'git_status',
         description:
-          'WHEN: start of any Git/backup/commit/push task, or after writes — inventory branch, remotes, dirty paths. CALL even in a brand-new chat (do not rely on prior messages). Side effects: may auto-init workspace Git (repoCreated); may append .kentucky/ to .gitignore. Next: git_diff / git_add→git_commit→git_push.',
+          'WHEN: start of any Git/backup/commit/push task, or after writes — inventory branch, remotes, dirty paths for THIS workspace only. CALL even in a brand-new chat. If Git (L5) names an env doc in this root, read_file that name first; otherwise do not invent remotes/URLs from other workspaces. Side effects: may auto-init workspace Git (repoCreated); may append .kentucky/ and revisions/ to .gitignore. Next: git_diff / git_add→git_commit→git_push.',
         parameters: { type: 'object', properties: {} }
       }
     },
@@ -836,7 +843,7 @@ export function getWritingTools(): ToolDef[] {
       function: {
         name: 'git_push',
         description:
-          'WHEN: after commit, or user asks 推送/push/备份到远程. Push to configured remote. Never --force. Optional setUpstream (-u) requires branch. Local-path remotes: auto-create missing bare (`git init --bare`) before push.',
+          'WHEN: after commit, or user asks 推送/push/备份到远程. Push to configured remote. Never --force. Optional setUpstream (-u) requires branch — use after remote_remove+remote_add (upstream cleared). Local-path remotes: auto-create missing bare (`git init --bare`) before push.',
         parameters: {
           type: 'object',
           properties: {
@@ -874,7 +881,7 @@ export function getWritingTools(): ToolDef[] {
       function: {
         name: 'git_commit',
         description:
-          'WHEN: user asks 提交/commit/保存版本. git commit -m immediately (auto + highlight card). Stage first via git_add if needed. Next: git_push if remote exists.',
+          'WHEN: user asks 提交/commit/保存版本. git commit -m immediately (auto + highlight card). Commits the whole index (all staged files). Stage first via git_add; empty index → clear Nothing-to-commit error — use git_status, do not retry. Next: git_push if remote exists.',
         parameters: {
           type: 'object',
           properties: {
@@ -889,7 +896,7 @@ export function getWritingTools(): ToolDef[] {
       function: {
         name: 'git_remote_add',
         description:
-          'WHEN: no remotes / user gives a URL or local bare path. git remote add immediately. URL: https/ssh/git@/file:///local path (spaces OK). Missing local folder → auto git init --bare. Next: git_push.',
+          'WHEN: no remotes / user gives a URL or local bare path for THIS workspace. git remote add immediately. URL must come from the user or this workspace’s env doc — never copy another project’s remote. https/ssh/git@/file:///local path (spaces OK). Missing local folder → auto git init --bare. After remove+re-add: Next git_push(setUpstream=true, branch from git_status). Else Next: git_push.',
         parameters: {
           type: 'object',
           properties: {
@@ -1033,6 +1040,28 @@ export function getWritingTools(): ToolDef[] {
     {
       type: 'function',
       function: {
+        name: 'export_workspace_pdf',
+        description:
+          'Export a workspace Markdown file to PDF inside the workspace (A4 portrait print). Writes dest immediately — no save dialog. Default dest is the sibling stem.pdf (overwrite OK). Uses the unsaved editor buffer if the file is open. Not for .kmind / dialogue / storyboard / .txt (those stay UI File → Export PDF). Does not use shell.',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: {
+              type: 'string',
+              description: 'Workspace-relative .md source'
+            },
+            dest: {
+              type: 'string',
+              description: 'Optional workspace-relative .pdf path (default: same folder, same stem)'
+            }
+          },
+          required: ['path']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
         name: 'workspace_delete',
         description:
           'Delete a file or folder inside the workspace (recursive). Only when the user clearly asked to delete/remove/归档后清理原件. Syncs dialogue sidecars. Does not use shell.',
@@ -1063,29 +1092,17 @@ export function getWritingTools(): ToolDef[] {
   ]
 }
 
-export class WorkspacePathError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'WorkspacePathError'
-  }
-}
+import {
+  WorkspacePathError,
+  assertInsideWorkspace,
+  resolveWorkspacePath,
+  toWorkspaceRel
+} from './workspacePath'
 
-export function resolveWorkspacePath(workspaceRoot: string, relOrAbs: string): string {
-  const root = normalize(workspaceRoot)
-  const candidate = normalize(
-    relOrAbs.includes(':') || relOrAbs.startsWith('/') || relOrAbs.startsWith('\\')
-      ? relOrAbs
-      : join(root, relOrAbs)
-  )
-  const rel = relative(root, candidate)
-  if (rel.startsWith('..') || rel === '..' || (rel !== '' && rel.split(sep).includes('..'))) {
-    throw new WorkspacePathError('Path escapes workspace')
-  }
-  return candidate
-}
+export { WorkspacePathError, assertInsideWorkspace, resolveWorkspacePath } from './workspacePath'
 
 function toRel(workspaceRoot: string, abs: string): string {
-  return relative(workspaceRoot, abs).split(sep).join('/')
+  return toWorkspaceRel(workspaceRoot, abs)
 }
 
 function isDialogueCsvAbs(abs: string): boolean {
@@ -1125,15 +1142,15 @@ function syncDialogueSidecarsMain(oldCsv: string, newCsv: string | null): void {
 }
 
 function assertNotWorkspaceRoot(workspaceRoot: string, abs: string): void {
-  const a = normalize(abs).replace(/[/\\]+$/, '').toLowerCase()
-  const r = normalize(workspaceRoot).replace(/[/\\]+$/, '').toLowerCase()
+  const a = resolve(abs).replace(/[/\\]+$/, '').toLowerCase()
+  const r = resolve(workspaceRoot).replace(/[/\\]+$/, '').toLowerCase()
   if (a === r) throw new Error('Refusing to modify the workspace root')
 }
 
 /** Prefer dirty editor buffer when open (keeps read/patch aligned with what user sees). */
 function readWorkspaceText(
   abs: string,
-  maxChars = 80_000
+  maxChars: number | null = 80_000
 ): { text: string; source: 'disk' | 'editor_buffer'; truncated: boolean } {
   const hub = getDoc(abs)
   const disk = existsSync(abs) ? readFileSync(abs, 'utf-8') : ''
@@ -1141,7 +1158,7 @@ function readWorkspaceText(
     hub && hub.dirty && hub.content !== disk ? hub.content : disk
   const source: 'disk' | 'editor_buffer' =
     hub && hub.dirty && hub.content !== disk ? 'editor_buffer' : 'disk'
-  if (raw.length <= maxChars) return { text: raw, source, truncated: false }
+  if (maxChars == null || raw.length <= maxChars) return { text: raw, source, truncated: false }
   return {
     text: `${raw.slice(0, maxChars)}\n\n/* truncated: ${raw.length} chars total */`,
     source,
@@ -1310,8 +1327,8 @@ function allocateLineIds(
   const added: DialogueLine[] = []
   for (const row of incoming) {
     const speaker = String(row.speaker || '').trim()
-    const text = String(row.text || '')
-    if (!speaker || !text) continue
+    const text = row.text == null ? '' : String(row.text)
+    if (!speaker) continue
     let id = String(row.id || '').trim()
     if (!id || used.has(id)) {
       do {
@@ -1386,9 +1403,15 @@ export async function runTool(
         const rel = typeof args.path === 'string' ? args.path : '.'
         const abs = resolveWorkspacePath(ctx.workspaceRoot, rel === '.' ? '' : rel)
         const target = rel === '.' || rel === '' ? ctx.workspaceRoot : abs
-        // Hide VCS / dot machinery (parity with explorer: name.startsWith('.'))
+        // Hide VCS / dot machinery (parity with explorer: name.startsWith('.')).
+        // revisions/ is explorer-hidden; Agent uses list_revisions / read_file / restore.
+        const atRoot = resolve(target) === resolve(ctx.workspaceRoot)
         const entries = readdirSync(target, { withFileTypes: true })
-          .filter((d) => !d.name.startsWith('.') && d.name !== 'node_modules')
+          .filter((d) => {
+            if (d.name.startsWith('.') || d.name === 'node_modules') return false
+            if (atRoot && d.isDirectory() && d.name === REVISIONS_DIR) return false
+            return true
+          })
           .map((d) => ({
             name: d.name,
             type: d.isDirectory() ? 'dir' : 'file'
@@ -1479,8 +1502,9 @@ export async function runTool(
       case 'read_dialogue': {
         const path = String(args.path || '')
         const abs = resolveWorkspacePath(ctx.workspaceRoot, path)
-        if (!existsSync(abs)) return JSON.stringify({ error: 'File not found' })
-        const parsed = parseDialogueCsv(readFileSync(abs, 'utf-8'))
+        if (!existsSync(abs) && !getDoc(abs)) return JSON.stringify({ error: 'File not found' })
+        const { text: csvText, source: readSource } = readWorkspaceText(abs, null)
+        const parsed = parseDialogueCsv(csvText)
         const stems = dialogueStemPaths(abs)
         const choices = existsSync(stems.choices)
           ? parseDialogueChoices(readFileSync(stems.choices, 'utf-8'))
@@ -1502,13 +1526,14 @@ export async function runTool(
           hasLayout,
           warnings: graph.warnings,
           note:
-            'Disk truth = CSV + choices.json (play graph). layout.json is Kentucky-only. Empty option text = confirm-to-continue; labeled options = UI; end:true ends. CSV row order is not play order (opening = first CSV row).'
+            'Disk truth = CSV + choices.json (play graph). layout.json is Kentucky-only. Empty option text = confirm-to-continue; labeled options = UI; end:true ends. CSV row order is not play order (opening = first CSV row).',
+          readSource
         })
       }
       case 'propose_update_dialogue_lines': {
         const path = String(args.path || '')
         const abs = resolveWorkspacePath(ctx.workspaceRoot, path)
-        const before = readFileSync(abs, 'utf-8')
+        const before = readWorkspaceText(abs, null).text
         const parsed = parseDialogueCsv(before)
         const updates = (args.updates as Array<Record<string, string>>) || []
         const byId = new Map(parsed.lines.map((l) => [l.id, { ...l }]))
@@ -1569,10 +1594,21 @@ export async function runTool(
           writeFileSync(abs, serializeDialogueCsv([]), 'utf-8')
           createdHeader = true
         }
-        const before = readFileSync(abs, 'utf-8')
+        const { text: before, source: readSource } = createdHeader
+          ? { text: readFileSync(abs, 'utf-8'), source: 'disk' as const }
+          : readWorkspaceText(abs, null)
         const parsed = parseDialogueCsv(before)
         const incoming = (args.lines as Array<Record<string, unknown>>) || []
         const added = allocateLineIds(path, parsed.lines, incoming)
+        if (!added.length) {
+          return JSON.stringify({
+            error:
+              'No valid lines (need speaker). Empty text "" is valid v1.3 confirm-to-continue.',
+            addedLineIds: [],
+            addedLines: [],
+            toolApi: TOOL_API_VERSION
+          })
+        }
         const afterId = typeof args.afterId === 'string' ? args.afterId.trim() : ''
         let lines: DialogueLine[]
         if (afterId) {
@@ -1622,6 +1658,7 @@ export async function runTool(
           ]
         }
         result.addedLines = added.map((l) => ({ id: l.id, speaker: l.speaker, text: l.text }))
+        result.readSource = readSource
         if (createdHeader) {
           result.createdFile = true
           result.headerNote =
@@ -1636,8 +1673,8 @@ export async function runTool(
       case 'propose_dialogue_performance': {
         const path = String(args.path || '')
         const abs = resolveWorkspacePath(ctx.workspaceRoot, path)
-        if (!existsSync(abs)) return JSON.stringify({ error: 'File not found' })
-        const before = readFileSync(abs, 'utf-8')
+        if (!existsSync(abs) && !getDoc(abs)) return JSON.stringify({ error: 'File not found' })
+        const before = readWorkspaceText(abs, null).text
         const parsed = parseDialogueCsv(before)
         const updates = (args.updates as Array<Record<string, string>>) || []
         const byId = new Map(parsed.lines.map((l) => [l.id, { ...l }]))
@@ -1703,8 +1740,8 @@ export async function runTool(
       case 'propose_reorder_dialogue_lines': {
         const path = String(args.path || '')
         const abs = resolveWorkspacePath(ctx.workspaceRoot, path)
-        if (!existsSync(abs)) return JSON.stringify({ error: 'File not found' })
-        const before = readFileSync(abs, 'utf-8')
+        if (!existsSync(abs) && !getDoc(abs)) return JSON.stringify({ error: 'File not found' })
+        const before = readWorkspaceText(abs, null).text
         const parsed = parseDialogueCsv(before)
         const openingBefore = parsed.lines[0]?.id || null
         const order = (args.order as string[]) || []
@@ -1796,9 +1833,9 @@ export async function runTool(
       case 'layout_dialogue': {
         const path = String(args.path || '')
         const abs = resolveWorkspacePath(ctx.workspaceRoot, path)
-        if (!existsSync(abs)) return JSON.stringify({ error: 'Dialogue CSV not found' })
+        if (!existsSync(abs) && !getDoc(abs)) return JSON.stringify({ error: 'Dialogue CSV not found' })
         const stems = dialogueStemPaths(abs)
-        const parsed = parseDialogueCsv(readFileSync(abs, 'utf-8'))
+        const parsed = parseDialogueCsv(readWorkspaceText(abs, null).text)
         const choices = loadChoicesBeside(abs)
         const layout = layoutDialogueGraph(
           parsed.lines.map((l) => l.id).filter(Boolean),
@@ -1827,12 +1864,17 @@ export async function runTool(
         const mode = String(args.mode || 'replace') === 'append' ? 'append' : 'replace'
         const autoLayout = args.autoLayout !== false
         const stems = dialogueStemPaths(abs)
-        const beforeCsv = existsSync(abs) ? readFileSync(abs, 'utf-8') : ''
+        const beforeCsv = readWorkspaceText(abs, null).text
         const existing = beforeCsv ? parseDialogueCsv(beforeCsv).lines : []
         const incoming = (args.lines as Array<Record<string, unknown>>) || []
         const added = allocateLineIds(path, mode === 'append' ? existing : [], incoming)
         const lines = mode === 'append' ? [...existing, ...added] : added
-        if (!lines.length) return JSON.stringify({ error: 'No valid lines (need speaker + text)' })
+        if (!lines.length) {
+          return JSON.stringify({
+            error: 'No valid lines (need speaker). Empty text "" is allowed.',
+            toolApi: TOOL_API_VERSION
+          })
+        }
 
         const choiceList = (args.choices as Array<Record<string, unknown>>) || []
         const choiceFile = emptyDialogueChoices()
@@ -1929,7 +1971,7 @@ export async function runTool(
         const cast = existsSync(charsAbs)
           ? new Set(parseCharactersCsv(readFileSync(charsAbs, 'utf-8')).map((c) => c.id))
           : new Set<string>()
-        const parsed = parseDialogueCsv(readFileSync(abs, 'utf-8'))
+        const parsed = parseDialogueCsv(readWorkspaceText(abs, null).text)
         const orphans = parsed.lines
           .filter((l) => l.speaker && !cast.has(l.speaker))
           .map((l) => ({ id: l.id, speaker: l.speaker, text: l.text.slice(0, 80) }))
@@ -2571,7 +2613,7 @@ export async function runTool(
           if (raw != null) {
             const next = patchPlanTodoCheckboxes(raw, steps)
             contentChanged = next !== raw
-            const abs = join(ctx.workspaceRoot, ...planFileRel.replace(/\\/g, '/').split('/'))
+            const abs = resolveWorkspacePath(ctx.workspaceRoot, planFileRel)
             // Always rewrite when linked so DocumentHub / disk stay in sync with mirror.
             writeFileSync(abs, next, 'utf-8')
             docApplyExternalWrite(abs, next)
@@ -2678,6 +2720,17 @@ export async function runTool(
         ctx.onWorkspaceFs({ op: 'fsDeleted', path: toRel(ctx.workspaceRoot, abs) })
         return JSON.stringify({ ok: true, path: toRel(ctx.workspaceRoot, abs), deleted: true })
       }
+      case 'export_workspace_pdf': {
+        const source = String(args.path || args.source || '')
+        const dest = args.dest != null && String(args.dest).trim() ? String(args.dest) : undefined
+        const r = await exportWorkspacePdf({
+          workspaceRoot: ctx.workspaceRoot,
+          sourceRel: source,
+          destRel: dest
+        })
+        if (r.ok) ctx.onWorkspaceFs({ op: 'refreshTree' })
+        return JSON.stringify({ ...r, toolApi: TOOL_API_VERSION })
+      }
       case 'open_in_editor': {
         const path = String(args.path || '')
         resolveWorkspacePath(ctx.workspaceRoot, path)
@@ -2774,8 +2827,8 @@ export async function runTool(
           summary.repoCreated
             ? 'Side effect: auto-created Git repo at workspace root (kentucky.autoInit; .git hidden in explorer).'
             : summary.gitignoreUpdated
-              ? 'Side effect: appended .kentucky/ to .gitignore (ensureKentuckyGitignore).'
-              : 'May auto-init workspace Git if missing, and may append .kentucky/ to .gitignore (not pure read-only).'
+              ? 'Side effect: appended Kentucky ignore lines to .gitignore (ensureKentuckyGitignore: .kentucky/, revisions/).'
+              : 'May auto-init workspace Git if missing, and may append .kentucky/ and revisions/ to .gitignore (not pure read-only).'
         ]
         return JSON.stringify({
           ...summary,
@@ -2963,7 +3016,10 @@ export async function runTool(
   }
 }
 
-export function applyProposalToDisk(proposal: FileProposal): void {
+export function applyProposalToDisk(proposal: FileProposal, workspaceRoot?: string): void {
+  if (workspaceRoot) {
+    assertInsideWorkspace(workspaceRoot, proposal.absPath)
+  }
   const dir = dirname(proposal.absPath)
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   // Empty choices sidecar → delete file (protocol: missing file = linear)
@@ -3078,7 +3134,10 @@ export function modeSystemPrefix(mode: AgentToolMode): string {
   switch (mode) {
     case 'ask':
       return [
-        'MODE: Ask — conversation only. You have NO tools. Do not claim you edited files. Answer craft questions; suggest what the user could do in Agent/Outline mode.'
+        'MODE: Ask — conversation only. You have NO tools and cannot read, write, patch, list, or search files.',
+        'Never emit tool calls, DSML, XML <invoke> / tool_calls blocks, function-call markup, or fake tool output.',
+        'If the user asks to create or edit files, refuse and tell them to switch the composer from Ask to Agent, then resend.',
+        'Do not claim you read or edited anything this turn. Answer from Editor context already provided.'
       ].join('\n')
     case 'plan':
       return [
@@ -3104,8 +3163,23 @@ export function modeSystemPrefix(mode: AgentToolMode): string {
 export function LITERARY_SYSTEM_PROMPT(
   styleMemo: string,
   mode: AgentToolMode = 'agent',
-  extras?: { skillsCatalog?: string; webSearchEnabled?: boolean }
+  extras?: { skillsCatalog?: string; webSearchEnabled?: boolean; designDiscipline?: boolean }
 ): string {
+  if (mode === 'ask') {
+    return [
+      modeSystemPrefix('ask'),
+      '',
+      'You are KENTUCKY Writing Agent in Ask mode — talk only, no workspace side effects.',
+      'Prefer Chinese or English to match the user. Be concise and craft-focused.',
+      extras?.skillsCatalog?.trim()
+        ? `Skills exist in Agent mode only (names for advice, do not call them):\n${extras.skillsCatalog.trim()}`
+        : '',
+      styleMemo.trim() ? `Author style memo:\n${styleMemo.trim()}` : ''
+    ]
+      .filter(Boolean)
+      .join('\n')
+  }
+
   const webOn = Boolean(extras?.webSearchEnabled)
   return [
     modeSystemPrefix(mode),
@@ -3113,14 +3187,16 @@ export function LITERARY_SYSTEM_PROMPT(
     'You are KENTUCKY Writing Agent — a literary assistant inside a local writing app.',
     'Help with fiction, scripts, dialogue CSV, outlines, and mind maps.',
     'Prefer Chinese or English to match the user. Be concise and craft-focused.',
-    'Never run shell commands. Stay inside the opened workspace for file edits.',
-    'Workspace structure: use workspace_mkdir / workspace_copy / workspace_move / workspace_delete (Node FS, not shell) for folders and archival moves. Prefer move/copy tools over reading files and rewriting them with propose_write_file.',
+    'Never run shell commands. ALL file tools are sandboxed to the open workspace folder — absolute paths on other drives, `..` escapes, and system dirs are refused (Path escapes workspace).',
+    'Workspace structure: use workspace_mkdir / workspace_copy / workspace_move / workspace_delete (Node FS, not shell) for folders and archival moves — still inside the workspace only. Prefer move/copy tools over reading files and rewriting them with propose_write_file.',
+    'PDF: when the user asks to export/save Markdown as PDF into the workspace, call export_workspace_pdf(path) (optional dest). Writes immediately, default sibling stem.pdf, overwrite OK. Only .md — not kmind/dialogue/storyboard/txt.',
     WRITE_GATE_SUMMARY,
     mode === 'agent'
       ? GIT_AGENT_PLAYBOOK
       : mode === 'plan' || mode === 'outline'
-        ? 'Git (read/sync in this mode): git_status / git_diff / git_log / git_pull / git_push. For git_add/git_commit/git_remote_* switch to Agent mode. Live “Git (L5)” is in Editor context each turn.'
+        ? 'Git (read/sync in this mode): git_status / git_diff / git_log / git_pull / git_push. For git_add/git_commit/git_remote_* switch to Agent mode. “Git (L5)” is in Editor context (end of this user message), frozen for the turn.'
         : '',
+    extras?.designDiscipline ? DESIGN_AGENT_PLAYBOOK : '',
     webOn
       ? 'Web search tools are ENABLED. Prefer web_research / web_search; results include snippet + excerpt (fetched page text). If facts are still missing, call web_fetch on the best URL. Cite title+URL from tool results only — never invent sources.'
       : 'Web search is DISABLED in settings. Do not claim you searched the web; answer from context/knowledge and suggest enabling Web search in Settings if needed.',
@@ -3154,7 +3230,7 @@ export function LITERARY_SYSTEM_PROMPT(
     '- Always call read_dialogue before graph edits (returns choices, empty-text chains as sequenceChains, warnings).',
     '- New / full scripts → propose_dialogue_graph (csv + choices + layout). Linear continues MUST be options with text:\"\". Labeled text = player choices. end:true = End. Never omit choices to mean “linear CSV order”.',
     '- Do not mix empty-text and labeled options on the same line.',
-    '- Patch lines only → propose_update_dialogue_lines / propose_append_dialogue_lines (afterId inserts near that id in CSV) / propose_reorder_dialogue_lines.',
+    '- Patch lines only → propose_update_dialogue_lines / propose_append_dialogue_lines (afterId inserts near that id in CSV) / propose_reorder_dialogue_lines. Empty line text "" is valid (v1.3 confirm-to-continue); do not drop those rows.',
     '- Patch options only → propose_set_dialogue_choices. Empty nodes deletes choices file (isolated lines with no outs).',
     '- After structural edits, call layout_dialogue if layout was not already written (canvas coordinates; Godot ignores).',
     '- Playback follows options.goto / end only; CSV first row = opening. Unreachable lines (no path from opening via options) will not play.',

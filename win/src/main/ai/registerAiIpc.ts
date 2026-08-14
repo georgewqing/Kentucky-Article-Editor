@@ -1,4 +1,6 @@
 import { BrowserWindow, ipcMain, dialog } from 'electron'
+import { senderWorkspaceOrNull } from '../ipcSandbox'
+import { sameWorkspace } from './workspacePath'
 import {
   clearApiKey,
   hasApiKey,
@@ -48,6 +50,14 @@ function winFromEvent(e: Electron.IpcMainInvokeEvent): BrowserWindow | null {
   return BrowserWindow.fromWebContents(e.sender)
 }
 
+function sessionForSender(e: Electron.IpcMainInvokeEvent, id: string) {
+  if (!id) return null
+  const session = loadSession(id)
+  if (!session) return null
+  if (!sameWorkspace(session.workspacePath, senderWorkspaceOrNull(e))) return null
+  return session
+}
+
 export function registerAiIpc(): void {
   ipcMain.handle('ai:getSettings', () => {
     const s = loadAiSettings()
@@ -95,37 +105,44 @@ export function registerAiIpc(): void {
 
   ipcMain.handle('ai:getActiveProfile', () => getActiveProfile())
 
-  ipcMain.handle('ai:listSessions', (_e, workspacePath?: string | null) =>
-    listSessions(workspacePath)
+  ipcMain.handle('ai:listSessions', (e, _workspacePath?: string | null) =>
+    listSessions(senderWorkspaceOrNull(e))
   )
 
-  ipcMain.handle('ai:createSession', (_e, workspacePath: string | null) => {
-    return createSession(workspacePath)
+  ipcMain.handle('ai:createSession', (e, _workspacePath: string | null) => {
+    return createSession(senderWorkspaceOrNull(e))
   })
 
-  ipcMain.handle('ai:getWorkspacePrefs', (_e, workspacePath: string | null) => {
-    return getWorkspaceAiPrefs(workspacePath)
+  ipcMain.handle('ai:getWorkspacePrefs', (e, _workspacePath: string | null) => {
+    return getWorkspaceAiPrefs(senderWorkspaceOrNull(e))
   })
 
   ipcMain.handle(
     'ai:setWorkspacePrefs',
-    (_e, workspacePath: string, partial: { panelVisible?: boolean }) => {
-      if (!workspacePath) return getWorkspaceAiPrefs(null)
-      return setWorkspaceAiPrefs(workspacePath, partial)
+    (e, _workspacePath: string, partial: { panelVisible?: boolean }) => {
+      const root = senderWorkspaceOrNull(e)
+      if (!root) return getWorkspaceAiPrefs(null)
+      return setWorkspaceAiPrefs(root, partial)
     }
   )
 
-  ipcMain.handle('ai:loadSession', (_e, id: string) => loadSession(id))
+  ipcMain.handle('ai:loadSession', (e, id: string) => sessionForSender(e, id))
 
-  ipcMain.handle('ai:deleteSession', (_e, id: string) => {
+  ipcMain.handle('ai:deleteSession', (e, id: string) => {
+    if (!sessionForSender(e, id)) return false
     deleteSession(id)
     return true
   })
 
-  ipcMain.handle('ai:contextUsage', (_e, sessionId: string, mode?: AgentMode) => {
-    const session = sessionId ? loadSession(sessionId) : null
-    const agentMode = mode === 'ask' || mode === 'plan' || mode === 'outline' || mode === 'agent' ? mode : 'agent'
-    return estimateContextBreakdown(session, agentMode)
+  ipcMain.handle('ai:contextUsage', (e, sessionId: string, mode?: AgentMode) => {
+    try {
+      const session = sessionId ? sessionForSender(e, sessionId) : null
+      const agentMode =
+        mode === 'ask' || mode === 'plan' || mode === 'outline' || mode === 'agent' ? mode : 'agent'
+      return estimateContextBreakdown(session, agentMode, senderWorkspaceOrNull(e))
+    } catch {
+      return { used: 0, limit: loadAiSettings().contextWindow || 128000, buckets: [] }
+    }
   })
 
   ipcMain.handle(
@@ -144,6 +161,7 @@ export function registerAiIpc(): void {
     ) => {
       const win = winFromEvent(e)
       if (!win) return { ok: false }
+      if (payload.sessionId && !sessionForSender(e, payload.sessionId)) return { ok: false }
       void runAgentTurn({
         win,
         sessionId: payload.sessionId,
@@ -165,33 +183,38 @@ export function registerAiIpc(): void {
 
   ipcMain.handle(
     'ai:applyProposal',
-    (_e, payload: { sessionId: string; proposalId: string }) => {
+    (e, payload: { sessionId: string; proposalId: string }) => {
+      if (!sessionForSender(e, payload.sessionId)) return null
       return applyProposal(payload.sessionId, payload.proposalId)
     }
   )
 
   ipcMain.handle(
     'ai:rejectProposal',
-    (_e, payload: { sessionId: string; proposalId: string }) => {
+    (e, payload: { sessionId: string; proposalId: string }) => {
+      if (!sessionForSender(e, payload.sessionId)) return null
       return rejectProposal(payload.sessionId, payload.proposalId)
     }
   )
 
   ipcMain.handle(
     'ai:confirmGitOp',
-    async (_e, payload: { sessionId: string; opId: string }) => {
+    async (e, payload: { sessionId: string; opId: string }) => {
+      if (!sessionForSender(e, payload.sessionId)) return null
       return confirmGitOp(payload.sessionId, payload.opId)
     }
   )
 
   ipcMain.handle(
     'ai:rejectGitOp',
-    (_e, payload: { sessionId: string; opId: string }) => {
+    (e, payload: { sessionId: string; opId: string }) => {
+      if (!sessionForSender(e, payload.sessionId)) return null
       return rejectGitOp(payload.sessionId, payload.opId)
     }
   )
 
-  ipcMain.handle('ai:applyAllProposals', (_e, sessionId: string) => {
+  ipcMain.handle('ai:applyAllProposals', (e, sessionId: string) => {
+    if (!sessionForSender(e, sessionId)) return []
     return applyAllPending(sessionId)
   })
 

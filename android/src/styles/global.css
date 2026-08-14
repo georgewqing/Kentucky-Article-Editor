@@ -701,6 +701,27 @@ input[type='color'] {
   overflow-y: hidden;
   gap: 2px;
   scrollbar-width: none;
+  position: relative;
+}
+
+.tab-bar-scroll.is-reordering {
+  cursor: grabbing;
+}
+
+.tab-bar-scroll.is-reordering .tab {
+  touch-action: none;
+}
+
+.tab-drop-line {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 2;
 }
 
 .tab-bar-scroll::-webkit-scrollbar {
@@ -747,6 +768,15 @@ input[type='color'] {
   height: 2px;
   background: var(--accent);
   border-radius: 1px;
+}
+
+.tab.split-target:not(.active) {
+  color: var(--fg);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.tab.is-dragging {
+  opacity: 0.45;
 }
 
 .tab-title {
@@ -842,6 +872,85 @@ input[type='color'] {
 
 .editor-pane + .editor-pane {
   box-shadow: inset 1px 0 0 var(--border-subtle);
+}
+
+.pane-file-picker {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 8px;
+  background: var(--bg-tab);
+  box-shadow: inset 0 -1px 0 var(--border-subtle);
+}
+
+.pane-file-picker-kicker {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.pane-file-picker-btn {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--fg-bright);
+  background: var(--bg-input);
+  border: 1px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.pane-file-picker-btn:hover {
+  background: var(--bg-hover);
+}
+
+.pane-file-picker-btn:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.pane-file-picker-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.pane-file-picker-chevron {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--fg-muted);
+}
+
+.pane-file-menu {
+  max-height: min(360px, calc(100vh - 16px));
+  z-index: 10000;
+}
+
+.pane-file-menu button {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pane-file-menu button.is-active {
+  background: var(--accent-soft);
+  color: var(--fg-bright);
+}
+
+.pane-file-menu-empty {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--fg-muted);
 }
 
 .editor-empty {

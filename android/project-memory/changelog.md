@@ -1,8 +1,34 @@
 # 改动时间线（Android）
 
+## 2026-08-14（分屏文件选择换肤 + 标签改序手势）
+- 对齐 Win changelog **§161**（现行契约：Win architecture / gotchas「标签栏 / 分屏」）
+- 「此栏」去掉原生 `<select>`（Windows/WebView 弹出层无法换肤）→ `.pane-file-picker-btn` + portal `.ctx-menu.pane-file-menu`；拷贝 `fitContextMenu.ts`
+- 标签改序：右键 `preventDefault` + 对该 tab `setPointerCapture` + 窗口 `mousemove` 兜底；左键拖过 5px 同样可改序；不要 `lostpointercapture` 结束；不要 HTML5 drag
+- 保留 `compactLayout` 关分屏；未并入 Win 的 storyboard/pdf/image/video 路由
+- 文件：`EditorArea.tsx` · `fitContextMenu.ts` · `global.css` · i18n `editor.reorderTabsHint`
+
+## 2026-08-14（标签栏滚轮 / 右键改序 / 分屏选文件）
+- 对齐 Win §160：滚轮横滑、改序、分屏后各栏选文件；不再用右键指定分屏。首版手势/原生 select 在 §161 修完
+
+## 2026-08-14（产品拍板：Win 功能全移植）
+- **Win 已有产品功能全部要移植**；BOARD A3/A4/A5/A6 与 U13–U18 从 ⏭ 改为 ❌
+- Git 默认 isomorphic-git（禁止跳过、禁止 `git.exe`）
+- PORTING §0 区分「功能对齐」与「壳不照搬」（单窗 / SAF / 无 AppMenuBar）
+- **未改** `android/src` 实现
+
+## 2026-08-14（Win 架构核对 · 移植交接重写）
+- [`PORTING-WIN-TO-ANDROID.md`](./PORTING-WIN-TO-ANDROID.md) 按 Win **0.3.0** / `toolApi: 2026-08-14-a` 重写：现状表 + 能力矩阵 + 硬规则（AI 扫描）
+- README / BOARD 指纹与「Win 超前项」对齐；新增 BOARD **A4** PDF 不移植；A3 注明 Win 分镜已完整、本版仍 ⏭
+- `open/auto-apply-git.md` / literary-memory restore 契约去掉过时 Accept；指纹改为当前串
+- **未改** `android/src` 实现
+
+## 2026-08-12（Win 0.3.0 分镜头 · 不移植）
+- BOARD **A3** ⏭：分镜头稿本 + 简化 PR（`.kyboard`）等 Win 完整版后再移植
+- Win 真源：[`../win/project-memory/STORYBOARD.md`](../win/project-memory/STORYBOARD.md)
+
 ## 2026-08-12（文档对齐 Win Git l）
 - **未混入实现**：Android 仍无 Git/`U13–U18` 代码；BOARD U13–U18 保持 ⏭
-- 契约镜像 [`open/auto-apply-git.md`](./open/auto-apply-git.md) 指纹对齐 Win **`2026-08-12-l`**；文首标明 Win 真源 [`../win/project-memory/AGENT-GIT.md`](../win/project-memory/AGENT-GIT.md)
+- 契约镜像 [`open/auto-apply-git.md`](./open/auto-apply-git.md) 指纹对齐 Win **`2026-08-12-o`**；文首标明 Win 真源 [`../win/project-memory/AGENT-GIT.md`](../win/project-memory/AGENT-GIT.md)
 - 修正过期表述：README 曾写 `-f`+§七 OPEN；PORTING/BOARD/gotchas 曾写 `-c`；清单内曾写 `-k`/`-i`
 - README 增加 Win AGENT-GIT 链接
 

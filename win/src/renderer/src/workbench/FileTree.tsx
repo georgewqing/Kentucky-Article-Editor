@@ -10,10 +10,12 @@ import {
   type FormEvent,
   type MouseEvent
 } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import type { FileEntry } from '@/platform'
 import { getPlatform } from '@/platform'
 import { useAppStore } from '@/state/appStore'
+import { canExportPathToPdf, exportPathToPdf } from '@/export/exportPdf'
 import {
   isCharactersPath,
   isDialogueChoicesPath,
@@ -25,6 +27,7 @@ import {
 import { applyStemKeepExt, displayEntryName, splitKnownExt } from './explorerNames'
 import { ChevronRight, Folder, FolderOpen } from 'lucide-react'
 import { KENTUCKY_PATH_MIME } from './dnd'
+import { useFittedMenuPos } from './fitContextMenu'
 import {
   loadExplorerExpandPrefs,
   pathExpandKey,
@@ -72,8 +75,12 @@ function FileIcon({ entry }: { entry: FileEntry }) {
   if (isDialogueMetaPath(entry.path)) return <span className="tree-icon tree-icon-meta">m</span>
   if (isDialogueChoicesPath(entry.path)) return <span className="tree-icon tree-icon-meta">ch</span>
   if (isDialogueLayoutPath(entry.path)) return <span className="tree-icon tree-icon-meta">ly</span>
-  const ext = getPlatform().extname(entry.path)
+  const ext = getPlatform().extname(entry.path).toLowerCase()
   if (ext === '.kmind') return <span className="tree-icon tree-icon-mind">M</span>
+  if (ext === '.kyboard') return <span className="tree-icon tree-icon-storyboard">SB</span>
+  if (ext === '.png') return <span className="tree-icon tree-icon-image">PNG</span>
+  if (ext === '.mp4') return <span className="tree-icon tree-icon-video">MP4</span>
+  if (ext === '.pdf') return <span className="tree-icon tree-icon-pdf">PDF</span>
   if (ext === '.md') return <span className="tree-icon tree-icon-md">MD</span>
   return <span className="tree-icon tree-icon-file">T</span>
 }
@@ -315,7 +322,7 @@ export function FileTree({
   onRequestCreate
 }: {
   entries: FileEntry[]
-  onRequestCreate: (kind: 'file' | 'folder' | 'mindmap' | 'dialogue', parentDir: string) => void
+  onRequestCreate: (kind: 'file' | 'folder' | 'mindmap' | 'dialogue' | 'storyboard', parentDir: string) => void
 }) {
   const { t } = useTranslation()
   const workspacePath = useAppStore((s) => s.workspacePath)
@@ -323,6 +330,7 @@ export function FileTree({
   const renameEntry = useAppStore((s) => s.renameEntry)
   const moveEntry = useAppStore((s) => s.moveEntry)
   const [menu, setMenu] = useState<MenuState>(null)
+  const { menuRef, menuPos } = useFittedMenuPos(Boolean(menu), menu?.x ?? 0, menu?.y ?? 0)
   const [renameTarget, setRenameTarget] = useState<FileEntry | null>(null)
   const [renameStem, setRenameStem] = useState('')
   const [renameExt, setRenameExt] = useState('')
@@ -554,13 +562,15 @@ export function FileTree({
           )}
         </ul>
 
-        {menu ? (
-          <div
-            className="ctx-menu"
-            style={{ left: menu.x, top: menu.y }}
-            onClick={(e) => e.stopPropagation()}
-            onContextMenu={(e) => e.preventDefault()}
-          >
+        {menu
+          ? createPortal(
+            <div
+              ref={menuRef}
+              className="ctx-menu"
+              style={{ left: menuPos.x, top: menuPos.y }}
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => e.preventDefault()}
+            >
             <button
               type="button"
               onClick={() => {
@@ -587,6 +597,15 @@ export function FileTree({
               }}
             >
               {t('explorer.newMindMap')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onRequestCreate('storyboard', menu.targetDir)
+                setMenu(null)
+              }}
+            >
+              {t('explorer.newStoryboard')}
             </button>
             <button
               type="button"
@@ -620,6 +639,20 @@ export function FileTree({
                 >
                   {t('explorer.revealInFolder')}
                 </button>
+                {menu.entry &&
+                !menu.entry.isDirectory &&
+                canExportPathToPdf(menu.entry.path) ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const path = menu.entry!.path
+                      setMenu(null)
+                      void exportPathToPdf(path)
+                    }}
+                  >
+                    {t('explorer.exportPdf')}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="danger"
@@ -646,8 +679,10 @@ export function FileTree({
                 </button>
               </>
             ) : null}
-          </div>
-        ) : null}
+            </div>,
+            document.body
+          )
+        : null}
 
         {renameTarget ? (
           <div className="app-dialog-backdrop" role="presentation">

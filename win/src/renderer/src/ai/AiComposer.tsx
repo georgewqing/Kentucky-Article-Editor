@@ -201,7 +201,7 @@ export function AiComposer() {
     }, 50)
   }
 
-  const resolveDropRelPath = (raw: string): string | null => {
+  const resolveDropRelPath = async (raw: string): Promise<string | null> => {
     const trimmed = raw.trim().replace(/\\/g, '/')
     if (!trimmed || !workspacePath) return null
     const platform = getPlatform()
@@ -222,6 +222,10 @@ export function AiComposer() {
       findTreeEntry(fileTree, trimmed) || findTreeEntry(fileTree, absCandidate)
     // Folders keep a trailing slash so chips / agent context can tell them apart.
     if (entry?.isDirectory) {
+      return rel.replace(/\/+$/, '') + '/'
+    }
+    // Tree may not have the node yet — probe the filesystem.
+    if (await platform.isDirectory(absCandidate)) {
       return rel.replace(/\/+$/, '') + '/'
     }
     return rel.replace(/\/+$/, '')
@@ -257,19 +261,26 @@ export function AiComposer() {
     setDropActive(false)
     const raw =
       e.dataTransfer.getData(KENTUCKY_PATH_MIME) || e.dataTransfer.getData('text/plain') || ''
-    const rel = resolveDropRelPath(raw)
-    if (rel) addAttachment(rel)
+    void resolveDropRelPath(raw).then((rel) => {
+      if (rel) addAttachment(rel)
+    })
   }
 
   return (
     <div
-      className={`ai-composer${dropActive ? ' is-drop-target' : ''}`}
+      className={`ai-composer${dropActive ? ' is-drop-target' : ''}${streaming ? ' is-streaming' : ''}`}
       ref={rootRef}
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
+      <span className="ai-composer-glow" aria-hidden="true">
+        <span className="ai-composer-glow-bloom" />
+        <span className="ai-composer-glow-ring">
+          <span className="ai-composer-glow-spin" />
+        </span>
+      </span>
       {slashOpen && slashToken ? (
         <div className="ai-slash-menu" role="listbox" aria-label={t('ai.slashMenu')}>
           {skillMatchCount > 0 ? (
@@ -535,7 +546,7 @@ export function AiComposer() {
               className="ai-composer-send"
               title={t('ai.send')}
               aria-label={t('ai.send')}
-              disabled={!draft.trim() && !composerSkillId}
+              disabled={!draft.trim() && !composerSkillId && attachments.length === 0}
               onClick={() => void send()}
             >
               <ArrowUp size={16} aria-hidden />

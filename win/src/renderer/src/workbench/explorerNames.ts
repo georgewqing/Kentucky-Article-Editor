@@ -4,7 +4,11 @@ const STRIP_EXTS = [
   '.dialogue.choices.json',
   '.dialogue.meta.json',
   '.dialogue.csv',
+  '.kyboard',
   '.kmind',
+  '.png',
+  '.mp4',
+  '.pdf',
   '.md',
   '.txt',
   '.csv',
@@ -14,6 +18,7 @@ const STRIP_EXTS = [
 /** Extension used when creating a plain text/markdown file from the sidebar. */
 export const CREATE_FILE_EXT = '.md'
 export const CREATE_MINDMAP_EXT = '.kmind'
+export const CREATE_STORYBOARD_EXT = '.kyboard'
 
 export function splitKnownExt(fileName: string): { stem: string; ext: string } {
   const lower = fileName.toLowerCase()

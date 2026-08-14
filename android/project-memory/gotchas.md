@@ -25,7 +25,7 @@
 
 ## Agent 落盘（与 Win U13+ 对齐时注意）
 
-16. Capacitor 真机历史上曾对 Accept **强制落盘**（防杀进程丢缓冲）。Win 现已 **始终写盘、无 Accept**，并演进到 `toolApi: 2026-08-12-l`（Git L5 等，见 [`../win/project-memory/AGENT-GIT.md`](../win/project-memory/AGENT-GIT.md)）。Android 移植 U14 时必须 `WorkspaceIo.write` 真写 SAF，不能只标脏；契约镜像 [`open/auto-apply-git.md`](./open/auto-apply-git.md)。
+16. Capacitor 真机历史上曾对 Accept **强制落盘**（防杀进程丢缓冲）。Win 现已 **始终写盘、无 Accept**，当前 `toolApi: 2026-08-14-a`（见 [`../win/project-memory/AGENT-GIT.md`](../win/project-memory/AGENT-GIT.md) 与 [`AGENT-TOOL-FEEDBACK.md`](../win/project-memory/AGENT-TOOL-FEEDBACK.md) §2.0）。Android 移植 U14 时必须 `WorkspaceIo.write` 真写 SAF，不能只标脏；契约镜像 [`open/auto-apply-git.md`](./open/auto-apply-git.md)。
 17. 角色 upsert / 小台词 append 的 auto 路径同理：杀进程比桌面更危险。
 
 ## 系统栏 / 布局 / 触控
@@ -36,10 +36,21 @@
 21. **React Flow 画布**：默认滚轮/双指滑动是**平移**；缩放用捏合或 **Ctrl/Meta + 滚轮**。
 22. **禁止**在 `index.html` viewport 写 `maximum-scale=1` / `user-scalable=no` — 会吃掉列表滚动。整页缩放靠 MainActivity `setSupportZoom(false)` + 画布 `touch-action: none`。
 23. 手指长按画布/文件树**不会**开上下文菜单；触控板双指点按与 Ctrl+左键会开。
-24. 改 `MainActivity` 后需 **Run 重装**；仅 `cap sync` 网页不够。
-25. **A1 待真机验收**：MD TipTap 与 AI 在触控板上曾互斥；现由 `MainActivity` 截获 `ACTION_SCROLL` 经 `kentucky:native-wheel` 重派发。详见 [`open/trackpad-scroll.md`](./open/trackpad-scroll.md)。
+24. 标签栏 / 分屏：见下节。禁止退回原生 `<select>`，禁止恢复右键指定分屏。
+25. 改 `MainActivity` 后需 **Run 重装**；仅 `cap sync` 网页不够。
+26. **A1 待真机验收**：MD TipTap 与 AI 在触控板上曾互斥；现由 `MainActivity` 截获 `ACTION_SCROLL` 经 `kentucky:native-wheel` 重派发。详见 [`open/trackpad-scroll.md`](./open/trackpad-scroll.md)。
+
+## 标签栏 / 分屏
+
+Win 踩坑真源：[`../win/project-memory/gotchas.md`](../win/project-memory/gotchas.md)「标签栏 / 分屏」。Android 额外：
+
+- `EditorArea.tsx` 在「永远不能被 Win 覆盖」名单里：对照移植，保留 `compactLayout` 与现有编辑器路由（无分镜/媒体预览）。
+- WebView 同样：右键改序要 `preventDefault` + 对该 tab `setPointerCapture` + `mousemove` 兜底；**不要** `lostpointercapture` 当结束。
+- 不要给 `.tab` 常驻 `touch-action: none`（挡手指横滑标签栏）。只在 `.is-reordering` 时加。
+- 「此栏」用 portal `.ctx-menu`（`fitContextMenu.ts`）；`.editor-pane` overflow 会裁切非 portal 菜单。Android `.ctx-menu` 默认 z-index 1000，此栏菜单须提到 10000，以免被 AI 抽屉盖住。
+- 滚轮横滑同样 `{ passive: false }`；真机触控板还走 `kentucky:native-wheel`（A1）。
 
 ## 其它
 
-26. Toast / 对话框退出动画需保留 DOM；尊重 `prefers-reduced-motion`。
-27. 清空上下文后续聊：先读 [`README.md`](./README.md) → [`BOARD.md`](./BOARD.md)。
+27. Toast / 对话框退出动画需保留 DOM；尊重 `prefers-reduced-motion`。
+28. 清空上下文后续聊：先读 [`README.md`](./README.md) → [`BOARD.md`](./BOARD.md)。

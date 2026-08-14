@@ -1,7 +1,7 @@
 # 契约：文学记忆（H1–H4 / Round H）
 
 > **状态**：OPEN / 未开始移植  
-> **Win 指纹**：`toolApi: "2026-08-11-j"`  
+> **Win 指纹**：引入时 `2026-08-11-j`；**对齐时用 Win 当前** `2026-08-14-a`  
 > **进度**：[`../BOARD.md`](../BOARD.md)  
 > **Win 源**：[AGENT-TOOL-FEEDBACK](../../../win/project-memory/AGENT-TOOL-FEEDBACK.md) · [REQ](../../../win/project-memory/REQ-literary-agent-capability-upgrade.md) · [基线 §四](../../../win/project-memory/AGENT-TOOL-TEST-BASELINE.md)  
 > **勿 import `win/`**；IO 一律 `WorkspaceIo`
@@ -90,11 +90,11 @@ Round H **可以**在 W 项未全绿时开始拷贝纯逻辑模块（YAML schema
 | `forceReviewAllWrites` | 仍可压成 pending |
 | `materials/<slug>.md` | **prose**（新建 auto；覆盖现有 → Accept） |
 | `materials/index.yaml` | `materials_index` → auto+强制盘 |
-| `propose_restore_revision` 正文 | prose/other → **Accept**；Accept 后同步脏缓冲（对齐 DocumentHub / Android 等价缓冲） |
+| `propose_restore_revision` 正文 | **自动写盘**（无 Accept）；同步脏缓冲（对齐 DocumentHub / Android 等价缓冲） |
 | 故事语义冲突 | **永不**改变 `decideAutoApply`；只出 `issues[]` |
 
 `gateDetail.reason` 记忆类：`memory_yaml_upsert`。  
-`toolApi` 必须与 Win 当前字符串一致（移植完成时至少 `2026-08-11-j`；若 Win 已再 bump 则以 Win 为准）。
+`toolApi` 必须与 Win 当前字符串一致（现 `2026-08-14-a`）。
 
 路径推断（`inferKind`）需识别 basename：
 
@@ -256,7 +256,7 @@ byPov:
 
 ## 8. 验收清单（与 Win 基线 §四对齐）
 
-指纹：结果含 `toolApi`（与 Win 当前一致，至少 `2026-08-11-j`）。
+指纹：结果含 `toolApi`（与 Win 当前一致，现 `2026-08-14-a`）。
 
 1. 空工作区随笔：`continuity_check` aspects 含 timeline → `story_state_missing` info，**无** stale，**无** L5 状态摘要  
 2. `propose_upsert_story_state` 一章（含 `sourcePath`）→ 启用；L5 出现计数摘要 + 调用 CTA（无道具名/伏笔正文）  

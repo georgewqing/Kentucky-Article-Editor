@@ -36,6 +36,8 @@ const api = {
     ipcRenderer.invoke('fs:rename', oldPath, newPath),
   delete: (targetPath: string): Promise<boolean> => ipcRenderer.invoke('fs:delete', targetPath),
   exists: (targetPath: string): Promise<boolean> => ipcRenderer.invoke('fs:exists', targetPath),
+  isDirectory: (targetPath: string): Promise<boolean> =>
+    ipcRenderer.invoke('fs:isDirectory', targetPath),
   copyFile: (src: string, dest: string): Promise<boolean> =>
     ipcRenderer.invoke('fs:copyFile', src, dest),
   toMediaUrl: (filePath: string): Promise<string> => ipcRenderer.invoke('fs:toMediaUrl', filePath),
@@ -51,7 +53,7 @@ const api = {
   runMenuAction: (action: string): Promise<boolean> => ipcRenderer.invoke('menu:runAction', action),
 
   getWindowBootstrap: (): Promise<WindowBootstrap> => ipcRenderer.invoke('window:getBootstrap'),
-  reportWorkspace: (workspacePath: string | null): Promise<boolean> =>
+  reportWorkspace: (workspacePath: string | null): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('window:reportWorkspace', workspacePath),
   newMainWindow: (workspacePath?: string | null): Promise<boolean> =>
     ipcRenderer.invoke('window:newMain', { workspacePath }),
@@ -122,6 +124,11 @@ const api = {
     ipcRenderer.on('menu:save', handler)
     return () => ipcRenderer.removeListener('menu:save', handler)
   },
+  onMenuExportPdf: (cb: () => void): (() => void) => {
+    const handler = (): void => cb()
+    ipcRenderer.on('menu:exportPdf', handler)
+    return () => ipcRenderer.removeListener('menu:exportPdf', handler)
+  },
   onMenuNewWindow: (cb: () => void): (() => void) => {
     const handler = (): void => cb()
     ipcRenderer.on('menu:newWindow', handler)
@@ -131,6 +138,14 @@ const api = {
     const handler = (): void => cb()
     ipcRenderer.on('menu:newMainWindow', handler)
     return () => ipcRenderer.removeListener('menu:newMainWindow', handler)
+  },
+  onOpenDocument: (cb: (payload: { workspacePath: string; filePath: string }) => void): (() => void) => {
+    const handler = (
+      _e: Electron.IpcRendererEvent,
+      payload: { workspacePath: string; filePath: string }
+    ): void => cb(payload)
+    ipcRenderer.on('shell:openDocument', handler)
+    return () => ipcRenderer.removeListener('shell:openDocument', handler)
   },
   onDocApply: (cb: (snap: DocSnapshot) => void): (() => void) => {
     const handler = (_e: Electron.IpcRendererEvent, snap: DocSnapshot): void => cb(snap)
@@ -227,6 +242,47 @@ const api = {
     const handler = (_e: Electron.IpcRendererEvent, payload: unknown): void => cb(payload)
     ipcRenderer.on(channel, handler)
     return () => ipcRenderer.removeListener(channel, handler)
+  },
+
+  storyboardGenerateBlank: (payload: {
+    workspaceRoot: string
+    kyboardAbsPath: string
+    layout: unknown
+    fileName?: string
+    targetDirAbs?: string
+  }): Promise<unknown> => ipcRenderer.invoke('storyboard:generateBlank', payload),
+  storyboardImportSheet: (payload: {
+    workspaceRoot: string
+    kyboardAbsPath: string
+    sourceAbs: string
+  }): Promise<unknown> => ipcRenderer.invoke('storyboard:importSheet', payload),
+  storyboardSliceSheet: (payload: unknown): Promise<unknown> =>
+    ipcRenderer.invoke('storyboard:sliceSheet', payload),
+  storyboardSheetSize: (layout: unknown): Promise<{ width: number; height: number }> =>
+    ipcRenderer.invoke('storyboard:sheetSize', layout),
+  storyboardExportMp4: (payload: {
+    workspaceRoot: string
+    doc: unknown
+    outAbsPath: string
+  }): Promise<unknown> => ipcRenderer.invoke('storyboard:exportMp4', payload),
+  openPngDialog: (): Promise<string | null> => ipcRenderer.invoke('dialog:openPng'),
+  openMp3Dialog: (): Promise<string | null> => ipcRenderer.invoke('dialog:openMp3'),
+  saveMp4Dialog: (opts?: string | { defaultPath?: string }): Promise<string | null> =>
+    ipcRenderer.invoke('dialog:saveMp4', opts),
+  savePngDialog: (opts?: string | { defaultPath?: string }): Promise<string | null> =>
+    ipcRenderer.invoke('dialog:savePng', opts),
+  savePdfDialog: (opts?: string | { defaultPath?: string }): Promise<string | null> =>
+    ipcRenderer.invoke('dialog:savePdf', opts),
+  exportPdf: (payload: {
+    destAbs: string
+    html: string
+    landscape?: boolean
+  }): Promise<{ ok: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke('pdf:export', payload),
+  onStoryboardExportProgress: (cb: (payload: { pct: number }) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, payload: { pct: number }): void => cb(payload)
+    ipcRenderer.on('storyboard:exportProgress', handler)
+    return () => ipcRenderer.removeListener('storyboard:exportProgress', handler)
   }
 }
 

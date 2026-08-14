@@ -12,9 +12,11 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/renderer/src/*"]
+      "@/*": ["src/renderer/src/*"],
+      "@shared/*": ["src/shared/*"],
+      "@brand/*": ["build/*"]
     },
     "noEmit": true
   },
-  "include": ["src/renderer/src/**/*", "src/common/**/*"]
+  "include": ["src/renderer/src/**/*", "src/common/**/*", "src/shared/**/*"]
 }

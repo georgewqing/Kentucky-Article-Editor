@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron'
+import { getWindowMeta } from '../windowRegistry'
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
-import { isAbsolute, join } from 'path'
+import { join, resolve } from 'path'
 import { randomUUID } from 'crypto'
 import {
   loadSession,
@@ -13,6 +14,7 @@ import {
   type PlanStep
 } from './chatSessions'
 import { loadAiSettings } from './aiSettings'
+import { REVISIONS_DIR } from './revisions'
 import {
   streamChatCompletion,
   type ChatCompletionMessage
@@ -23,8 +25,10 @@ import {
   runTool,
   LITERARY_SYSTEM_PROMPT,
   applyProposalToDisk,
+  resolveWorkspacePath,
   type AgentToolMode
 } from './tools'
+import { isDialogReadAllowed } from './workspacePath'
 import { parseCharactersCsv } from './formats'
 import {
   decideAutoApply,
@@ -32,6 +36,8 @@ import {
   type GateDecision
 } from './proposalGate'
 import { skillsCatalogText, loadSkill } from './skills'
+import { buildDesignL5Summary, workspaceHasDesignTree } from './designGddL5'
+import { looksLikeToolDump, sanitizeAskAssistantContent } from './askGuard'
 
 const activeAborts = new Map<number, AbortController>()
 const MAX_CTX_FILE_CHARS = 24000
@@ -50,23 +56,37 @@ function send(win: BrowserWindow, channel: string, payload: unknown): void {
   if (!win.isDestroyed()) win.webContents.send(channel, payload)
 }
 
-function pathKey(p: string): string {
-  return p.replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase()
+/** Keep sandbox-refusal JSON intact so the refused path is not cut at 400 chars. */
+function toolResultPreview(result: string): string {
+  try {
+    const o = JSON.parse(result) as { error?: unknown }
+    if (typeof o.error === 'string' && o.error.startsWith('Path escapes workspace')) {
+      return result
+    }
+  } catch {
+    /* not JSON */
+  }
+  return result.length <= 400 ? result : result.slice(0, 400)
 }
 
 function readAbsSafe(workspaceRoot: string | null, filePath: string): string | null {
-  if (!workspaceRoot || !filePath) return null
-  try {
-    const cleaned = filePath.replace(/[/\\]+$/, '')
-    const abs = isAbsolute(cleaned) ? cleaned : join(workspaceRoot, cleaned)
-    const rootKey = pathKey(workspaceRoot)
-    const absKey = pathKey(abs)
-    if (absKey !== rootKey && !absKey.startsWith(rootKey + '\\')) return null
-    if (!existsSync(abs)) return null
-    return abs
-  } catch {
-    return null
+  if (!filePath) return null
+  const raw = filePath.replace(/[/\\]+$/, '')
+  if (workspaceRoot) {
+    try {
+      const abs = resolveWorkspacePath(workspaceRoot, raw)
+      if (existsSync(abs)) return abs
+    } catch {
+      /* dialog allowlist */
+    }
   }
+  try {
+    const abs = resolve(raw)
+    if (isDialogReadAllowed(abs) && existsSync(abs)) return abs
+  } catch {
+    /* ignore */
+  }
+  return null
 }
 
 /** File body, or shallow directory listing for mounted folders. */
@@ -76,9 +96,14 @@ function readWorkspaceMention(workspaceRoot: string | null, filePath: string): s
   try {
     const st = statSync(abs)
     if (st.isDirectory()) {
-      const all = readdirSync(abs, { withFileTypes: true }).filter(
-        (e) => e.name !== '.git' && e.name !== 'node_modules'
+      const listingRoot = Boolean(
+        workspaceRoot && resolve(abs) === resolve(workspaceRoot)
       )
+      const all = readdirSync(abs, { withFileTypes: true }).filter((e) => {
+        if (e.name === '.git' || e.name === 'node_modules') return false
+        if (listingRoot && e.isDirectory() && e.name === REVISIONS_DIR) return false
+        return true
+      })
       const entries = all.slice(0, 48)
       const lines = entries.map((e) => `${e.isDirectory() ? '[dir]' : '[file]'} ${e.name}`)
       const label = filePath.replace(/\\/g, '/').replace(/\/+$/, '') + '/'
@@ -91,15 +116,141 @@ function readWorkspaceMention(workspaceRoot: string | null, filePath: string): s
   return readWorkspaceText(workspaceRoot, filePath.replace(/[/\\]+$/, ''), null)
 }
 
+/**
+ * Expand a user bubble for the model API: bind composer chips to deixis
+ * (这个/该/this folder…) so mounts are not ignored in favor of workspace L5.
+ * UI still shows the original short content + chips.
+ */
+function expandUserMountsForApi(m: ChatMessage, workspaceRoot: string | null): string {
+  const paths = (m.attachedPaths || [])
+    .map((p) => p.replace(/\\/g, '/').trim())
+    .filter(Boolean)
+  if (!paths.length) return m.content
+
+  const lines: string[] = [
+    '[Composer mounts for this message — these ARE the referent of 这个/那个/该文件/该文件夹/这目录/this/that/it file/folder/path in the user text. Answer about THESE paths. Do not inventory the whole workspace unless the user explicitly asks.]',
+    ''
+  ]
+  for (const rel of paths.slice(0, 8)) {
+    const body = readWorkspaceMention(workspaceRoot, rel)
+    lines.push(`# Mounted: ${rel}`)
+    if (!body) {
+      lines.push(
+        '(Could not read — missing, unreadable, or outside the workspace sandbox. Tell the user.)'
+      )
+    } else {
+      lines.push('"""')
+      lines.push(body)
+      lines.push('"""')
+    }
+    lines.push('')
+  }
+  if (paths.length > 8) {
+    lines.push(`…and ${paths.length - 8} more mount(s) omitted.`)
+    lines.push('')
+  }
+  lines.push('---')
+  lines.push('User message:')
+  lines.push(m.content?.trim() ? m.content : '(no text — answer about the mounts above)')
+  return lines.join('\n')
+}
+
+function ensureUserApiContent(m: ChatMessage, workspaceRoot: string | null): string {
+  if (typeof m.apiContent === 'string') return m.apiContent
+  const expanded = expandUserMountsForApi(m, workspaceRoot)
+  m.apiContent = expanded
+  return expanded
+}
+
+const EDITOR_CTX_SEP = '\n\n---\nEditor context:\n'
+const TURN_HINT_SEP = '\n\n---\nTurn instructions:\n'
+
+async function buildEditorContextText(
+  editor: EditorContextPayload,
+  session: ChatSession,
+  mode: AgentToolMode
+): Promise<string> {
+  const ctxParts: string[] = []
+  const attachedNorm = (editor.attachedPaths || [])
+    .map((p) => p.replace(/\\/g, '/').trim())
+    .filter(Boolean)
+  const attachedKeys = new Set(attachedNorm.map((p) => p.replace(/\/+$/, '').toLowerCase()))
+  // Mounts first — otherwise L5 / active-file dumps drown the subject.
+  if (attachedNorm.length) {
+    ctxParts.push(
+      `PRIMARY SUBJECT (composer mounts this turn): ${attachedNorm.join(', ')}`,
+      'Deixis (这个/该文件夹/this folder…) refers to these mounts, not the workspace root or the active tab.'
+    )
+  }
+  if (editor.workspacePath) ctxParts.push(`Workspace: ${editor.workspacePath}`)
+
+  const cast = buildCharacterSummary(editor.workspacePath)
+  if (cast) ctxParts.push(cast)
+
+  if (editor.workspacePath) {
+    const storyL5 = buildStoryStateL5Summary(editor.workspacePath)
+    if (storyL5) ctxParts.push(storyL5)
+    const designL5 = buildDesignL5Summary(editor.workspacePath)
+    if (designL5) ctxParts.push(designL5)
+    try {
+      const { buildGitL5Summary } = await import('../git/gitService')
+      const gitL5 = await buildGitL5Summary(editor.workspacePath)
+      if (gitL5) ctxParts.push(gitL5)
+    } catch {
+      /* git optional */
+    }
+  }
+
+  if (editor.activeFilePath) {
+    ctxParts.push(`Active file: ${editor.activeFilePath}`)
+    if (!attachedNorm.length) {
+      const body = readWorkspaceText(editor.workspacePath, editor.activeFilePath, editor.selection)
+      if (body) ctxParts.push(`Active file content:\n"""\n${body}\n"""`)
+    } else {
+      ctxParts.push(
+        mode === 'ask'
+          ? '(Active file body omitted this turn — composer mounts are the primary subject.)'
+          : '(Active file body omitted this turn — composer mounts are the primary subject. Use read_file if you still need the open tab.)'
+      )
+    }
+  }
+  if (editor.selection) ctxParts.push(`Selection:\n"""\n${editor.selection.slice(0, 12000)}\n"""`)
+  if (editor.mentionedPaths?.length) {
+    const mentionOnly = editor.mentionedPaths.filter((rel) => {
+      const key = rel.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+      return !attachedKeys.has(key)
+    })
+    if (mentionOnly.length) {
+      ctxParts.push(`@mentions: ${mentionOnly.join(', ')}`)
+      for (const rel of mentionOnly.slice(0, 8)) {
+        const body = readWorkspaceMention(editor.workspacePath, rel)
+        if (body) ctxParts.push(`@${rel}:\n"""\n${body}\n"""`)
+      }
+    }
+  }
+  if (session.planFileRel) {
+    ctxParts.push(`Active plan file: ${session.planFileRel}`)
+    if (mode !== 'ask') {
+      ctxParts.push(
+        'If executing work from a prior Plan mode, call read_file on that path first, then follow its todos. Soft: update_plan_step when completing steps.'
+      )
+    }
+  }
+  return ctxParts.join('\n')
+}
+
 /** CRITICAL turn hint for composer paperclip mounts (parity with skill body injection). */
 function buildMountedFilesHint(
   workspaceRoot: string | null,
   attachedPaths: string[]
 ): string | null {
   if (!attachedPaths.length) return null
+  const labels = attachedPaths.slice(0, 8).map((p) => p.replace(/\\/g, '/'))
   const blocks: string[] = [
     'CRITICAL: User mounted file(s) / folder(s) via the composer chip for this turn.',
-    'These are primary attached workspace paths — treat them as the subject of the request.',
+    `Primary subject path(s): ${labels.join(', ')}`,
+    'Deixis rule: 这个/那个/该文件/该文件夹/这目录/this/that/it → the mount(s) above, NOT the open tab, NOT a workspace survey.',
+    'If the user asks what is in a mounted folder, list that folder’s entries (already injected below and in the user message). Do not list the whole workspace root.',
     'They are NOT skills. Skills are /id capsules whose SKILL.md body is injected separately.',
     'Do not ask the user to re-attach or claim you cannot see a mounted path if its body is below.',
     ''
@@ -185,75 +336,53 @@ function buildCharacterSummary(workspaceRoot: string | null): string | null {
   }
 }
 
-async function toApiMessagesWithTools(
+function flattenToolHistoryText(
+  m: ChatMessage & {
+    toolCalls?: Array<{ id: string; name: string; arguments: string }>
+  }
+): string {
+  if (m.role === 'tool') {
+    const name = m.toolName || 'tool'
+    const body = (m.content || '').slice(0, 4000)
+    return `[Prior ${name} result]\n${body}`
+  }
+  if (m.role === 'assistant' && m.toolCalls?.length) {
+    const names = m.toolCalls.map((t) => t.name).join(', ')
+    return (m.content || '').trim() || `(called ${names})`
+  }
+  return m.content
+}
+
+function toApiMessagesWithTools(
   session: ChatSession,
   editor: EditorContextPayload,
   mode: AgentToolMode,
-  turnSystemHint?: string
-): Promise<ChatCompletionMessage[]> {
+  pack: {
+    editorContextText: string
+    turnHint?: string
+    userTurnId: string
+    flattenToolHistory: boolean
+  }
+): ChatCompletionMessage[] {
   const settings = loadAiSettings()
   const msgs: ChatCompletionMessage[] = [
     {
       role: 'system',
       content: LITERARY_SYSTEM_PROMPT(settings.styleMemo, mode, {
         skillsCatalog: skillsCatalogText(),
-        webSearchEnabled: settings.webSearchEnabled
+        webSearchEnabled: settings.webSearchEnabled,
+        designDiscipline: workspaceHasDesignTree(editor.workspacePath)
       })
     }
   ]
-  const ctxParts: string[] = []
-  if (editor.workspacePath) ctxParts.push(`Workspace: ${editor.workspacePath}`)
-
-  const cast = buildCharacterSummary(editor.workspacePath)
-  if (cast) ctxParts.push(cast)
-
-  if (editor.workspacePath) {
-    const storyL5 = buildStoryStateL5Summary(editor.workspacePath)
-    if (storyL5) ctxParts.push(storyL5)
-    try {
-      const { buildGitL5Summary } = await import('../git/gitService')
-      const gitL5 = await buildGitL5Summary(editor.workspacePath)
-      if (gitL5) ctxParts.push(gitL5)
-    } catch {
-      /* git optional */
-    }
-  }
-
-  if (editor.activeFilePath) {
-    ctxParts.push(`Active file: ${editor.activeFilePath}`)
-    const body = readWorkspaceText(editor.workspacePath, editor.activeFilePath, editor.selection)
-    if (body) ctxParts.push(`Active file content:\n"""\n${body}\n"""`)
-  }
-  if (editor.selection) ctxParts.push(`Selection:\n"""\n${editor.selection.slice(0, 12000)}\n"""`)
-  if (editor.mentionedPaths?.length) {
-    const attachedKeys = new Set(
-      (editor.attachedPaths || []).map((p) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase())
-    )
-    ctxParts.push(`@mentions: ${editor.mentionedPaths.join(', ')}`)
-    for (const rel of editor.mentionedPaths.slice(0, 8)) {
-      const key = rel.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
-      // Paperclip mounts are injected as CRITICAL turn hints — skip duplicate bodies here.
-      if (attachedKeys.has(key)) continue
-      const body = readWorkspaceMention(editor.workspacePath, rel)
-      if (body) ctxParts.push(`@${rel}:\n"""\n${body}\n"""`)
-    }
-  }
-  if (session.planFileRel) {
-    ctxParts.push(
-      `Active plan file: ${session.planFileRel}`,
-      'If executing work from a prior Plan mode, call read_file on that path first, then follow its todos. Soft: update_plan_step when completing steps.'
-    )
-  }
-  if (ctxParts.length) msgs.push({ role: 'system', content: `Editor context:\n${ctxParts.join('\n')}` })
-  if (turnSystemHint?.trim()) {
-    msgs.push({ role: 'system', content: turnSystemHint.trim() })
-  }
 
   for (const m of session.messages) {
     const extra = m as ChatMessage & {
       toolCalls?: Array<{ id: string; name: string; arguments: string }>
     }
-    if (m.role === 'assistant' && extra.toolCalls?.length) {
+    if (pack.flattenToolHistory && (m.role === 'tool' || extra.toolCalls?.length)) {
+      msgs.push({ role: 'assistant', content: flattenToolHistoryText(extra) })
+    } else if (m.role === 'assistant' && extra.toolCalls?.length) {
       msgs.push({
         role: 'assistant',
         content: m.content || null,
@@ -269,7 +398,26 @@ async function toApiMessagesWithTools(
         content: m.content,
         tool_call_id: m.toolCallId || 'unknown'
       })
-    } else if (m.role === 'user' || m.role === 'system' || m.role === 'assistant') {
+    } else if (m.role === 'user') {
+      let content: string
+      if (m.id === pack.userTurnId) {
+        if (typeof m.apiContent === 'string') {
+          content = m.apiContent
+        } else {
+          content = expandUserMountsForApi(m, editor.workspacePath)
+          if (pack.editorContextText.trim()) {
+            content += `${EDITOR_CTX_SEP}${pack.editorContextText.trim()}`
+          }
+          if (pack.turnHint?.trim()) {
+            content += `${TURN_HINT_SEP}${pack.turnHint.trim()}`
+          }
+          m.apiContent = content
+        }
+      } else {
+        content = ensureUserApiContent(m, editor.workspacePath)
+      }
+      msgs.push({ role: 'user', content })
+    } else if (m.role === 'system' || m.role === 'assistant') {
       msgs.push({ role: m.role, content: m.content })
     }
   }
@@ -285,13 +433,16 @@ function commitProposal(
   settings: ReturnType<typeof loadAiSettings>
 ): { autoApplied: boolean; gate: GateDecision; writeDisk: boolean } {
   p.messageId = assistantId
+  p.status = 'applied'
   const gate = decideAutoApply(p, turnPaths, settings)
   turnPaths.add(p.absPath.replace(/\//g, '\\').toLowerCase())
   const isNewFile = !p.before
   // Always auto + always disk (architecture: Git working tree)
-  applyProposalToDisk(p)
-  p.status = 'applied'
-  session.proposals.push(p)
+  applyProposalToDisk(p, session.workspacePath || undefined)
+  if (!session.proposals) session.proposals = []
+  const existing = session.proposals.findIndex((x) => x.id === p.id)
+  if (existing >= 0) session.proposals[existing] = p
+  else session.proposals.push(p)
   const owner = session.messages.find((m) => m.id === assistantId)
   if (owner) {
     owner.proposalIds = [...(owner.proposalIds || []), p.id]
@@ -420,7 +571,10 @@ export async function runAgentTurn(opts: {
   /** Composer skill chip id (persisted on the user message). */
   skillId?: string
 }): Promise<void> {
-  const mode: AgentToolMode = opts.mode || loadAiSettings().agentMode || 'agent'
+  const mode: AgentToolMode =
+    opts.mode === 'ask' || opts.mode === 'plan' || opts.mode === 'outline' || opts.mode === 'agent'
+      ? opts.mode
+      : loadAiSettings().agentMode || 'agent'
   const wcId = opts.win.webContents.id
   abortAiForWebContents(wcId)
   const ac = new AbortController()
@@ -430,6 +584,12 @@ export async function runAgentTurn(opts: {
   if (!session) {
     send(opts.win, 'ai:error', { message: 'Session not found' })
     return
+  }
+
+  const winRoot = getWindowMeta(opts.win)?.workspacePath
+  if (winRoot) {
+    opts.editor.workspacePath = winRoot
+    session.workspacePath = winRoot
   }
 
   if (opts.planFileRel !== undefined && opts.planFileRel !== null) {
@@ -458,8 +618,9 @@ export async function runAgentTurn(opts: {
     typeof opts.skillId === 'string' && /^[A-Za-z0-9._-]+$/.test(opts.skillId.trim())
       ? opts.skillId.trim()
       : undefined
+  const userTurnId = randomUUID()
   session.messages.push({
-    id: randomUUID(),
+    id: userTurnId,
     role: 'user',
     content: opts.userText,
     createdAt: Date.now(),
@@ -477,7 +638,7 @@ export async function runAgentTurn(opts: {
 
   let turnHint = opts.turnSystemHint?.trim() || ''
   if (skillId) {
-    const loaded = loadSkill(skillId)
+    const loaded = loadSkill(skillId, ['examples.md', 'reference.md'])
     if ('error' in loaded) {
       turnHint = [
         `CRITICAL: User mounted skill /${skillId}, but it could not be loaded (${loaded.error}).`,
@@ -487,16 +648,24 @@ export async function runAgentTurn(opts: {
         .filter(Boolean)
         .join('\n')
     } else {
+      const extraBlocks = Object.entries(loaded.extraFiles || {}).map(
+        ([name, text]) => `## ${name}\n${text}`
+      )
       turnHint = [
         `CRITICAL: User mounted skill /${skillId} via the composer chip.`,
         'Follow the skill instructions below for this entire turn.',
         'Plain "/…" text inside the user message is literal text, not a slash command.',
-        `You may still call read_skill("${skillId}") if you need extraFiles.`,
+        extraBlocks.length
+          ? 'examples.md / reference.md are included below when present.'
+          : mode === 'ask'
+            ? 'Ask cannot call read_skill; use only the skill text below.'
+            : `You may still call read_skill("${skillId}") if you need extraFiles.`,
         '',
         `# Skill /${skillId} (${loaded.name})`,
         loaded.description ? `Description: ${loaded.description}` : '',
         '',
-        loaded.body
+        loaded.body,
+        extraBlocks.length ? extraBlocks.join('\n\n') : ''
       ]
         .filter((line) => line !== '')
         .join('\n')
@@ -519,6 +688,13 @@ export async function runAgentTurn(opts: {
     settings.agentEnabled && workspaceRoot
       ? getWritingToolsForMode(mode, { webSearchEnabled: settings.webSearchEnabled })
       : undefined
+  const toolsAllowed = Boolean(tools && tools.length > 0)
+
+  for (const m of session.messages) {
+    if (m.role === 'user' && m.id !== userTurnId) ensureUserApiContent(m, workspaceRoot)
+  }
+  const editorContextText = await buildEditorContextText(opts.editor, session, mode)
+  saveSession(session)
 
   try {
     while (steps < maxSteps) {
@@ -532,12 +708,13 @@ export async function runAgentTurn(opts: {
 
       await new Promise<void>((resolve) => {
         void (async () => {
-          const messages = await toApiMessagesWithTools(
-            session,
-            opts.editor,
-            mode,
-            turnHint || undefined
-          )
+          const messages = toApiMessagesWithTools(session, opts.editor, mode, {
+            editorContextText,
+            turnHint: turnHint || undefined,
+            userTurnId,
+            flattenToolHistory: !toolsAllowed
+          })
+          if (steps === 1) saveSession(session)
           await streamChatCompletion({
             messages,
             tools,
@@ -545,6 +722,9 @@ export async function runAgentTurn(opts: {
             onEvent: (ev) => {
               if (ev.type === 'content') {
                 content += ev.text
+                if (mode === 'ask' && looksLikeToolDump(content)) {
+                  return
+                }
                 send(opts.win, 'ai:chunk', {
                   sessionId: session.id,
                   messageId: assistantId,
@@ -583,7 +763,10 @@ export async function runAgentTurn(opts: {
         }))
         .filter((t) => t.name)
 
-      if (toolCalls.length === 0) {
+      if (toolCalls.length === 0 || !toolsAllowed) {
+        if (mode === 'ask') {
+          content = sanitizeAskAssistantContent(content)
+        }
         session.messages.push({
           id: assistantId,
           role: 'assistant',
@@ -688,7 +871,7 @@ export async function runAgentTurn(opts: {
           sessionId: session.id,
           name: tc.name,
           status: 'done',
-          resultPreview: result.slice(0, 400)
+          resultPreview: toolResultPreview(result)
         })
       }
 
@@ -708,7 +891,7 @@ export function applyProposal(sessionId: string, proposalId: string): FilePropos
   if (!session) return null
   const p = session.proposals.find((x) => x.id === proposalId)
   if (!p || p.status !== 'pending') return null
-  applyProposalToDisk(p)
+  applyProposalToDisk(p, session.workspacePath || undefined)
   p.status = 'applied'
   saveSession(session)
   return p
@@ -770,7 +953,7 @@ export function applyAllPending(sessionId: string): FileProposal[] {
   const applied: FileProposal[] = []
   for (const p of session.proposals) {
     if (p.status !== 'pending') continue
-    applyProposalToDisk(p)
+    applyProposalToDisk(p, session.workspacePath || undefined)
     p.status = 'applied'
     applied.push(p)
   }

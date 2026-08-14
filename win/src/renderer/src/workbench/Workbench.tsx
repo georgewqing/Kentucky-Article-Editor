@@ -34,24 +34,30 @@ export function Workbench() {
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const platform = getPlatform()
-      const boot = await platform.getWindowBootstrap()
-      if (cancelled) return
-      useAppStore.getState().setWindowRole(boot.role)
-      if (boot.role === 'float' && boot.filePath && boot.workspacePath) {
-        useAppStore.setState({
-          workspacePath: boot.workspacePath,
-          fileTree: [],
-          sidebarVisible: false,
-          activeView: 'explorer'
-        })
-        await useAppStore.getState().openFile(boot.filePath)
-      } else if (boot.role === 'main' && boot.workspacePath) {
-        await useAppStore.getState().openWorkspace(boot.workspacePath)
-      }
-      if (!cancelled) {
-        await useAiStore.getState().hydrate()
-        setBootReady(true)
+      try {
+        const platform = getPlatform()
+        const boot = await platform.getWindowBootstrap()
+        if (cancelled) return
+        useAppStore.getState().setWindowRole(boot.role)
+        if (boot.role === 'float' && boot.filePath && boot.workspacePath) {
+          useAppStore.setState({
+            workspacePath: boot.workspacePath,
+            fileTree: [],
+            sidebarVisible: false,
+            activeView: 'explorer'
+          })
+          await useAppStore.getState().openFile(boot.filePath)
+        } else if (boot.role === 'main' && boot.workspacePath) {
+          await useAppStore.getState().openWorkspace(boot.workspacePath)
+          if (boot.filePath) await useAppStore.getState().openFile(boot.filePath)
+        }
+        if (!cancelled) {
+          await useAiStore.getState().hydrate()
+        }
+      } catch (err) {
+        console.error(err)
+      } finally {
+        if (!cancelled) setBootReady(true)
       }
     })()
     return () => {
@@ -109,8 +115,22 @@ export function Workbench() {
     void document.body.offsetHeight
   }, [aiStreaming])
 
+  useEffect(() => {
+    if (!bootReady) return
+    const el = document.getElementById('boot-splash')
+    if (!el) return
+    const start = window.requestAnimationFrame(() => {
+      el.classList.add('boot-splash-out')
+    })
+    const removeId = window.setTimeout(() => el.remove(), 480)
+    return () => {
+      window.cancelAnimationFrame(start)
+      window.clearTimeout(removeId)
+    }
+  }, [bootReady])
+
   if (!bootReady) {
-    return <div className="app-root" />
+    return null
   }
 
   if (windowRole === 'float') {

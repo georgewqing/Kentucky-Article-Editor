@@ -10,3 +10,5 @@ release
 
 dev-data/
 data/
+
+resources/ffmpeg/*.exe

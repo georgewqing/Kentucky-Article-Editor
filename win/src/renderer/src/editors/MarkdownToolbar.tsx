@@ -17,6 +17,7 @@ import {
   Minus,
   Undo2,
   Redo2,
+  FileDown,
   FileCode2,
   PenLine
 } from 'lucide-react'
@@ -28,6 +29,7 @@ type Props = {
   wordCount: number
   onModeChange: (mode: 'wysiwyg' | 'source') => void
   onRequestLink: () => void
+  onExportPdf?: () => void
 }
 
 const iconProps = { size: 16, strokeWidth: 1.6 }
@@ -104,7 +106,8 @@ export function MarkdownToolbar({
   mode,
   wordCount,
   onModeChange,
-  onRequestLink
+  onRequestLink,
+  onExportPdf
 }: Props) {
   const { t } = useTranslation()
   const wysiwyg = mode === 'wysiwyg'
@@ -260,6 +263,12 @@ export function MarkdownToolbar({
       <span className="article-word-count" title={t('article.wordCount')}>
         {t('article.words', { count: wordCount })}
       </span>
+
+      <div className="article-toolbar-group">
+        <ToolBtn title={t('article.exportPdf')} onClick={() => onExportPdf?.()}>
+          <FileDown {...iconProps} />
+        </ToolBtn>
+      </div>
 
       <div className="article-toolbar-group">
         <ToolBtn

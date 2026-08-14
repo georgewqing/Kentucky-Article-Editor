@@ -1,7 +1,7 @@
 # 契约：Shell UX（U8–U12）
 
 > **状态**：OPEN  
-> **指纹**：`toolApi: "2026-08-12-a"`（含主进程变更须重启 Electron）  
+> **指纹**：该批 UI 在 Win 落地时为 `2026-08-12-a`；**对齐时用 Win 当前** `2026-08-14-a`  
 > **进度**：[`../BOARD.md`](../BOARD.md) · 互补 [`./workbench-chrome.md`](./workbench-chrome.md) / [`./agent-ui.md`](./agent-ui.md)  
 > **移植顺序**：U12 → U10 → U8 → U9 验收 → U11 验收
 
@@ -147,38 +147,38 @@ CONTEXT_BUCKET_STRENGTH = {
 
 ---
 
-## 5. U12 · 纸夹挂载 CRITICAL 注入（修「挂了却不认」）
+## 5. U12 · 纸夹挂载 CRITICAL + user 绑定（修「挂了却不认」）
 
 ### 5.1 根因
 
-Skill（U5）走 CRITICAL turnHint 注入正文；文件挂载旧实现只塞弱 `@mentions` Editor context → 模型常当成「没挂上 / 不是 skill」。
+Skill（U5）走 CRITICAL turnHint 注入正文；文件挂载若只塞弱 `@mentions` / 独立 system 侧信道 → 模型常忽略指示词（「这个文件夹」），去扫整仓。
+
+Win `2026-08-12-r`：**挂载正文绑定进发给模型的 user 消息**（UI 仍显示短文案 + chip）+ CRITICAL + Editor `PRIMARY SUBJECT`；有挂载时省略活动文件正文。
 
 ### 5.2 Win 文件
 
 | Win | Android |
 |-----|---------|
-| `win/src/main/ai/agentLoop.ts` → `buildMountedFilesHint` · `pathKey`/`readAbsSafe` | `android/src/ai-runtime/agentLoop.ts` |
-| `proposalGate.TOOL_API_VERSION` → `2026-08-12-a` | runtime 同名字段 |
+| `win/src/main/ai/agentLoop.ts` → `formatUserContentForApi` · `buildMountedFilesHint` · `readAbsSafe` | `android/src/ai-runtime/agentLoop.ts` |
+| `proposalGate.TOOL_API_VERSION` | runtime 同名字段；对齐时用 Win **当前**（现 `2026-08-14-a`），不要停在引入时的 `2026-08-12-r` |
 
 ### 5.3 契约
 
 发送时对 `editor.attachedPaths`：
 
 1. `buildMountedFilesHint(workspace, paths)` 读 `readWorkspaceMention`（文件正文 / 目录浅列表）。  
-2. 拼进 **turnSystemHint**（可与 skill 正文同轮；mount 块建议在前或明确分段）。  
-3. 文案要点：  
-   - `CRITICAL: User mounted file(s)…`  
-   - 明确 **不是 skill**  
-   - 正文在 `"""…"""` 内；读失败要写明 sandbox/缺失。  
-4. `@mentions` 循环：**跳过**已在 `attachedPaths` 的路径，避免正文双份。  
-5. `readAbsSafe`：统一 `\` 再比前缀（修 Win `/` vs `\` 误拒）。
+2. 拼进 **turnSystemHint**（可与 skill 正文同轮；mount 块建议在前或明确分段）；含中英 **指示词** 规则。  
+3. **`formatUserContentForApi`**：历史/本轮带 `attachedPaths` 的 user 消息在 API 层前缀挂载路径+正文；气泡 UI 不改。  
+4. Editor context 置顶 `PRIMARY SUBJECT (composer mounts)`；有挂载时**不**注入活动文件正文。  
+5. `@mentions`：**不要**把 chip 路径重复并进弱提及；循环跳过 `attachedPaths`。  
+6. `readAbsSafe`：统一 `\` 再比前缀（修 Win `/` vs `\` 误拒）。
 
 ### 5.4 验收
 
 1. Composer 纸夹挂 `.md` → 发送 → Agent **直接依据挂载正文**回答，不说「看不到 / 不是 skill」。  
-2. 挂文件夹 → 注入浅列表。  
+2. 挂文件夹问「这个文件夹里有什么」→ **只列该夹**，不盘点工作区根。  
 3. 区外导入仍进 `.kentucky/refs/` 再挂（沙箱不变）。  
-4. 工具结果 `toolApi` 为 `2026-08-12-a`（或 Android 对齐后的同版字符串）。
+4. 工具结果 `toolApi` 为 Win **当前**字符串（现 `2026-08-14-a`）。
 
 ### 5.5 与 chrome OPEN
 
@@ -188,7 +188,7 @@ Skill（U5）走 CRITICAL turnHint 注入正文；文件挂载旧实现只塞弱
 
 ## 6. Grill / 勿回退
 
-1. 文件挂载 = CRITICAL 注入，与 Skill 同级；禁止退回「仅 @mentions」。  
+1. 文件挂载 = **user 消息绑定 + CRITICAL**，与 Skill 同级；禁止退回「仅 @mentions」或「仅独立 system」。  
 2. 设置分段动效用 clip-path + token；勿 `transition: all` / `scale(0)`。  
 3. 上下文色跟 accent strength；勿写死旧冷色 hex 表（U2 移植时注意）。  
 4. `goHome` 不关工程；开始页开文件夹与「+」同为加开。  
@@ -198,7 +198,7 @@ Skill（U5）走 CRITICAL turnHint 注入正文；文件挂载旧实现只塞弱
 
 ## 7. 总验收清单
 
-- [ ] U12：挂文件发送，Agent 认正文（CRITICAL）  
+- [ ] U12：挂文件/夹发送，Agent 认正文；问「这个文件夹」不整仓盘点  
 - [ ] U10：换主题色，上下文分段变色  
 - [ ] U8：设置页卡片 + Seg 动效  
 - [ ] U9：设置页滚动条主题色  

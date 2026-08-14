@@ -343,7 +343,7 @@ export function getLiteraryToolDefs(): ToolDef[] {
       function: {
         name: 'propose_create_revision',
         description:
-          'CALL BEFORE a risky chapter rewrite. Snapshot paths under revisions/snaps/. Fails at maxRevisionSnaps. Auto-writes manifest.',
+          'CALL BEFORE a risky chapter rewrite. Snapshot paths under revisions/snaps/. Ring buffer: at maxRevisionSnaps (default 20) the oldest snap is deleted. Auto-writes manifest. Result may include evicted[].',
         parameters: {
           type: 'object',
           properties: {
@@ -359,7 +359,7 @@ export function getLiteraryToolDefs(): ToolDef[] {
       function: {
         name: 'propose_restore_revision',
         description:
-          'CALL to roll back to a prior snapshot. Existing prose needs Accept. Do not silently discard dirty buffers.',
+          'CALL to roll back to a prior snapshot. Always writes disk (same as other Agent writes). Do not claim Accept is required. Mistakes: Source Control discard or undo.',
         parameters: {
           type: 'object',
           properties: {
@@ -811,7 +811,8 @@ export function runLiteraryTool(
           kind: 'revision_meta'
         }),
         snapshotId: created.id,
-        paths
+        paths,
+        evicted: created.evicted
       })
     }
     case 'propose_restore_revision': {
@@ -840,7 +841,7 @@ export function runLiteraryTool(
             absPath: abs,
             before,
             after: f.content,
-            summary: `Restore ${snapshotId} �?${f.rel}`,
+            summary: `Restore ${snapshotId} → ${f.rel}`,
             kind: kind as FileProposal['kind']
 
           })
@@ -853,7 +854,7 @@ export function runLiteraryTool(
         results,
         toolApi: TOOL_API_VERSION,
         instruction:
-          'Prose restores may be pending Accept �?tell user to Accept cards. Dirty buffers sync via docApplyExternalWrite on accept.'
+          'Already written to disk (no Accept). Summarize as restored. Mistakes: Source Control discard or editor undo. Dirty editor buffers follow the restored bytes.'
       })
     }
     case 'propose_upsert_volume': {

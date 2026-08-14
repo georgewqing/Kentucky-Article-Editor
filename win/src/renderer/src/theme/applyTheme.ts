@@ -1,3 +1,5 @@
+import { DARK_BG, DARK_ELEV_1, DARK_ELEV_2, DARK_ELEV_3, DARK_ELEV_4, LIGHT_BG } from '@shared/theme'
+
 export type ThemeMode = 'dark' | 'light'
 
 export const DEFAULT_ACCENT = '#88c0d0'
@@ -145,16 +147,17 @@ export function applyTheme(mode: ThemeMode, accent: string): void {
   const safeAccent = normalizeAccent(accent)
 
   const isDark = mode === 'dark'
-  const base = isDark ? '#141414' : '#f3f3f3'
-  const elev1 = isDark ? '#1a1a1a' : '#fafafa'
-  const elev2 = isDark ? '#1e1e1e' : '#ffffff'
-  const elev3 = isDark ? '#242424' : '#eeeeee'
-  const elev4 = isDark ? '#2a2a2a' : '#e4e4e4'
+  const base = isDark ? DARK_BG : LIGHT_BG
+  const elev1 = isDark ? DARK_ELEV_1 : '#fafafa'
+  const elev2 = isDark ? DARK_ELEV_2 : '#ffffff'
+  const elev3 = isDark ? DARK_ELEV_3 : '#eeeeee'
+  const elev4 = isDark ? DARK_ELEV_4 : '#e4e4e4'
   const fg = isDark ? '#d4d4d4' : '#2c2c2c'
   const fgMuted = isDark ? '#8b8b8b' : '#6e6e6e'
   const fgBright = isDark ? '#f0f0f0' : '#111111'
-  const border = isDark ? withAlpha('#ffffff', 0.06) : withAlpha('#000000', 0.08)
-  const borderSubtle = isDark ? withAlpha('#ffffff', 0.04) : withAlpha('#000000', 0.05)
+  const border = isDark ? withAlpha('#ffffff', 0.08) : withAlpha('#000000', 0.08)
+  const borderSubtle = isDark ? withAlpha('#ffffff', 0.05) : withAlpha('#000000', 0.05)
+  const borderPane = isDark ? withAlpha('#ffffff', 0.16) : withAlpha('#000000', 0.14)
   const hover = isDark ? withAlpha('#ffffff', 0.05) : withAlpha('#000000', 0.05)
   const selection = withAlpha(safeAccent, isDark ? 0.22 : 0.18)
   const accentHover = adjustLightness(safeAccent, isDark ? 0.08 : -0.08)
@@ -167,7 +170,7 @@ export function applyTheme(mode: ThemeMode, accent: string): void {
   root.style.setProperty('--bg-elev-3', elev3)
   root.style.setProperty('--bg-elev-4', elev4)
   root.style.setProperty('--bg-sidebar', elev1)
-  root.style.setProperty('--bg-activity', elev1)
+  root.style.setProperty('--bg-activity', base)
   root.style.setProperty('--bg-editor', elev2)
   root.style.setProperty('--bg-tab', elev1)
   root.style.setProperty('--bg-tab-active', elev2)
@@ -178,6 +181,7 @@ export function applyTheme(mode: ThemeMode, accent: string): void {
   root.style.setProperty('--bg-selection', selection)
   root.style.setProperty('--border', border)
   root.style.setProperty('--border-subtle', borderSubtle)
+  root.style.setProperty('--border-pane', borderPane)
   root.style.setProperty('--fg', fg)
   root.style.setProperty('--fg-muted', fgMuted)
   root.style.setProperty('--fg-bright', fgBright)

@@ -5,6 +5,10 @@ import { MonacoTextEditor } from '@/editors/MonacoTextEditor'
 import { MarkdownArticleEditor } from '@/editors/MarkdownArticleEditor'
 import { MindMapEditor } from '@/editors/MindMapEditor'
 import { DialogueEditor } from '@/editors/DialogueEditor'
+import { StoryboardEditor } from '@/editors/StoryboardEditor'
+import { ImagePreviewEditor } from '@/editors/ImagePreviewEditor'
+import { VideoPreviewEditor } from '@/editors/VideoPreviewEditor'
+import { PdfPreviewEditor } from '@/editors/PdfPreviewEditor'
 import { ToastLayer } from './ToastLayer'
 
 export function FloatWorkbench() {
@@ -32,6 +36,14 @@ export function FloatWorkbench() {
           <MindMapEditor tabId={tab.id} />
         ) : tab.kind === 'dialogue' ? (
           <DialogueEditor tabId={tab.id} />
+        ) : tab.kind === 'storyboard' ? (
+          <StoryboardEditor key={tab.id} tabId={tab.id} />
+        ) : tab.kind === 'image' ? (
+          <ImagePreviewEditor tabId={tab.id} />
+        ) : tab.kind === 'video' ? (
+          <VideoPreviewEditor tabId={tab.id} />
+        ) : tab.kind === 'pdf' ? (
+          <PdfPreviewEditor tabId={tab.id} />
         ) : isMarkdown ? (
           <MarkdownArticleEditor key={tab.id} tabId={tab.id} />
         ) : (

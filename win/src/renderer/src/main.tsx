@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client'
 import '@/i18n'
 import '@/editors/monacoSetup'
 import '@/styles/global.css'
+import '@/styles/storyboard-nle.css'
+import '@/styles/storyboard-pages.css'
 import { useSettingsStore } from '@/state/settingsStore'
 import App from './App'
 
@@ -16,8 +18,8 @@ function syncBootSplashFromTheme(): void {
     return v || fallback
   }
   const root = document.documentElement
-  root.style.setProperty('--boot-bg', pick('--bg-welcome', pick('--bg', '#141414')))
-  root.style.setProperty('--boot-elev', pick('--bg-elev-3', '#242424'))
+  root.style.setProperty('--boot-bg', pick('--bg-welcome', pick('--bg', '#0A0A0A')))
+  root.style.setProperty('--boot-elev', pick('--bg-elev-3', '#1C1C1C'))
   root.style.setProperty('--boot-fg', pick('--fg-bright', '#f0f0f0'))
   root.style.setProperty('--boot-accent', pick('--accent', '#88c0d0'))
   root.style.setProperty('--boot-accent-soft', pick('--accent-soft', 'rgba(136, 192, 208, 0.15)'))

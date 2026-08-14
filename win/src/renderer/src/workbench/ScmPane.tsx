@@ -4,6 +4,7 @@ import { GitBranch, RefreshCw } from 'lucide-react'
 import { useAppStore } from '@/state/appStore'
 import { getPlatform } from '@/platform'
 import { useOverlayScroll } from '@/hooks/useOverlayScroll'
+import { askConfirm } from '@/state/confirmDialogStore'
 
 type GitFile = {
   path: string
@@ -89,7 +90,12 @@ export function ScmPane() {
 
   const onDiscard = async (f: GitFile) => {
     if (f.untracked) {
-      const ok = window.confirm(t('scm.confirmDeleteUntracked', { path: f.relPath }))
+      const ok = await askConfirm({
+        title: t('explorer.delete'),
+        message: t('scm.confirmDeleteUntracked', { path: f.relPath }),
+        confirmLabel: t('explorer.delete'),
+        danger: true
+      })
       if (!ok) return
     }
     setBusy(true)

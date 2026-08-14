@@ -9,7 +9,7 @@ export function memoryToolsDisciplinePrompt(): string {
     '2. AFTER finishing a chapter (or a large beat that moves props/cast/time): call propose_upsert_story_state with chapter.id + sourcePath=that file. Same turn if possible.',
     '3. When planting or paying off a thread: propose_upsert_foreshadow (status open|resolved). Before finale/revision pass: continuity_check with aspects including foreshadow.',
     '4. Before multi-character dialogue: read_voice_bank; after a POV chapter if style matters: compare_voice or continuity_check aspect voice.',
-    '5. Before a risky rewrite: propose_create_revision on the chapter + story_state/foreshadow. Restore via propose_restore_revision (prose may need Accept).',
+    '5. Before a risky rewrite: propose_create_revision on the chapter + story_state/foreshadow. Restore via propose_restore_revision (writes disk immediately; no Accept).',
     '6. Essays / one-off notes: do NOT create story_state scaffolding. Skip memory tools unless the user asks.',
     '7. Conflicts from continuity_check are WARN-only — fix by explicit upsert (intentional reversals) or by editing prose; never claim the write was blocked.',
     'Tool names: read_story_state, propose_upsert_story_state, read_foreshadow, propose_upsert_foreshadow, read_scene_state, propose_upsert_scene, read_voice_anchor, propose_set_voice_anchor, read_voice_bank, propose_upsert_voice, compare_voice, continuity_check, list/search_materials, read/propose_upsert_glossary, proofread_check, reader_critique, list_revisions, propose_create_revision, propose_restore_revision.'

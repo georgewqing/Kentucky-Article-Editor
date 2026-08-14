@@ -687,6 +687,7 @@
 - **软件内不可见**：资源管理器与 Agent `list_dir` 均不列出 `.git` 等点文件；SCM 不再依赖用户手动「初始化」（失败时仍可重试）。
 - 有父级 Git 仓时**不**嵌套 init，复用向上找到的仓根。
 - `toolApi: 2026-08-12-h`
+- **历史注（§121）：** 上条 walk-up **已废止**。现只认工作区根 `.git`，打开子文件夹会嵌套 init。勿按本节实现。
 
 ## 86. Git 写操作取消确认 · 高亮提示（2026-08-12-i）
 
@@ -721,4 +722,603 @@
 
 - 新增完整记录 [`AGENT-GIT.md`](./AGENT-GIT.md)；README / product-decisions / architecture / SESSION 已交叉链接。
 - 本文 §80–§89 为时间线；**契约以 AGENT-GIT 为准**。
+
+## 91. 空提交可读错误（2026-08-12-m · GIT-1）
+
+压力测反馈：空 `git_commit` 报 `Command failed: git …`，未暴露 `nothing to commit`。
+
+- `git()` `allowFail`：空 stderr **不再**回退到 `err.message`（避免盖住 stdout）。
+- `formatGitCommitFailure`：映射为 `Nothing to commit — working tree clean…` / `Nothing staged to commit…`。
+- Playbook / `git_commit` description：整 index 一次提交（GIT-2 信息项）。
+- `toolApi: 2026-08-12-m`
+
+## 92. 三轮压力结论 + GIT-3（2026-08-12-n）
+
+test2 三轮合并：工具链稳定；批量/特殊路径/拉取专项/自动裸仓全通过。
+
+- [`AGENT-GIT.md`](./AGENT-GIT.md) §7 写入三轮总结论。
+- GIT-1 已在 `-m` 关闭；GIT-2/GIT-3 为 Git 正常行为。
+- Playbook + `git_push`/`git_remote_add`：remote 删除重加后用 `setUpstream`+`branch`（GIT-3）。
+- `toolApi: 2026-08-12-n`
+
+## 93. 工作区 Git 环境说明防遗忘（2026-08-12-o）
+
+- 约定工作区根文件：`agent-GIT环境说明.md` / `AGENT-GIT-ENV.md`（远程、分支、常用序列）。
+- L5：`findWorkspaceGitEnvDoc` 探测到则提示「新对话先 read_file 再 git_status」。
+- Playbook + `git_status` description 同步。
+- 例：test2 已落盘 `agent-GIT环境说明.md`（origin → `D:/Working Directory/test2-remote.git`）。
+- `toolApi: 2026-08-12-o`
+
+## 94. 工具通用性 / 禁跨工作区路径（2026-08-12-p）
+
+审计：Agent 工具实现均绑定 `ctx.workspaceRoot`，源码无 test2/绝对盘符写死；风险在提示层把某仓 remote「记」到其它仓。
+
+- Playbook / L5 / `git_status`·`git_remote_add` description：明确 **THIS workspace only**；无 L5 点名则不读/不造 env remote。
+- [`AGENT-GIT.md`](./AGENT-GIT.md) §4 增加通用性说明。
+- `toolApi: 2026-08-12-p`
+
+## 95. 工作区沙箱（2026-08-12-q）
+
+防错误指令理解后整盘破坏：
+
+- 新增 `workspacePath.ts`：跨盘符 `isAbsolute(rel)` 拦截、symlink realpath、提案落盘二次校验。
+- `gitStage` / `gitDiscard` / plan / revision 快照走同一围栏。
+- 本地裸仓：`assertSafeExternalGitPath` 拒绝盘符根与 Windows 系统目录。
+- 系统提示 / playbook 标明 sandbox。
+- `toolApi: 2026-08-12-q`
+
+## 96. 分镜头稿本 + 简化 PR（Win 0.3.0）
+
+大版本功能；完整说明书 → [`STORYBOARD.md`](./STORYBOARD.md)。
+
+### 产品
+
+- 每格 1920×1080；外绘拼图（gutter + 标题条 + 空白安全框）；Kentucky 不内绘。
+- 单序列：一键铺轨、Ken Burns `from→to` 线性、单 BGM 轨 MP3、监视器播放/scrub（相机用检视器）。
+- 导入尺寸不符默认拒绝；强制缩放二次确认。
+- 导出：PNG；MP4 24fps H.264 1080p yuv420。
+- AI 不参与；仅 Win；Android BOARD **A3 ⏭**。
+
+### 工程 / Schema
+
+- `*.kyboard` + 同级 `*.kyboard.assets/`。
+- `win/src/shared/kyboardSchema.ts` **v1**（只增不改）；别名 `@shared`。
+- 出厂默认：6 格 → suggest `3×2`；`panelDurationSec=2`；gutter 24 / labelBand 48。
+- 冒烟：空白 `3×2` → **5856×2328**。
+
+### 主进程
+
+- `main/storyboard/`：`pngUtil`（pngjs）+ `storyboardService` + `registerStoryboardIpc`。
+- IPC：`generateBlank` / `importSheet` / `sliceSheet` / `sheetSize` / `exportMp4` + progress；对话框 openPng/Mp3、savePng/Mp4。
+- 沙箱：写入走 `workspacePath.ts`；导入源允许区外再 copy 进 assets。
+- MP4：帧 PNG 序列 → ffmpeg（`KENTUCKY_FFMPEG` / 可选 ffmpeg-static / PATH）；临时目录 `.kentucky/storyboard-export/` 导出后清理。
+- **未**稳定捆绑 ffmpeg-static（安装曾超时）。
+
+### UI
+
+- `StoryboardEditor`：Seg **稿纸 / 时间线 / 导出**；主题变量 + Emil 动效；无 PR 孤岛皮肤。
+- Explorer：新建入口（Clapperboard）+ 右键；图标 **SB**；i18n `storyboard.*`。
+- 路由：`EditorArea` / `FloatWorkbench`；`EditorKind 'storyboard'`。
+- 立即写盘（非 DocumentHub）；BGM 播放不按 RAF 每帧 seek。
+
+### 文档 / 版本
+
+- 新建/扩写：[`STORYBOARD.md`](./STORYBOARD.md)、product-decisions、architecture、gotchas、README、how-to-run。
+- Android：BOARD A3 ⏭ + changelog。
+- `package.json` → **0.3.0**；依赖 `pngjs`。
+
+## 97. 分镜头导出自定义路径/文件名
+
+- 导出页：导出文件夹（可浏览）+ PNG/MP4 文件名输入；预览完整路径。
+- 「导出」写到 `文件夹/文件名`；「另存为…」系统对话框（`defaultPath` 完整路径）并回写目录与文件名。
+- 默认名：`{kyboardStem}-sheet.png` / `{kyboardStem}.mp4`；默认目录=工程文件父目录。
+- Toast 显示实际落盘路径。
+
+## 98. 工作区 PNG 预览
+
+- 资源树显示 `.png`（主进程 `TEXT_EXTS` 纳入）。
+- `EditorKind 'image'` + `ImagePreviewEditor`：只读预览、缩放、尺寸、Reveal。
+- 打开时跳过 DocumentHub UTF-8 读盘；媒体走 `kentucky-file://`。
+
+## 99. PNG 画布式缩放平移 + 空白稿自定义路径
+
+- PNG 预览：滚轮定点缩放、拖拽平移、双击/适应（对齐导图画布手感）。
+- 稿纸页「生成空白拼图」：可改**生成文件夹**（须在工作区内）与**文件名**；默认 `*.kyboard.assets/` + `blank_{cols}x{rows}.png`。
+- `storyboard:generateBlank` 支持 `targetDirAbs` + `fileName`。
+
+## 100. 时间线进度条（TransportScrubber）
+
+问题：Windows Electron 原生 `input[type=range]` + `accent-color` —
+
+- **0%**：左侧出现方形蓝块溢出圆角轨道；
+- **100%**：拇指 / 填充到不了轨道右端。
+
+修复：
+
+- `StoryboardEditor` 内 `TransportScrubber`：自绘轨道 + 填充 + 拇指。
+- 轨道 `overflow: hidden` 裁剪填充；拇指 `left: pct%` + `translate(-50%)`，0%/100% 中心贴齐两端。
+- 指针拖拽 scrub；方向键 / Home / End；样式 `.storyboard-scrub*`。
+- **勿回退**为仅靠原生 range accent 的实现。
+
+完整契约仍以 [`STORYBOARD.md`](./STORYBOARD.md) §5（空白/导出/scrub/PNG 预览）与 §12 年表为准。
+
+## 101. Composer 挂载指示词绑定（2026-08-12-r）
+
+问题：拖 `storyboard.kyboard.assets/` 进对话框问「这个文件夹里有什么」时，Agent 扫整仓，不认 chip。
+
+原因：挂载正文只进独立 system `turnHint`；用户气泡仍是短指示词；Editor context 里 L5 / 活动文件正文抢注意力。
+
+修复：
+
+- 发给模型的 **user 消息** 前缀绑定挂载路径 + 目录列表 / 文件正文（UI 仍显示短文案 + chip）
+- CRITICAL 指示词增加中英指示词规则；禁止默认整仓盘点
+- Editor context 置顶 `PRIMARY SUBJECT (composer mounts)`；有挂载时省略活动文件正文
+- `@mentions` 不再把 chip 路径重复塞进弱提及；拖夹时树未展开则用 `readDir` 探测并补 `/`
+- `toolApi: 2026-08-12-r`（须完整重启）
+
+## 102. V1 片段边缘拖拽调时长
+
+- 格子右缘可视化手柄（`.storyboard-clip-edge`）；拖动改单段 `duration`，`packVideoClipsMut` 涟漪后续 start。
+- `timelineLaneSec` 尾部留白，末段可拖长；检视器改时长同样 pack。
+- 契约：[`STORYBOARD.md`](./STORYBOARD.md) §5「V1 片段边缘拖拽」。
+
+## 103. V1 入点/出点单边修剪
+
+- 根因：轨道按总时长 % 布局，拖尾时整段左右缘一起动（像对称缩放）。
+- 固定 px/秒 + 横向滚动；右缘只动出点；左缘（非首段）滚动修剪，本段出点时刻不变。
+- `trimVideoClipInMut` / `trimVideoClipOutMut`。
+
+## 104. 时间线播放：BGM 无声 + 监视器闪烁
+
+- 无声：CSP 缺 `media-src kentucky-file:`；`.mp3` 响应补 `Content-Type: audio/mpeg`。
+- 闪烁：每帧重设 `canvas.width` 清空位图 + 每帧 `new Image()`；改为缓存图片，仅在尺寸变化时设 canvas，RAF 内同步绘制。
+
+## 105. 播放黑屏 / 时长不显示 / 残余闪烁
+
+- BGM 默认 `outSec:60` 把 scrubber 拉到无画面区间 → 黑屏；改为探测 MP3 时长；**节目时长**用 `videoTimelineDurationSec`（不受音频虚长影响）。
+- 切镜未缓存下一张时先清黑 → 闪；改为加载中保留上一帧 + 预取相邻格；`findVideoClipAt` 末端 hold。
+- 拖段缩短后 playhead 钳回节目长度；片段上显示 `Ns` 时长。
+
+## 106. 时间线 NLE 观感与基础剪辑
+
+- 运输条 + 监视器|检视器 + 可拖上下分栏 + 刻度尺/播放头 + 加高 V1/A1 + clip 缩略图。
+- 刀片分割 / Delete 涟漪 / 缩放适应 / 吸附 / 分镜条追加；快捷键 Space、←→、Home/End、C、Delete。
+- 进入时间线校正已存 BGM `outSec=60` 占位。
+- 样式：`storyboard-nle.css`；助手见 `kyboardSchema` split/remove/snap。
+
+## 107. 时间线滚轮横移 + A1 修剪 + BGM 再无声
+
+- 隐藏时间线横向滚动条；滚轮/触控板直接横移素材轨（`wheel` + `{ passive: false }` → `scrollLeft`）。
+- A1 BGM 左右缘手柄：`trimAudioClipInMut` / `trimAudioClipOutMut`；可选 `mediaDurationSec` 作修剪上限。
+- 无声回归根因：曾用 `outSec > 节目×3` 把**正常长 BGM**当占位反复探测，与播放抢 `kentucky-file`。
+- 修复：占位校正**仅** `outSec===60`；缺 `mediaDurationSec` 时用当前 `outSec` 填、不另开探测 Audio。
+- `.mp3` 协议改为 **流式 + Range/206**（勿整文件 `arrayBuffer`）；等 `canplay` 再 `play()`。
+- 播放钟用 `docRef`，勿把整份 `doc` / 高频 `playhead` 绑进加载 effect。
+- **须完整重启 Electron**（协议/CSP 在 main）。
+
+## 108. 分镜素材库 → 多稿本切换
+
+- 去掉检视器「分镜条/素材库」点格追加 V1（及轨道 `kentucky-panel-id` 拖放）。
+- 改为「追加画完的稿本」（`importSheet`+`sliceSheet`）+ 稿本链接栏切换 `activeSheetId`。
+- 稿纸页与时间线检视器同步；分镜格列表按当前 `sheetId` 过滤。
+- 一键铺轨：先 `sheets` 顺序，再 `panel.index`。
+
+## 109. 分镜三页 UI 抛光
+
+- 稿纸 / 时间线检视器 / 导出：分区卡片、链接栏、路径预览条、操作主次分组。
+- 分镜格改为格位卡片（`#N` +「列·行」）；按钮按压 `scale(0.97)`（Emil）。
+- 新样式：`storyboard-pages.css`（`main.tsx` 引入）；NLE 仍用 `storyboard-nle.css`。
+- 跟 Cursor 工作台色阶；**不**另起 PR 皮肤 / 落地页美学。
+
+## 110. 空白路径/文件名无法键入
+
+- 根因：`blankFileName` 仍匹配 `/^blank_\d+x\d+\.png$/i` 时，布局 cols/rows effect 不断写回默认名，表现为「打不了字」。
+- 修复：`blankDirTouchedRef` / `blankFileNameTouchedRef`；用户一改就停止自动同步；输入 `stopPropagation` + `user-select:text`。
+
+## 111. 稿纸页「页面显示不全」
+
+- 根因：`.storyboard-pane` 为 column flex + `overflow:auto` 时，子 section 默认 `flex-shrink:1`，再叠加 section `overflow:hidden`，中间「空白稿输出」等被压扁裁掉。
+- 修复：稿纸/导出 pane 显式滚动；子 `.storyboard-section` → `flex: 0 0 auto`；底部分区可滚出视口而非消失。
+
+## 112. 时间线检视器「内容显示不全」
+
+- 根因：检视器 `max-height: none` 撑破监视器行后被父级 `overflow:hidden` 裁切；窄栏横滑链接栏把「稿本 N」切成半截。
+- 修复：检视器 `height/max-height: 100%` + 自身纵向滚动；紧凑态按钮竖排、稿本链接**换行全显**；分栏 `minmax(0, fr)`；监视器 canvas 取消全局 16:9 硬比例以免裁切。
+
+## 113. 时间线多轨音频 + 监视器镜头打点
+
+用户明确要求覆盖原「单 BGM / 监视器不改相机」限制（STORYBOARD「明确不做」不再含这两项）。schema **v1 只增不改**。
+
+**音频**
+- 新字段 `timeline.audioClips?: AudioClip[]`，`AudioClip.track?: number`（0–3，A1–A4）。
+- 每轨 **一条** MP3；空轨点「添加音轨」写入 `a{n}_{ts}.mp3` 到 sibling assets。
+- 旧字段 `timeline.audioClip` **始终** = `audioClips[0]`（`parseKyboard` 迁入；`serializeKyboard` / `syncLegacyAudioClip` 写出）。
+- 播放：`Map<clipId, HTMLAudioElement>`，按 clip 的 start/in/out 同步；勿共用一个 `audioRef`。
+- 导出：ffmpeg 每轨 `-ss/-t` + `volume/afade/adelay`，多轨 `amix=inputs=N:duration=longest`，再 `-map 0:v -map [a] -shortest`。
+- 占位校正仍 **仅** `outSec===60`；缺 `mediaDurationSec` 用当前 out 填，勿把长 BGM 当虚长重探测。
+
+**镜头（本条初版，随后被 §114–§115 修正交互）**
+- 新字段 `VideoClip.camera.keys?: { t, x, y, scale }[]`，`t` ∈ 0..1，最多 `MAX_CAMERA_KEYS=6`。
+- 监视器半分辨率 canvas：滚轮缩放、拖拽平移。
+- 画布位移：`dCam = -dCanvas * 2 / scale`（与 `translate(-cam.x/2)` 一致）。
+- 导出帧循环必须 `cameraAtClip`，禁止手写 from→to lerp。
+
+**源码**：`src/shared/kyboardSchema.ts`；`main/storyboard/storyboardService.ts`；`editors/StoryboardEditor.tsx`；`storyboard-nle.css`；i18n `storyboard.*`。
+
+## 114. 镜头打帧改为 Blender 式一键操作
+
+§113 检视器拆成「记录入点 / 出点 / 在播放头打点 / 删除此点」+ from/to 六个数字，心智负担大；拖监视器还改**最近**一帧，播放头不在那一帧时画面会跳。
+
+**现契约（Blender 自动关键帧 + I）**
+- 拖监视器 / 滚轮 = 在 **播放头当前时刻** `upsertCameraKeyMut`（覆盖同 t，否则插入）。
+- **I** 或运输条 / 检视器「打帧」：把当前插值姿态钉在播放头。
+- **Alt+I** / 「删帧」：删除播放头处已有的手动帧。
+- 去掉入出点四按钮和 from/to 数值栏；时长仍可改。
+- 满 6 帧 Toast `camKeysFull`，`upsert` 返回 false，**不**默默丢掉别的帧。
+- V1 clip 上菱形 = 已打的帧（点击跳转）；快捷键避开输入框。
+- i18n：`camInsertKey` / `camInsertKeyTitle` / `camKeyHint` / `camKeysFull`（zh「打帧」；`addBgm` 文案改为「添加音轨」）。
+
+## 115. 轨道上不显示默认镜头关键帧
+
+§114 仍把 t=0 / t=1 静止姿态写入 `keys` 并画菱形。中间打一帧后，插值变成「原位 → 该帧 → 原位」，画面「乱跑」。
+
+**现契约**
+- `camera.keys` **只存手动打的帧**；`writeCameraKeys` **不再**强制补 t=0/t=1。
+- 轨道菱形 / 检视器芯片只用 `storedCameraKeys`（不是合成的 from/to）。
+- 播放/导出 `cameraAtClip`：有 stored keys → 在这些点之间线性插值，**区间外 hold**（一帧=整段钉住）；无 keys → 旧 from→to。
+- `storedCameraKeys` 读取时 `pruneIdentityBookends`：丢掉旧工程里自动注入的 identity 头尾点（有内部帧且两端为静止）。
+- 删帧可删播放头上**任意**手动帧（含头尾）。
+- 刀片：只重映射 stored keys，不在切开处注入默认帧。
+
+## 116. 右键菜单贴窗口边缘
+
+资源树在窗口底部右键时，`.ctx-menu`（`position:fixed`）按 `clientY` 往下开，列表一长（新建文件/夹/导图/分镜/台词 + 重命名/在文件夹中显示/删除）被窗口裁切。导图节点菜单、活动栏关工作区、选区复制菜单同样问题。
+
+**现契约**
+- 真源：`workbench/fitContextMenu.ts`
+  - `clampMenuPosition`：下方不够则翻到光标上方，再钳进 `pad=8` 的视口。
+  - `useFittedMenuPos`：`useLayoutEffect` 量 `offsetWidth/Height` 后再钳（避免估高不准）。
+- 接入：`FileTree`、`MindMapEditor`、`ActivityBar`、`SelectionContextMenu`。
+- CSS `.ctx-menu`（`global.css`）：`max-height: calc(100vh - 16px)` + `overflow-y: auto` + `overscroll-behavior: contain`（菜单高于窗口时仍可滚到每一项）。
+- 禁止只把 `left/top` 设成点击坐标。
+- 新菜单必须走同一 helper，勿再复制 `{ left: clientX, top: clientY }`。
+
+## 117. 追加稿本接到 V1 末尾
+
+- 根因：「追加画完的稿本」只 `push` `sheets`/`panels`，不写 `timeline.videoClips`；时间线仍是旧片段，用户以为没追加成功。
+- 已导入但未上轨的稿本：选中后出现「接到时间线」（`appendPanelClipsMut` 跳过已在轨的 panelId）。不要再点追加以免重复 `sheets`。
+- 播放头跳到新片段起点并横滚露出；Toast `slicedOntoTimeline`。
+- **一键铺轨**仍按全部稿本重铺（会丢掉已改时长/keys），作重置用。
+- **不要**恢复点格素材库。
+
+## 118. 捆绑 ffmpeg 供 MP4 导出
+
+导出页点「导出 MP4」Toast 英文 `ffmpeg not found…`：本机 PATH 无 ffmpeg；Electron 从 Cursor 启动时也不继承用户后来改的 PATH。曾尝试 `ffmpeg-static` npm 包，postinstall 从 GitHub 拉二进制 **ETIMEDOUT**，不能当稳定依赖。
+
+**现契约**
+- 真源脚本：`win/scripts/ensure-ffmpeg.js`（`npm run ensure-ffmpeg`）。已有可运行 ffmpeg 则**复制**到 `win/resources/ffmpeg/ffmpeg.exe`；否则 `winget install -e --id Gyan.FFmpeg.Essentials` 再复制。
+- `ffmpeg.exe` **gitignore**（`resources/ffmpeg/*.exe`）；目录只提交 `README.txt`。
+- `resolveFfmpeg()`（`storyboardService.ts`）顺序：`KENTUCKY_FFMPEG` → 打包 `process.resourcesPath/ffmpeg/ffmpeg.exe` → 开发态 `../../resources/ffmpeg/ffmpeg.exe`（相对 `out/main`）→ 常见 Win 路径 → PATH。每个候选 `-version` 探活，不是只 `existsSync`。
+- `dist` / `dist:dir` / `dist:portable` **先**跑 ensure-ffmpeg；`extraResources`：`resources/ffmpeg/ffmpeg.exe` → `ffmpeg/ffmpeg.exe`。
+- 找不到：主进程 `error: 'FFMPEG_NOT_FOUND'`（勿塞英文长句）；渲染层 Toast `storyboard.ffmpegNotFound`。
+- **禁止**再把 `ffmpeg-static` 加回 dependencies。
+
+**源码**：`scripts/ensure-ffmpeg.js`；`storyboardService.ts`；`package.json`；i18n `ffmpegNotFound`。
+
+## 119. 工作区 MP4 可点开预览
+
+用户要求：工作区能**识别**并**点击预览**导出的 MP4。此前 `TEXT_EXTS` 只有 `.png` 媒体，`.mp4` 在树里消失；若硬打开会走 DocumentHub UTF-8 `docOpen`。
+
+**现契约**
+- 主进程 `TEXT_EXTS` 含 `.mp4`（与 `.png` 一样：树可见，不是文本编辑）。
+- `detectKind('.mp4')` → `EditorKind 'video'`。
+- `isMediaPreviewKind` = `image | video`：`openFile` **跳过** `docOpen`；`saveTab` 直接成功；`closeTab` **不** `docUnsubscribe`。
+- UI：`VideoPreviewEditor.tsx` — `toMediaUrl` → `<video controls playsInline preload="metadata">`；工具栏时长 + Reveal。路由：`EditorArea` / `FloatWorkbench`。
+- 资源树图标 **MP4**（`tree-icon-video`）；`explorerNames` `STRIP_EXTS` 含 `.mp4`。
+- `kentucky-file`：抽出 `streamLocalMedia`。`.mp3` → `audio/mpeg`；`.mp4` → `video/mp4`。有 `Range` 则 **206** + `Content-Range` / `Accept-Ranges`；无 Range 仍声明 Accept-Ranges。其它扩展仍 `net.fetch(file URL)`。
+- CSP `media-src` 已含 `kentucky-file:`（BGM 时加过）；协议/handler 变更须 **完整退出 Electron**，热重载无效。
+- i18n：`video.preview` / `loading` / `loadFailed`。
+- **明确不做**：jpg/webp/webm/mov；工作区内嵌播放器皮肤；把 MP4 当文本。不要恢复「点格素材库」。
+
+**源码**：`main/index.ts`（`TEXT_EXTS` + `streamLocalMedia`）；`state/appStore.ts`；`editors/VideoPreviewEditor.tsx`；`workbench/{EditorArea,FloatWorkbench,FileTree,explorerNames}`；`styles/global.css`（`.video-preview-*`）；i18n `video.*`。
+
+## 120. Win 本机安全审计（只记不改）
+
+对 `win/` 做代码 + 漏洞审查，焦点是**破坏用户计算机**（擦盘、越权写删、任意执行、磁盘打满），不是网站 XSS。全文：[SECURITY-AUDIT.md](./SECURITY-AUDIT.md)。
+
+**结论：** Agent/Git 工作区沙箱（`workspacePath.ts`）没有发现可直接删系统目录的洞。真正危险的是更早的渲染层 IPC 与产品边界。
+
+**P0（应先修，本轮未改代码）**
+- `fs:*` / `doc:*` 不校验工作区；`fs:delete` 对目录 `recursive+force`。
+- 主窗无 `will-navigate` / `setWindowOpenHandler`：整页导航后 preload 仍暴露 `window.kentucky`。
+- `git:setPath` 可指向任意 exe；打开盘符根 / 用户主目录当工作区时，Agent 可清空其下全部子项。
+
+**P1：** `kentucky-file` 任意本地读；`.kyboard` `joinPath` 不挡 `..`；MP4 导出时长 / PNG 尺寸 / 空白稿 layout 无上限；`importSheetFile` 任意 `sourceAbs`；Git IPC 根可走到父仓。
+
+**已有防护勿回退：** Agent `resolveWorkspacePath`；Git/ffmpeg `execFile`；`openExternal` 仅 http(s)；`contextIsolation`。
+
+下一步须用户点头后再改代码（建议顺序见审计文档「建议修复顺序」）。**已由 §121 落地。**
+
+## 121. 本机安全加固（审计 P0–P2）
+
+用户要求按 [SECURITY-AUDIT.md](./SECURITY-AUDIT.md) 修完发现项，避免破坏用户计算机。全文对照表见该文档「§121 落地对照」。**须完整退出 Electron**（协议 / preload / 导航锁 / IPC 沙箱）；热重载无效。
+
+### 现契约
+
+**导航锁**（`ipcSandbox.bindNavigationGuard`，主窗 + 闪屏）
+- `will-navigate` / `will-redirect`：dev 仅 `ELECTRON_RENDERER_URL` 同源；打包仅 `file:` 且路径在 `out/renderer/` 内。
+- `setWindowOpenHandler`：**一律 deny**；`http:`/`https:` 转已有 `shell.openExternal`。
+- `setPermissionRequestHandler`：全部 `callback(false)`。
+- 禁止再给主窗加 `nodeIntegration` 或关掉 `contextIsolation`。
+
+**窗口工作区沙箱**（`ipcSandbox.ts` + `workspacePath.ts`）
+- 每个 BrowserWindow 的工作区以 `windowRegistry` 为准，**不信任**渲染层随口传来的绝对路径。
+- `fs:readDir` / `readFile` / `writeFile` / `mkdir` / `exists` / `isDirectory` / `doc:*`：`resolveInSenderWorkspace`。
+- `fs:delete` / `rename`：`resolveWriteInSenderWorkspace`（额外 `assertNotWorkspaceRoot`）。
+- `fs:copyFile`：源 = 工作区内 **或** 本会话 read allowlist；目标 = 工作区内 **或** write allowlist。
+- `fs:toMediaUrl` / `kentucky-file` / `shell:showItemInFolder`：可读路径必须在打开的工作区或 allowlist。
+- `openWorkspace`：**先** `reportWorkspace`（校验危险根）再 `readDir`；失败回滚上一工作区。i18n `errors.unsafeWorkspace`。
+
+**对话框 allowlist**（进程内 Set，最多 512 条 FIFO）
+- **read**：`dialog:openImage` / `openImages` / `openContextFiles` / `openPng` / `openMp3`。
+- **write**：`dialog:savePng` / `saveMp4`（用户另存到桌面等处）。
+- Agent `readAbsSafe` 可读 allowlist（作曲器夹文件）；写工具仍只限工作区。
+- **不要**把任意绝对路径当例外；过期/新会话 allowlist 为空。
+
+**危险工作区根**（`assertSafeWorkspaceRoot`）
+- 继承 `assertSafeExternalGitPath`：盘符根、`C:\Windows` / Program Files / ProgramData / System Volume Information / Recycle Bin。
+- 另拒：`X:\Users`（Users 目录本身）、`os.homedir()`（当前用户主目录本身）。`Documents` / 项目子文件夹允许。
+- `window:reportWorkspace` / `window:newMain` / `window:newFloat` / `gitInit` / `ensureWorkspaceGit` 均校验。
+
+**Git**
+- `configureGitExecutable`：`execFile(…, ['--version'])` 且 stdout 匹配 `/^git version /i` 才保存 `gitPath`；启动时已存脏路径则清空。
+- Git IPC：`requireSenderWorkspace(e, claimed)`，claimed 必须等于该窗工作区。
+- `findGitRoot`：**只看该文件夹是否有 `.git`**，不再向上 40 层。打开 `Kentucky/win` 不会操作容器仓 `Kentucky/`；无 `.git` 则在**本根** `git init`（可能嵌套）。见 [AGENT-GIT.md](./AGENT-GIT.md)。
+- `gitUnstage` 路径同样 `resolveWorkspacePath`。
+
+**分镜头 / 媒体**
+- `kentucky-file`：`assertReadableLocalPath` 后再 `streamLocalMedia` / `net.fetch`。
+- 渲染层 `joinPath` 消化 `..`（不能越过盘符）；**主进程仍沙箱**，勿只靠 renderer。
+- Storyboard IPC 的 `workspaceRoot` 必须等于窗口工作区。
+- `importSheetFile`：源必须在 read allowlist **或** 工作区内。
+- `exportMp4` 目标：工作区内 **或** write allowlist；临时帧目录走 `resolveWorkspacePath(.kentucky/storyboard-export/…)`。
+- 时长：`MAX_EXPORT_DURATION_SEC = 15 * 60`；超限 `{ error: 'EXPORT_TOO_LONG' }` → Toast `storyboard.exportTooLong`。
+- PNG：IHDR 先读；`MAX_PNG_DIM = 16384`、`MAX_PNG_PIXELS = 80e6`。稿纸 `clampLayout`：≤ 8×8，panel 锁 1920×1080，gutter/labelBand ≤ 200。
+- ffmpeg `filter_complex` 的 volume / fade / delay 一律 `finiteNum` 夹紧。
+
+**Agent / 联网**
+- `runAgentTurn` 把 `editor.workspacePath` 与 `session.workspacePath` **覆盖**为窗口工作区。
+- `ai:createSession` 优先用窗口工作区，不信渲染层乱传根。
+- `fetchPageExcerpt`：仍仅 http(s)；再拒 localhost / `.local` / RFC1918 / link-local。
+- `assertInsideWorkspace`：`realpath` 失败 **fail-closed**（不再吞掉）。
+
+**明确保留**
+- Monaco CSP `'unsafe-eval'`。
+- Agent 在用户**自愿打开的项目文件夹内**写删（产品行为）。
+- `ensure-ffmpeg.js` 的 winget（仅开发/打包）。
+- Android 本轮不移植。
+
+**手测 / 禁止回退 / 危险路径清单 / IPC 通道表：** 全文 [`SECURITY-AUDIT.md`](./SECURITY-AUDIT.md)「现契约详解」。Git 相对 §85 的 walk-up 废止见 [`AGENT-GIT.md`](./AGENT-GIT.md)。
+
+**源码**：`src/main/ipcSandbox.ts`（新）；`src/main/ai/workspacePath.ts`；`src/main/index.ts`；`src/main/windowRegistry.ts`（`listWorkspaceRoots`）；`src/main/git/{gitService,registerGitIpc}.ts`；`src/main/storyboard/*`；`src/shared/kyboardSchema.ts`（`clampLayout` / `MAX_EXPORT_DURATION_SEC`）；`src/main/ai/{agentLoop,registerAiIpc,webSearch}.ts`；`src/renderer/src/platform/index.ts`；`src/renderer/src/state/appStore.ts`；`src/preload/index.ts`；i18n `errors.unsafeWorkspace` / `storyboard.exportTooLong`。
+
+## 122. IPC / 协议 / Git 根再收紧
+
+§121 之后对照契约继续改：协议不再按「任一已开工作区」放行；Git 根只认 `.git` **目录**；窗口与 AI IPC 不再信渲染层乱传的根。
+
+- **`kentucky-file`**：`assertProtocolReadable` = `rememberMediaPath`（`fs:toMediaUrl` 沙箱通过后登记）∪ dialog read allowlist。伪造 `?path=` 读另一已开工程 → 404。
+- **`assertReadableLocalPath`**：有 sender 时只允许该窗工作区 ∪ read allowlist，**不**跨窗。
+- **`window:newFloat`**：`requireSenderWorkspace` + 解析后的文件绝对路径。**`window:newMain`**：只能克隆本窗或 `listWorkspaceRoots` 已有根。
+- **AI**：`listSessions` / `createSession` / `loadSession` / `deleteSession` / prefs / `send` / apply* 绑窗口工作区（`sameWorkspace`）。
+- **`findGitRoot` / `inspectWorkspaceGit`**：`.git` 必须是目录；文件或 symlink（worktree/submodule 指针）→ `foreign`，不 init、不操作父仓。
+- **`git:discard`**：DocumentHub evict/reload 用解析后的绝对路径。另存对话框 `defaultPath` 夹在工作区内。
+
+须完整退出 Electron。权威：[SECURITY-AUDIT.md](./SECURITY-AUDIT.md)「§122」。
+
+## 123. git_diff 越界与 git_add 同文案
+
+测试建议：`git_diff` 越界应返回 `Path escapes workspace`（与 `git_add` 一致），且错误里的路径不要截断。
+
+- 原先 `gitDiff` 用手写 `startsWith`/`includes(':')` 拼路径，越界常变成 `Path not found` 或 git 的 outside repository。
+- 现与 add/unstage/discard 共用 `resolveRepoRel`：`error` 为 **`Path escapes workspace: <调用方传入的完整路径>`**（不 slice）。
+- 工具 UI 预览：含该前缀的 JSON **整段保留**，不再 `result.slice(0, 400)` 切到半路。
+
+不必改旧 test2 冒烟总结；记在 [AGENT-GIT.md](./AGENT-GIT.md)。
+
+## 124. 独立游戏文案 / 策划 Agent 技能包
+
+文学 + 独立游戏策划双主线：新装 / 新 `data/` 默认开启 8 个中文 game-* skill；纯小说作者可在设置关掉。需求：[REQ-indie-game-skills.md](./REQ-indie-game-skills.md)。
+
+- 仓内真源 `win/resources/ai-skills/<id>/SKILL.md`（打包 extraResources）；`ensureSkillsDir` **copy-if-missing**，已有文件永不覆盖。
+- `seenBundledSkillIds`：只把从未见过的 bundled id 追加进 `enabledSkillIds` 白名单；用户关掉后重启不复活。`enabledSkillIds === null`（全开）只记 seen。
+- 工作区硬约定 `design/`（concept / gdd / systems / narrative / levels / balance csv / marketing）。文学 YAML 仍在根上。
+- 若存在 `design/gdd.md`，Editor L5 加一行（模型向，中英；与 Git L5 同类）。
+- UI 用 SKILL 中文 `name`；不新增 `nameEn`。不执行 skill 脚本、无子 Agent、无数值仿真器。
+
+**验收**：完整退出后重启 Electron；设置里 8 个中文名 + `literary-voice`；关掉后 `/` 不列出且重启不复活。
+
+## 125. Design 常驻纪律 + 对白 examples.md
+
+技能包之后：没挂 `/game-*` 时 Agent 仍会按小说助手写。有 `design/` 树则系统提示注入 `DESIGN_AGENT_PLAYBOOK`（对白走 CSV、数字进表、专有名词先读 glossary）。`/game-narrative` 的 `examples.md` copy-if-missing，挂载 skill 时与正文一起注入。
+
+纯小说工作区（无 `design/`）不注入，避免误伤。须完整退出 Electron。
+
+## 126. Design L5 扩探测（策划 skill 收尾）
+
+Design L5 不再只认 `design/gdd.md`。只要工作区有 `design/` 树，就列出本根**实际存在**的：`gdd.md` / `concept.md` / `characters.csv` / `glossary.yaml` / 浅扫 `*.dialogue.csv`（文件名最多 3 个）。只报存在、不灌正文；CTA 只点名已存在的文件。无 `design/` 的纯小说工作区不注入（Cast 摘要照旧）。
+
+本切片到此收口：8 skill + copy-if-missing + seenBundled + playbook + 对白 examples + L5 探测。厂家改 SKILL 正文仍不覆盖老用户文件；不做 kyboard Agent 工具 / 子 Agent / 数值仿真。
+
+## 127. 工作区 PDF 预览 + Markdown/导图导出 PDF
+
+工作区 `.pdf` 可点开只读预览，对齐 PNG/MP4：`EditorKind 'pdf'`、`isMediaPreviewKind`（跳过 DocumentHub）、树图标 **PDF**、`TEXT_EXTS` + `STRIP_EXTS`。预览为 **pdf.js 自绘**（工作台配色、叠加主题滚动条、可拖宽缩略图、适应/缩放、Reveal）；`toMediaUrl` + fetch ArrayBuffer，worker 用打包的 `pdf.worker.min.mjs`。不用 Chromium PDF iframe（无法换肤，重挂空白）。导出仍为隐藏窗 `printToPDF`（非 pdf.js）。HTML ≤ 2MB，PDF ≤ 50MB。无批注/全文搜索。Android 不移植。改协议/CSP/preload 须**完整退出 Electron**。
+
+导出仅当前 `.md` / `.kmind`（含未保存）。`.md`：TipTap HTML，A4 竖版浅色印刷稿。`.kmind`：`fitView` 后 `html-to-image` 栅格化 `.react-flow`（滤 minimap/controls，长边 ≤ 4096），一页横版。入口：文章/导图工具栏、文件菜单、资源树右键（未打开的 `.md` 读盘转 HTML；未打开的 `.kmind` 先 `openFile`）。另存 `dialog:savePdf`，默认同目录 `主名.pdf`，`rememberDialogWritePath` + `assertWritableLocalPath`。
+
+印刷：隐藏 `BrowserWindow` 加载仓内 `pdf-print.html`（导航锁禁止 `data:` URL），IPC 注入 HTML 后 `printToPDF`。HTML ≤ 2MB，PDF ≤ 50MB；失败 i18n Toast。无 puppeteer。Android 不移植。改协议/CSP/preload 须**完整退出 Electron**。
+
+## 128. Agent `export_workspace_pdf`
+
+用户要 Agent 把 Markdown **直接写成工作区 PDF**（无另存对话框）。指纹 `toolApi: 2026-08-13-a`（须完整退出 Electron）。
+
+- 工具 `export_workspace_pdf`（仅 Agent 模式）：`path` = 工作区相对 `.md`；可选 `dest`（默认同目录 `主名.pdf`，覆盖）。打开且未保存时用 DocumentHub 缓冲。
+- 与 UI 共用 `printHtmlToPdf`（隐藏窗 + `printToPDF`）。主进程无 DOM，Markdown→HTML 用 GFM 子集（标题/列表/表格/代码/链接），不是 TipTap。
+- `.kmind` / 台词 / 分镜头 / `.txt` 拒绝（导图仍须 UI 栅格化）。写完 `refreshTree`。路径走 `resolveWorkspacePath` + `assertWritableLocalPath`。
+- 系统提示 + Design playbook 点名此工具。无 puppeteer / Android。
+
+## 129. 应用图标改为黑底负形 K
+
+用户提供的几何标重绘为 SVG，并替换软件图标。
+
+- 底稿 `build/icon.svg`：黑圆角方（透明角外）、两块浅色几何（内圆角方被 45° 切开 + 右侧三角），负形为 K。
+- 比例对齐 Cursor：外圆角 **220 / 1024（≈22%）**；K 标四周留白 **184（≈18%）**（原先 rx 135、留白 108）。
+- `node scripts/rasterize-icon.js` 写出 1024² PNG（透明圆角）到 `build/icon.png` 与 `resources/icon.png`。
+- 窗口 / electron-builder 仍读 PNG。改标须重跑脚本，不要手改 PNG。
+
+## 130. 深色底 RAL 9005
+
+深色模式画布 / 欢迎页 / 闪屏 / 窗口 `backgroundColor` 为 **RAL 9005** `#0A0A0A`。功能区用同色系深浅分开（Cursor 式房间，不是平涂）：活动栏 `#0A0A0A`、资源树/代理人 `#121212`、编辑器 `#161616`；输入 `#1C1C1C`、菜单 `#242424` 只比所在房间略抬。栏间分隔是 sash 自己的 1px `--border-pane` 发丝线（约 16% 白），命中区 5px，不再用负边距把线盖掉。标签条跟侧栏同色，活动标签跟编辑器。Windows 原生标题栏在浅色系统下会发白。深色模式用 `nativeTheme.themeSource` + Win32 `titleBarStyle: 'hidden'` / `titleBarOverlay`（色同 `DARK_BG`），菜单栏即顶栏，系统按钮叠在右侧。切主题走 `setTitleBarOverlay`。此项须完整退出再开。浅色仍 `#f3f3f3`。
+
+## 131. 分镜头生成器滚动条
+
+稿纸 / 导出页改用与资源树、设置、Agent 相同的 `kentucky-overlay-scroll`（滚动时才出现主题色细滑块）。时间线横滚仍隐藏。
+
+## 132. Agent 输入框边缘流光
+
+作曲框沿边走一圈 accent 彗星（conic + `transform` 旋转，8s linear）。外层轻 bloom，内层 1.5px 发丝；焦点 / 生成中略亮。`prefers-reduced-motion` 停转、留静态虹边。无 framer-motion。
+
+## 133. 菜单栏软件标
+
+Windows 自定义顶栏最左侧放 `build/icon.svg`（16px，负形 K）。装饰图，可拖窗，不抢菜单焦点。
+
+## 134. Ask 模式真正禁工具
+
+Ask 原先只是不把 tools 放进请求，同会话若刚跑过 Agent，模型仍会发出 `read_file` / `propose_text_patch`，循环也会执行并写盘。现：Ask（及未广告工具时）请求 `tool_choice: none`、历史里的 tool_calls 改成纯文本、收到的工具调用一律不执行。
+
+DeepSeek 等模型仍可能把 DSML / `<invoke>` 写成**气泡正文**（不是 OpenAI tool_calls）。Ask 改用短系统提示（不再灌写盘/read_file 说明书），流式丢弃工具 XML，落盘前换成「请切 Agent」。
+
+Ask 下 `getWritingToolsForMode` 返回空，`JSON.stringify(undefined)` 让 `ai:contextUsage` 抛错，hydrate 失败则 `bootReady` 永不置位；闪屏 480ms 已卸 → 黑屏。现：估算对空工具安全、IPC 失败不抛、hydrate 失败仍显示工作台、闪屏等到 `bootReady`。
+
+## 135. 空台词 text 可落盘
+
+`propose_append_dialogue_lines` / `allocateLineIds` 曾把 `text:""` 当无效行丢掉（第三轮 pressure.dialogue.csv d16）。Godot v1.3 确认续句行允许真空字符串。现只要求 speaker；空 text 写入 CSV。
+
+## 136. 台词工具读脏缓冲区
+
+第三轮 d16 经 `propose_text_patch`（`patchSource=editor_buffer`）写入黄脏缓冲，随后 `propose_append_dialogue_lines` 只 `readFileSync` 磁盘（无 d16），写回时把缓冲盖掉。`read_dialogue` / append / update / reorder / performance / graph / layout / cast_check 改为与 patch 一样优先脏 DocumentHub。结果带 `readSource`。指纹 `toolApi: 2026-08-13-e`（须完整退出 Electron）。
+
+## 137. `/` 技能菜单被流光规则顶到面板顶
+
+§132 给作曲框子元素加了 `position: relative`（盖住流光）。斜杠菜单因此丢掉 `absolute`，`bottom: 100%` 按 relative 把 SKILLS 抬到栏顶，输入框上方留下一块空圆角框。现把 `.ai-slash-menu` 排除出该规则。CSS-only，Ctrl+R 即可。
+
+## 138. 资源树右键菜单裁切
+
+资源树 `.ctx-menu` 画在侧栏里：`.sidebar-body` 裁掉超出部分，sash（`z-index: 8`）叠在菜单上，长文案（「新建分镜头稿本」）贴边被切。菜单改 `createPortal(..., document.body)`，并 `width: max-content` / `nowrap`。活动栏工作区右键同样 portal。CSS/布局，Ctrl+R 即可。
+
+## 139. 系统标题按钮压住顶栏分割线
+
+`.app-menu-bar` / `.float-titlebar` 高度等于 `titleBarOverlay`（`env(titlebar-area-height)`），`box-sizing: border-box` 又把 1px `border-bottom` 算进这高度里，Win32 最小化/最大化/关闭刚好盖住分割线。高度改为 overlay + 1px，线画在按钮下方。Ctrl+R 即可。
+
+## 141. 活动栏选中块滑动
+
+侧栏按钮切换原先是各钮自己亮/灭。现一块 `activity-indicator` 用 `transform: translateY` 跟到当前视图键（起始页 / 工作区 / SCM / 设置）；曲线 `--ease-in-out`、`--duration-toggle` 200ms，与分段控件同一套 token。首次定位不播；`prefers-reduced-motion` 关掉位移。代理人键仍是独立开关，不抢这块。Ctrl+R 即可。
+
+## 140. 删除确认改用应用内弹窗
+
+资源树 `deleteEntry` 和 SCM 删除未跟踪文件原先走 `window.confirm`，Win32 弹出白色系统框（标题 kentucky）。改走已有 `askConfirm` / `ConfirmDialog`（与台词/角色删除、未保存对话框同一套深色 `app-dialog`）。Ctrl+R 即可。
+
+## 142. 代理人开关用淡主题色底
+
+活动栏代理人开着时 Chromium 焦点环画成空心白框。改为 `--accent-soft` 底（与选中块同色、无描边）；已点亮时不再画 `:focus-visible` 框。Ctrl+R 即可。
+
+## 143. Agent 请求前缀稳定（模型无关）
+
+自动前缀缓存从请求开头做最长相同匹配。原先文学系统提示之后立刻插入每步都变的 Editor context（Git L5 / 活动文件）和 skill/mount `turnHint`，历史全部无法复用。现：系统提示 + 工具表保持在最前；Git L5 等易变块冻结在本轮用户消息末尾；一轮循环内不刷新；历史挂载写入 `apiContent` 快照不再读盘。不 bump `toolApi`，须**完整退出** Electron。切 Ask/Agent 仍会换工具表，前缀照样作废。
+
+## 144. 资源树隐藏 `revisions/`
+
+Agent 章节快照柜在工作区根是给工具用的，日常不必出现在资源管理器。现与 `.git` 一样对用户隐藏：磁盘仍在，`list_revisions` / `propose_create_revision` / `propose_restore_revision` / `read_file` 仍可用。根目录 `list_dir` 也不列出该项。`.gitignore` 幂等补 `revisions/`，SCM 不再堆快照。须**完整退出** Electron。
+
+## 145. 快照环形 20 份
+
+`propose_create_revision` 不再在上限报错。默认 20（`maxRevisionSnaps`）：成功写入新快照前先删最旧，结果含 `evicted[]`。拷贝失败不删旧份。指纹 `toolApi: 2026-08-14-a`，须**完整退出** Electron。
+
+## 146. Windows「打开方式」出现 KENTUCKY（.md）
+
+打包版启动时在 **HKCU** 登记 `.md` 的 Open With / 默认应用能力（不抢当前默认、不需管理员）。`npm run dev` 和 portable 解到 Temp 的路径不登记，避免绑上 electron.exe。双击或「打开方式」把文件路径传入：已打开的工作区包含该文件则只开标签；否则以父文件夹为工作区（仍拒盘符根/主目录）。单实例：第二次启动把路径交给已有窗口。须跑 `npm run dist` 后的 `KENTUCKY.exe` **至少一次**，再在资源管理器里对 `.md` 选「打开方式」。
+
+## 147. Win 正式版收尾（查缺补漏）
+
+- **restore** 与其它 Agent 写入对齐：自动写盘、无 Accept；工具 description / `instruction` / Q13 / 基线 §四.6 不再写 pending Accept。误改仍靠 Undo / SCM。
+- **前缀**：本轮 user 的 `apiContent` 在第一次请求时写入完整后缀（Editor context + turnHint），同轮后续步与跨轮重放不再重拼、不再把历史 user 砍短。
+- **指纹**：Win 文档「当前 toolApi」统一为 `2026-08-14-a`（changelog 旧节保留当时串）。
+- `electron.vite.config.ts` 重复 `server` 键导致 typecheck 失败，已删一份。
+- **`npm run dist`**：GitHub CDN 超时后用 npmmirror（`ELECTRON_MIRROR` / `ELECTRON_BUILDER_BINARIES_MIRROR`，见 how-to-run）打出 `release/KENTUCKY-0.3.0/KENTUCKY.exe`。跑过一次打包 exe：HKCU `KENTUCKY.md` 已写入「打开方式」（命令指向该 exe，不是 F5 的 electron.exe）；`resources/ffmpeg/ffmpeg.exe` 探活为 8.1.1，导出 0.5s 1920×1080 24fps yuv420 H.264；`assertSafeWorkspaceRoot` 拒 `C:\` / 用户主目录 / `C:\Users`，Agent `Path escapes workspace`；干净临时仓写入 md / kmind / 台词 / 分镜头一格 / 新文件并 SCM commit；asar 含帮助菜单仓库 URL。GitHub 未登录时该 URL 返回 404（私有仓），菜单仍打开同一地址。
+
+须**完整退出** Electron；打开方式仍须打包 exe。
+
+## 148. 代理人顶栏按钮统一
+
+三个操作从混用的 `+` / `≡` / `×` 改成同一套 Lucide 图标（新建 / 对话历史 / 关闭），按钮尺寸与输入栏回形针一致（28px、圆角 8）。历史打开时才有底，不再看起来像单独一个实心菜单键。
+
+## 149. 分镜切片文件名 + 格位缩略图
+
+切片 PNG 不再带 sheet UUID，也不按稿本序号（`s2_p01`）。文件名为 **稿本文件名 + 格号**：导入 `blank_3x2.png` → `blank_3x2_01.png`、`blank_3x2_02.png`；空格会变成下划线；重名则 `_2` 递增。稿纸页「分镜格」直接显示切片图（16:9 contain），编号叠在左上角。旧工程已落盘的 UUID / `sN_pNN` 文件名不改写。
+
+## 150. 时间线拖动分镜块改序
+
+V1 块身可拖到新位置，播放顺序涟漪重排（无空隙）。左右缘仍是修剪时长。镜头关键帧留在该片段上。
+
+## 151. 时间线：取消自动铺轨，拖分镜上轨
+
+去掉稿本分类按钮与「一键铺轨」。导入只切片、不上 V1。时间线左侧工具栏：选择 / 刀片（分割从顶栏挪走）。监视器右侧排列切片缩略图，拖到 V1 才加入（可重复用同一格）。
+
+## 152. 时间线内拖块改序真正能拖
+
+§150 把改序绑在片段 `<button>` 的 pointer 上：一点就 `preventDefault`，重排时 DOM 一挪捕获就丢，拖出块范围手势直接断。后又把原块设成 `pointer-events: none`，Chromium 会立刻 `pointerup`，插入下标还是原位，看起来像闪回；播放头却被误seek到该块入点。V1 块与右侧素材箱一样走 **HTML5 拖放**（不是指针 capture）。拖到目标接缝，竖线标插入点，松手 `reorderVideoClipMut`。按住 **Alt** 拖边缘才修剪。未改序不挪播放头。
+
+## 153. V1 改序：指针手势，提交 lastIndex
+
+HTML5 改序松手仍闪回：吸附竖线 `pointer-events: none`，`drop` 经常不触发；`dragend` 只清状态不提交；`dropEffect: move` 且源节点还在，Chromium 会把拖影弹回原点。MDN：失败的 drop 就会播放飞回动画。现改回 **窗口捕获阶段的指针跟踪**（不 `preventDefault` pointerdown、不 `setPointerCapture` 到其它节点、源块不 `pointer-events: none`、拖动中不 splice DOM）。松手提交拖动中最后一次插入下标。素材箱→V1 仍 HTML5。须 **Ctrl+R**。
+
+## 154. V1 改序 mut-noop：splice 后按旧 start 排序
+
+检测 log：手势 `pointerup`、`lastIndex` 已变、`willMut: true`，但 `reorderVideoClipMut` 返回 `mut-noop`。原因是 splice 之后又 `packVideoClipsMut`（按旧 `start` 排序），片段被排回原位，幽灵块一收就像闪回。改序/插入后只按**当前数组顺序**重写 start（`repackVideoClipStartsMut`）。临时探针已关闭。须 **Ctrl+R**；主进程改动须**完整退出 Electron**。
+
+## 155. 分镜粗剪保存
+
+时间线改序/修剪会 `writeFile`，但 `.kyboard` 标签仍走 DocumentHub。Ctrl+S、关标签保存、退出保存用的是**打开时**的 JSON，把磁盘上的粗剪盖回空轨；切到别的文件再回来就像重置。现改为 `persistDoc` 同时写盘 + 更新标签缓冲；Save 前 `flushStoryboardForSave`；工具栏增加保存（Ctrl+S 仍可用）。拖动中不写盘，松手再持久化。切走仍打开的标签会把当前稿刷进缓冲；关掉并不保存时卸载不再写盘。
+
+## 157. Agent 改动卡片重新记入会话
+
+`commitProposal` 自动写盘后漏了 `session.proposals`（status=applied）。面板按该数组画卡片，当轮和重载后都是空的。现写盘后 upsert 进会话；渲染层 `ai:proposal` 同步补进当前会话（对齐 gitOps）。
+
+## 158. project-memory 改成 AI 交接扫描
+
+Win `project-memory/README.md` 改为现状表 + 按任务读序；`changelog.md` 明确只作历史。architecture / STORYBOARD / gotchas / 工具总表去掉过时 Accept、一键铺轨、`isMediaPreviewKind` 缺 pdf、旧 `toolApi` 当「当前」的写法。Android `PORTING-WIN-TO-ANDROID.md` 按 Win **0.3.0** 重写成能力矩阵交接文；BOARD/README 指纹对齐 `2026-08-14-a`。不 bump `toolApi`。
+
+## 159. Android 全量移植拍板
+
+用户明确：**Win 已有产品功能 Android 全部要移植。** 此前 BOARD ⏭（分镜 A3、PDF A4、Git U16/U17、U13–U18）改为 ❌。壳不照搬（单窗、无 AppMenuBar、SAF、无 `kentucky-file` / `printToPDF` / `git.exe`）。Git 默认 isomorphic-git。不 bump `toolApi`。
+
+## 160. 标签栏滚轮 / 右键改序 / 分屏选文件
+
+标签过多时滚轮横向滚动标签栏。按住右键拖动标签改顺序（非 HTML5 drag）。分屏后左右栏各有「此栏」下拉，从已打开文件里选；不再用右键指定分屏文件。
+
+首版手势只在窗口上听 `pointermove`，且未 `preventDefault` 右键、未 `setPointerCapture`；Windows 上几乎拖不动。首版「此栏」是原生 `<select>`，深色主题下弹出层仍是系统白底。
+
+## 161. 分屏文件选择换肤 + 标签改序手势
+
+用户反馈两件：分屏文件选择栏不像工作台；「按住右键拖动改标签顺序」等于没实现。
+
+**此栏：** Chromium/Electron 在 Windows 上无法给 `<select>` 的弹出列表换肤（option 走系统控件）。改为 `PaneFilePicker`：kicker「此栏」+ 输入风按钮（`--bg-input`、当前标题、▾）→ portal 到 `document.body` 的 `.ctx-menu.pane-file-menu`（与资源树右键同一套：`--bg-elev-4`、`--bg-selection` hover、当前项 `--accent-soft`）。`.editor-pane` `overflow:hidden`，不 portal 会被裁切。位置复用 `fitContextMenu.ts`。Escape / 点外侧关闭。脏/新建 ● 与标签一致。
+
+**改序：** 右键在 Windows 是系统上下文菜单手势；不 `preventDefault` 则没有可靠的 `pointermove`。现：左键或右键按下；右键 `preventDefault` + 对该 **tab** `setPointerCapture`；窗口捕获 `pointermove` **和** `mousemove`；手势期间 document 捕获 `contextmenu`。拖过 5px 才画插入竖线并在松手 `reorderTabs`；未过阈值的单击仍激活。不要 HTML5 drag、不要拖动中 splice 标签 DOM、不要用 `lostpointercapture` 当结束（RMB 捕获常立刻丢，会拆掉 mousemove 兜底）。左键拖同样可改序（VS Code 习惯）。`SelectionContextMenu` skip `.tab-bar`。
+
+**未改：** 滚轮横滑；「关闭分屏」仍在顶栏右侧；右键不再指定分屏文件；不 bump `toolApi`。须 **Ctrl+R**。
+
+**文件：** `EditorArea.tsx` · `appStore.reorderTabs` · `SelectionContextMenu.tsx` · `global.css` · i18n `editor.reorderTabsHint`。Android 同步（保留 `compactLayout` / 无分镜预览路由）。现行契约写在 architecture「标签栏 / 分屏」与 gotchas 同名节。
+
+
+
 

@@ -8,6 +8,7 @@ function labels(locale: MenuLocale) {
       file: '文件',
       openFolder: '打开文件夹',
       save: '保存',
+      exportPdf: '导出为 PDF',
       closeWindow: '关闭窗口',
       quit: '退出',
       edit: '编辑',
@@ -36,8 +37,9 @@ function labels(locale: MenuLocale) {
   return {
     file: 'File',
     openFolder: 'Open Folder',
-    save: 'Save',
-    closeWindow: 'Close Window',
+      save: 'Save',
+      exportPdf: 'Export as PDF',
+      closeWindow: 'Close Window',
     quit: 'Quit',
     edit: 'Edit',
     undo: 'Undo',
@@ -103,6 +105,13 @@ export function buildAppMenu(locale: MenuLocale = 'zh-CN'): Menu {
           click: (_item, win) => {
             const w = (win ?? BrowserWindow.getFocusedWindow()) as BrowserWindow | null
             w?.webContents.send('menu:save')
+          }
+        },
+        {
+          label: L.exportPdf,
+          click: (_item, win) => {
+            const w = (win ?? BrowserWindow.getFocusedWindow()) as BrowserWindow | null
+            w?.webContents.send('menu:exportPdf')
           }
         },
         { type: 'separator' },

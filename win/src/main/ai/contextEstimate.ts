@@ -6,6 +6,7 @@ import {
 import { loadAiSettings } from './aiSettings'
 import { LITERARY_SYSTEM_PROMPT, getWritingToolsForMode, type AgentToolMode } from './tools'
 import { skillsCatalogText } from './skills'
+import { workspaceHasDesignTree } from './designGddL5'
 
 export type ContextBucketId =
   | 'system'
@@ -36,7 +37,8 @@ const BUCKET_ORDER: ContextBucketId[] = [
 /** Estimate fixed + session context the agent typically sends (rough char/4). */
 export function estimateContextBreakdown(
   session: ChatSession | null,
-  mode: AgentToolMode = 'agent'
+  mode: AgentToolMode = 'agent',
+  workspaceRoot?: string | null
 ): ContextUsageBreakdown {
   const settings = loadAiSettings()
   const limit = settings.contextWindow || 128000
@@ -45,15 +47,16 @@ export function estimateContextBreakdown(
 
   const systemText = LITERARY_SYSTEM_PROMPT('', mode, {
     skillsCatalog: '', // counted under skills
-    webSearchEnabled: settings.webSearchEnabled
+    webSearchEnabled: settings.webSearchEnabled,
+    designDiscipline: workspaceHasDesignTree(workspaceRoot || session?.workspacePath || '')
   })
   const toolsJson = JSON.stringify(
-    getWritingToolsForMode(mode, { webSearchEnabled: settings.webSearchEnabled })
+    getWritingToolsForMode(mode, { webSearchEnabled: settings.webSearchEnabled }) ?? []
   )
 
   const buckets: ContextBucket[] = [
     { id: 'system', tokens: estimateTokensFromText(systemText) },
-    { id: 'tools', tokens: estimateTokensFromText(toolsJson) },
+    { id: 'tools', tokens: toolsJson ? estimateTokensFromText(toolsJson) : 0 },
     {
       id: 'skills',
       tokens: catalog ? estimateTokensFromText(catalog) : 0

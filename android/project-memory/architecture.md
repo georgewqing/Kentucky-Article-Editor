@@ -1,5 +1,8 @@
 # 架构（Android）
 
+> **扫描**：先读 [`README.md`](./README.md)「现状」+ [`PORTING-WIN-TO-ANDROID.md`](./PORTING-WIN-TO-ANDROID.md) 能力矩阵。本文是 Android 技术结构。  
+> **当前**：Android **0.2.0**（功能未齐）· 目标对齐 Win **0.3.0** 全部产品功能 · `toolApi: 2026-08-14-a`。
+
 ## 技术栈
 
 | 层 | 技术 |
@@ -63,11 +66,23 @@ android/                 ← 本软件根
   AI / Settings / dialogs 等 chrome；编辑器 `fontSize` 保持独立，禁止用根
   `transform` / `zoom` 破坏 Monaco、React Flow 和触控板坐标。
 - 宽度 `<= 1100px` 时 AI pane 脱离三栏布局成为右侧覆盖抽屉；编辑器分屏自动关闭。
+- 标签栏 / 分屏对齐 Win §160–§161（详见下节）。触屏不要给 `.tab` 常驻 `touch-action: none`（会挡标签栏横滑）；只在 `.tab-bar-scroll.is-reordering` 时加上。
 - `(pointer: coarse)` 放大触屏命中区；外接触控板的 wheel / secondary click 仍走
   专用桥与 hooks。
 
+## 标签栏 / 分屏
+
+Win 真源：[`../win/project-memory/architecture.md`](../win/project-memory/architecture.md)「标签栏 / 分屏」。Android 差异：
+
+- **保留** `compactLayout`（`max-width: 1100px`）时强制 `disableSplit`，「分屏编辑」按钮 disabled + `editor.splitNeedsWideScreen`。
+- 路由仍无 storyboard / image / video / pdf 预览（BOARD A3–A6）；`EditorPane` 不要从 Win 整文件覆盖进来。
+- `fitContextMenu.ts` 已拷到 `android/src/workbench/`（此栏菜单用）。FileTree 仍可本地定位；新浮层优先 portal + clamp。
+- 「此栏」必须是 `.pane-file-picker-btn` + `createPortal` `.ctx-menu`，禁止原生 `<select>`。
+- 改序：左/右键拖过 5px；右键 `preventDefault` + 对该 tab `setPointerCapture` + 窗口 `mousemove` 兜底；不要 `lostpointercapture` 结束；不要 HTML5 drag；不要右键指定分屏文件。
+- 关闭分屏只在 `.tab-bar-actions`。
+
+文件：`workbench/EditorArea.tsx` · `workbench/fitContextMenu.ts` · `state/appStore.ts` `reorderTabs` · `styles/global.css` · i18n `editor.paneFile` / `paneFileTitle` / `reorderTabsHint`。
+
 ## 与 Windows 的关系
 
-功能对齐，**源码分家**。台词协议 **v1.3** 与 Win extras 一致；联调 Godot 请用 win
-版打开同一磁盘目录。Windows 正式功能后续同步的文件映射、Platform/AI/原生改造流程
-和回归矩阵见 [PORTING-WIN-TO-ANDROID.md](./PORTING-WIN-TO-ANDROID.md)。
+功能对齐写作/kmind/对话骨架，**源码分家**。Win 现为 **0.3.0**；**产品功能全部要移植**（分镜/PDF/Git/媒体预览），对照 [PORTING-WIN-TO-ANDROID.md](./PORTING-WIN-TO-ANDROID.md)。台词协议 **v1.3** 与 Win extras 一致；联调 Godot 请用 win 版打开同一磁盘目录。

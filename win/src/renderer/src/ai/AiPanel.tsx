@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, History, Plus, X } from 'lucide-react'
 import { useAiStore, type AiProposal, type AiGitOp, type AiChatMessage } from '@/state/aiStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { accentTone, CONTEXT_BUCKET_STRENGTH } from '@/theme/applyTheme'
@@ -9,6 +9,8 @@ import { AiComposer } from './AiComposer'
 import { FileMountChip } from './FileMountChip'
 import { SimpleMarkdown } from './simpleMarkdown'
 import { formatProposalDiff } from './proposalDiff'
+
+const headerIcon = { size: 16, strokeWidth: 1.75 } as const
 
 function formatTokens(n: number): string {
   if (n >= 10000) return `${Math.round(n / 1000)}K`
@@ -341,19 +343,31 @@ export function AiPanel() {
           <span className="ai-panel-model">{settings?.model || '—'}</span>
         </div>
         <div className="ai-panel-actions">
-          <button type="button" title={t('ai.newChat')} onClick={() => void newChat()}>
-            +
+          <button
+            type="button"
+            title={t('ai.newChat')}
+            aria-label={t('ai.newChat')}
+            onClick={() => void newChat()}
+          >
+            <Plus {...headerIcon} aria-hidden />
           </button>
           <button
             type="button"
             title={t('ai.history')}
+            aria-label={t('ai.history')}
+            aria-pressed={showHistory}
             className={showHistory ? 'active' : ''}
             onClick={() => setShowHistory(!showHistory)}
           >
-            ≡
+            <History {...headerIcon} aria-hidden />
           </button>
-          <button type="button" title={t('ai.close')} onClick={() => setPanelVisible(false)}>
-            ×
+          <button
+            type="button"
+            title={t('ai.close')}
+            aria-label={t('ai.close')}
+            onClick={() => setPanelVisible(false)}
+          >
+            <X {...headerIcon} aria-hidden />
           </button>
         </div>
       </header>
@@ -368,8 +382,13 @@ export function AiPanel() {
                 <span>{s.title}</span>
                 <small>{s.workspacePath ? s.workspacePath.split(/[/\\]/).pop() : '—'}</small>
               </button>
-              <button type="button" onClick={() => void deleteSession(s.id)}>
-                ×
+              <button
+                type="button"
+                title={t('ai.deleteChat')}
+                aria-label={t('ai.deleteChat')}
+                onClick={() => void deleteSession(s.id)}
+              >
+                <X size={14} strokeWidth={1.75} aria-hidden />
               </button>
             </div>
           ))}

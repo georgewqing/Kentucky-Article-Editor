@@ -9,8 +9,9 @@
 |------|-----|
 | 反馈来源 | `test2/tool_feedback.md`（v1 → v2） |
 | Win 轮次 | Round A/B/C/D（2026-08-11） |
-| 部署指纹 | 写入类工具结果须含 `toolApi: "2026-08-12-l"` |
-| Git 专档 | [`AGENT-GIT.md`](./AGENT-GIT.md)（SCM + Agent 完整契约 §80–89） |
+| 部署指纹 | 写入类工具结果须含 `toolApi: "2026-08-14-a"` |
+| Git 专档 | [`AGENT-GIT.md`](./AGENT-GIT.md)（SCM + Agent 完整契约 §80–89；**§121 不向上找父仓**） |
+| 本机沙箱 | [`SECURITY-AUDIT.md`](./SECURITY-AUDIT.md)（Win IPC / 工作区根 / 导航锁；Android 移植时须对齐，不得只抄 UI） |
 | 测试基线 | [`AGENT-TOOL-TEST-BASELINE.md`](./AGENT-TOOL-TEST-BASELINE.md)（9 项实证） |
 | Android 状态 | **未对齐**（见 [`BOARD.md`](../../android/project-memory/BOARD.md)） |
 
@@ -20,7 +21,7 @@
 
 1. **业务规则两端一致**：写入门禁、工具名/schema、返回字段语义、continuity 结构、Plan 文件协议。
 2. **IO 层不同**：Win = Node `fs`（`win/src/main/ai/`）；Android = `WorkspaceIo`（`android/src/ai-runtime/`）。移植时改执行体，不改契约。
-3. **UI 项 agent 观测不到**：diff hunk、批量 Accept 在面板上；应用结果字段给 agent，面板给人。
+3. **UI 项 agent 观测不到**：diff hunk、只读变更卡在面板上；应用结果字段给 agent，面板给人。**无** Accept / 批量 Apply。
 4. **验证指纹**：任一端若工具结果无 `toolApi`，视为旧运行时，勿当「未修」。
 
 ### Win ↔ Android 文件映射
@@ -46,8 +47,8 @@
 | ID | 问题 | 严重度 | Win | Android | 验收要点 |
 |----|------|--------|-----|---------|----------|
 | **W1** | 写入结果不可预测；缺稳定提示 | P0 | ✅ Round A/D | ❌ | 结果含 `written`/`pending`/`reviewHint`/`gateDetail`/`toolApi` |
-| **W1b** | 角色 upsert 在「只标黄」时不写盘 → 幽灵 cast | P0 | ✅ Round C `shouldPersistAutoToDisk` | ❌ 查 Accept/落盘策略 | 角色 upsert 后磁盘立刻有行；continuity 能看见 |
-| **W1c** | 误以为「≥5 张角色 → pending」 | P0 澄清 | ✅ 无此阈值；≤5=台词行 | ❌ 对齐门禁注释 | 5–6 张 + 同轮改正文仍 `character_upsert` auto |
+| **W1b** | 角色 upsert 在「只标黄」时不写盘 → 幽灵 cast | P0 | ✅ 现恒强制写盘 | ❌ 须 `WorkspaceIo.write` | 角色 upsert 后磁盘立刻有行；continuity 能看见 |
+| **W1c** | 误以为「≥5 张角色 → pending」 | P0 澄清 | ✅ 无此阈值（历史 ≤5=台词行） | ❌ 勿恢复旧门禁 | 5–6 张 + 同轮改正文仍写盘 |
 | **W2** | 归档不知 `workspace_copy/move`，读后重写 | P1 | ✅ 描述+系统提示 | ❌ | agent 用 FS 工具归档，不抄写 |
 | **W3** | `continuity_check` dump 全文 | P0 | ✅ `issues[]`，无 `excerpts` | ❌ | 无全文；有 `registeredCast`/`castNote` |
 | **W3b** | 幽灵误报（第一章/钟楼/白鲸号）且漏报真名 | P0 | ✅ Round E–F `ghostNames.ts` | ❌ | 报老陈/管事；不报章节地名船号与「张船票/老人」类；排除已登记 |
@@ -57,7 +58,7 @@
 | **W7** | dialogue 列序静默重排不告知 | P2 | ✅ `columnOrder`/`headerNote` | ❌ | append 结果含列序说明 |
 | **W8** | append 新 `.dialogue.csv` 报 File not found | P1 | ✅ 自动建 11 列表头 | ❌ | 不存在则建表，不报错 |
 | **W9** | 无 diff 预览 | P2 | ✅ 文本 hunk UI + 结果 `uiReview` | ❌ | **需人工**看 AiPanel；agent 见 `uiReview` 勿重复报缺 |
-| **W10** | 无批量 Accept/Reject | P2 | ✅ 批量按钮 + `uiReview` | ❌ | 同上 |
+| **W10** | 无批量 Accept/Reject | P2 | ⏭ **已废止** Accept；只读卡（U13） | ❌ 勿做旧批量 Accept | 对齐 U13；见 BOARD W9 |
 | **W11** | kmind omit x/y 但坐标被固化 | P2 | ⏳ backlog 刻意未做 | ⏳ | 见 §3 |
 | **W12** | `web_search` 无 snippet | P2 | ✅ enrich+兜底 | ❌ | 每条 `snippet` 非空 |
 | **W13** | CSV `""人""` 观感 | P3 | ✅ 标明 RFC 4180 | ❌ | `read_characters` 解码字段 + 说明 |
@@ -71,29 +72,37 @@
 
 ## 2. Win 已实现行为契约（Android 必须复刻）
 
-### 2.1 写入门禁（`proposalGate`）
+### 2.0 当前写入契约（覆盖 2.1 历史门禁）
+
+Win **U13/U14** 之后（changelog §80 起，当前 `toolApi: 2026-08-14-a`）：
+
+| 项 | 现行 |
+|----|------|
+| `decideAutoApply` | **恒 `auto: true`**（reason/kind 仅遥测） |
+| `shouldPersistAutoToDisk` | **恒 `true`** |
+| Accept / Reject / 底部 pending 条 | **无** |
+| `commitProposal` | 写盘后 `status='applied'`，**必须 upsert** `session.proposals`（否则改动卡空白） |
+| 黄● | 相对上次 Ctrl+S / 打开 / Git 重载的 baseline，不是「未 Accept」 |
+| 误改 | Source Control 丢弃 / Undo |
+
+`forceReviewAllWrites` 加载强制 false，设置 UI 已移除。移植时 **禁止** 再实现 multi_file → pending。
+
+### 2.1 历史门禁（禁止恢复）
+
+下列是 U13 之前的规则，**只作对照，不要按此实现**：
 
 - `forceReviewAllWrites` → 全部 pending。
-- 新文件 / 空文件 → auto。
-- **`kind === 'characters'` → 始终 auto**（任意张数、即使本轮已改其它文件）。
-- layout（kmind_layout / dialogue_layout）→ auto。
-- dialogue：**行数** `changeCount ≤ 5` 可 auto；更大或多文件 → Accept。
+- dialogue：行数 `changeCount ≤ 5` 可 auto；更大或多文件 → Accept。
 - 已有 prose / kmind / performance / 多文件内容 → Accept。
 - **没有「角色卡 ≥5 张 → pending」**；勿把台词 ≤5 误套到角色。
-- 多文件判定：`turnPaths` 为**本轮已提交的其它内容路径**（先 `decideAutoApply`，再登记当前 path）。`update_plan_step` Soft 写计划 **不进** 门控；`plans/*.plan.md` 不计入 `multi_file_turn`。
-- `propose_append_dialogue_lines` 返回 `addedLineIds`（勿猜 id）；`setCurrent:false` 用 `asBool`，且不挪 `current.location`。
 
-### 2.2 自动落盘（即使「改完只标黄」）
+仍有效的澄清：`turnPaths` 为遥测；`update_plan_step` Soft 写计划不进内容门控；`propose_append_dialogue_lines` 返回 `addedLineIds`；`setCurrent:false` 用 `asBool`。
 
-`shouldPersistAutoToDisk` 为 true 时必须写工作区：
+### 2.2 自动落盘
 
-- characters
-- dialogue（≤5 行）
-- dialogue_choices / dialogue_layout / kmind_layout
-- 新文件 / 空文件
-- 或用户开启 `applyWritesToDisk`
+所有 Agent 写入走 `applyProposalToDisk`。Android SAF/杀进程：必须真 `WorkspaceIo.write`，不能只标脏。
 
-Android 另有 SAF/杀进程风险：角色与小台词建议与 Win 一样强制落盘（可参考既有 Accept 强制写盘策略，但 **auto 角色不能只停在内存**）。
+历史「仅 characters / ≤5 行台词 / layout 强制落盘」已被恒 true 取代。
 
 ### 2.3 工具结果公共字段
 
@@ -105,7 +114,7 @@ Android 另有 SAF/杀进程风险：角色与小台词建议与 Win 一样强�
   "writeDisk": true,
   "reviewHint": "auto: character_upsert",
   "gateDetail": { "reason": "character_upsert", "kind": "characters", "otherTurnPaths": 0 },
-  "toolApi": "2026-08-11-d",
+  "toolApi": "2026-08-14-a",
   "note": "..."
 }
 ```
@@ -126,14 +135,14 @@ Android 另有 SAF/杀进程风险：角色与小台词建议与 Win 一样强�
 | `continuity_check` | 结构化 issues |
 | `create_plan` / `update_plan_step` | `plans/*.plan.md` |
 | `web_search` / `web_research` / `web_fetch` | snippet 非空 |
-| `git_status` / `git_diff` / `git_pull` / `git_push` | 见 changelog §80–82；**无** force；**无** Agent commit；路径 UTF-8 |
+| `git_status` / `git_diff` / `git_log` / `git_pull` / `git_push` / `git_add` / `git_commit` / `git_remote_*` | 见 [AGENT-GIT.md](./AGENT-GIT.md)；**无** force；立即执行；Android 本版 ⏭ |
 | `propose_kmind_edit` | 含 shape/子树；非法 id → `skipped`/`warnings` |
 | `propose_reorder_dialogue_lines` | 可返回 `openingChanged`（CSV 首行=开场） |
 | `propose_dialogue_performance` | 校验 font_size / text_color |
 
 ### 2.5 System prompt 要点
 
-- `WRITE_GATE_SUMMARY` 含「角色始终 auto；记忆 YAML 始终 auto；≤5 仅台词行」。
+- `WRITE_GATE_SUMMARY`：已写盘；勿提 Accept；误改 → SCM。黄● 至 Ctrl+S。
 - 有 `toolApi` 说明；缺失则提示用户重启/重装。
 - cast 六列 + RFC 4180 说明。
 - 归档优先 FS 工具。
@@ -145,7 +154,7 @@ Android 另有 SAF/杀进程风险：角色与小台词建议与 Win 一样强�
 
 | 项 | 契约 |
 |----|------|
-| 指纹 | `2026-08-11-j` |
+| 指纹 | `2026-08-14-a` |
 | 工作区文件 | 按需：`story_state.yaml` / `foreshadow.yaml` / `voice_*.yaml` / `glossary.yaml` / `materials/` / `revisions/` |
 | 启用态 | 状态表存在且 `chapters.length≥1`（stale + L5） |
 | 门禁 | `MEMORY_KINDS` → auto+强制落盘；`materials/*.md`→prose；restore 正文→**自动写盘**（无 Accept，见 U13/U14） |
@@ -168,14 +177,15 @@ Win 实现入口：`literaryTools.ts` / `literaryContinuity.ts` / `memoryNudge.t
 
 | 项 | 当前态 |
 |----|--------|
-| 指纹 | `toolApi: "2026-08-12-l"` |
-| 建仓 | 打开工作区 `ensureWorkspaceGit`；点文件对 UI/`list_dir` 隐藏 |
-| Agent 工具 | status/diff/log/pull/push/add/commit/remote_add/remote_remove — 全部立即执行 |
+| 指纹 | `toolApi: "2026-08-14-a"` |
+| 建仓 | 打开工作区 `ensureWorkspaceGit`；**只看本根 `.git`，不向上**（§121）；点文件对 UI/`list_dir` 隐藏 |
+| 工作区根 | 拒盘符根 / 系统目录 / `C:\Users` / 用户主目录；见 [SECURITY-AUDIT.md](./SECURITY-AUDIT.md) |
+| Agent 工具 | status/diff/log/pull/push/add/commit/remote_add/remote_remove — 全部立即执行；**`git_diff` 越界与 `git_add` 同为 `Path escapes workspace: <完整路径>`**（§123） |
 | 写反馈 | 高亮卡 + Toast（无 Confirm；`-g` 已废） |
 | 本地 remote | 可含空格；缺失 → `git init --bare`（add/push） |
 | 新对话 | Git (L5) + `GIT_AGENT_PLAYBOOK` |
 | 禁止 | force / Shell / 任意 argv |
-| Android | 详约 [`../../android/project-memory/open/auto-apply-git.md`](../../android/project-memory/open/auto-apply-git.md)；本大版本不实现；Win 真源 [AGENT-GIT.md](./AGENT-GIT.md) |
+| Android | 详约 [`../../android/project-memory/open/auto-apply-git.md`](../../android/project-memory/open/auto-apply-git.md)；**要移植**（BOARD U16/U17 ❌；isomorphic-git）；Win 真源 [AGENT-GIT.md](./AGENT-GIT.md) |
 
 ---
 
@@ -207,7 +217,7 @@ Win 实现入口：`literaryTools.ts` / `literaryContinuity.ts` / `memoryNudge.t
 
 ## 5. 验证清单（任一端）
 
-1. 工具结果含 `toolApi: "2026-08-11-j"`（版本随契约 bump；旧文档示例中的 d/f/g/h/i 仅作历史）。
+1. 工具结果含 `toolApi: "2026-08-14-a"`（版本随契约 bump；清单里更早的 d/f/g/h/i/j/q 仅作历史）。
 2. `propose_upsert_characters`×6 → `written`+`writeDisk`；磁盘有 6 人。
 3. 同轮先 patch `.md` 再 upsert 角色 → 角色仍 auto（`gateDetail.reason=character_upsert`）。
 4. `continuity_check` → 有 `issues`，无 `excerpts`；不报第一章/钟楼会/张船票/老人/小字；能报老陈/管事。

@@ -141,6 +141,8 @@ export interface Platform {
     planFileRel?: string | null
     turnSystemHint?: string
     skillId?: string
+    replaceUserMessageId?: string
+    runId?: string
     editor: {
       workspacePath: string | null
       activeFilePath: string | null

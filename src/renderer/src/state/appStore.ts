@@ -20,6 +20,7 @@ import {
 import i18n from '@/i18n'
 import { askUnsavedConfirm } from '@/state/unsavedDialogStore'
 import { clipLines } from '@shared/clipLines'
+import { isExplorerHiddenAbs } from '@/workbench/explorerHidden'
 
 export type EditorKind = 'text' | 'mindmap' | 'dialogue' | 'characters' | 'storyboard' | 'image' | 'video' | 'pdf'
 export type ActiveView = 'explorer' | 'settings' | 'home' | 'scm'
@@ -153,6 +154,10 @@ interface AppState {
     writeDisk: boolean
     isNew?: boolean
   }) => Promise<void>
+  /** Close / restore editor tabs after rewriting a chat turn that undid agent file writes. */
+  syncTabsAfterFileRewind: (
+    restores: Array<{ absPath: string; before: string; isNew: boolean }>
+  ) => Promise<void>
   /** Agent change highlight ranges (1-based lines), cleared on save/close/git reload */
   agentChangeRanges: Record<string, Array<{ startLine: number; endLine: number }>>
   setAgentChangeRanges: (
@@ -681,8 +686,8 @@ export const useAppStore = create<AppState>((set, get) => ({
             : tab.isNew || tab.dirty
               ? tab.originalContent
               : snap.originalContent,
-          dirty: tab.isNew ? true : hubClean ? false : tab.dirty ? true : snap.dirty,
-          isNew: hubClean ? false : Boolean(tab.isNew),
+          dirty: hubClean ? false : snap.rev > tab.docRev ? snap.dirty : tab.isNew || tab.dirty || snap.dirty,
+          isNew: hubClean ? false : snap.rev > tab.docRev ? Boolean(tab.isNew) && snap.dirty : Boolean(tab.isNew),
           docRev: snap.rev
         }
         const patch: Partial<AppState> = { tabs: next }
@@ -797,6 +802,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     const platform = getPlatform()
     const existing = get().tabs.find((t) => pathsEqual(t.path, absPath))
     const isNewFile = Boolean(isNew ?? !before)
+    const hidden = isExplorerHiddenAbs(get().workspacePath, absPath)
+    // Explorer-hidden paths (revisions/, .kentucky, …) must not open ghost tabs —
+    // those paint a folder yellow dot with no visible dirty file.
+    if (!existing && hidden) {
+      try {
+        await platform.docOpen(absPath)
+        await platform.docPatch(absPath, content)
+      } catch {
+        /* buffer-only */
+      }
+      return
+    }
     // Always Cursor-like marks until the user saves (Ctrl+S), even if already persisted.
     const dirty = true
     const originalContent = before
@@ -863,6 +880,48 @@ export const useAppStore = create<AppState>((set, get) => ({
     } finally {
       applyingFromHub = false
     }
+  },
+
+  syncTabsAfterFileRewind: async (restores) => {
+    const platform = getPlatform()
+    for (const r of restores) {
+      get().clearAgentChangeRanges(r.absPath)
+      const tabs = get().tabs.filter((t) => pathsEqual(t.path, r.absPath))
+      if (r.isNew) {
+        for (const tab of tabs) {
+          await get().closeTab(tab.id, true)
+        }
+        try {
+          await platform.docEvict(r.absPath)
+        } catch {
+          /* ignore */
+        }
+        continue
+      }
+      if (!tabs.length) continue
+      for (const tab of tabs) {
+        const dirty = contentIsDirty(tab.path, r.before, tab.originalContent)
+        set((s) => ({
+          tabs: s.tabs.map((t) =>
+            t.id === tab.id
+              ? {
+                  ...t,
+                  content: r.before,
+                  dirty,
+                  isNew: false
+                }
+              : t
+          )
+        }))
+        try {
+          await platform.docOpen(r.absPath)
+          await platform.docPatch(r.absPath, r.before)
+        } catch {
+          /* disk restore in main is the source of truth */
+        }
+      }
+    }
+    await get().refreshTree()
   },
 
   saveTab: async (id) => {

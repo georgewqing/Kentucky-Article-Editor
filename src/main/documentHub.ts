@@ -278,6 +278,23 @@ export function docApplyAgentWrite(
   }
 }
 
+/** Rewind an agent write: disk already has `content`. Keep last Ctrl+S baseline. */
+export function docApplyRewindWrite(filePath: string, content: string): DocSnapshot | null {
+  const entry = findEntry(filePath)
+  if (!entry) return null
+  entry.content = content
+  entry.dirty = contentIsDirty(filePath, content, entry.originalContent)
+  entry.rev += 1
+  broadcast(entry)
+  return {
+    path: entry.path,
+    content: entry.content,
+    originalContent: entry.originalContent,
+    dirty: entry.dirty,
+    rev: entry.rev
+  }
+}
+
 /**
  * Force hub + subscribers to match on-disk bytes (e.g. after git discard).
  * Sets original=content, dirty=false.

@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { getPlatform } from '@/platform'
 import { useAppStore } from '@/state/appStore'
+import { askConfirm } from '@/state/confirmDialogStore'
+import { collectFileRestoresAfterUser } from '@shared/rewindFiles'
 import i18n from '@/i18n'
 
 export type AgentMode = 'ask' | 'plan' | 'outline' | 'agent'
@@ -63,6 +65,8 @@ export interface AiChatMessage {
   attachmentPreviews?: Array<{ path: string; lines: string[] }>
   /** Slash skill invoked for this user turn. */
   skillId?: string
+  /** Assistant turn was stopped before it finished. */
+  aborted?: boolean
 }
 
 export interface AiProposal {
@@ -123,6 +127,8 @@ interface AiState {
   streaming: boolean
   streamBuffer: string
   streamMessageId: string | null
+  /** Matches main-process runId so stale IPC from a replaced turn is ignored. */
+  agentRunId: string | null
   /** UI phase while a turn is in flight (avoid looking frozen). */
   agentPhase: 'idle' | 'thinking' | 'streaming' | 'tool'
   agentToolName: string | null
@@ -167,7 +173,7 @@ interface AiState {
   setSkillEnabled: (id: string, enabled: boolean) => Promise<AiSkillView[]>
   revealSkillsDir: () => Promise<void>
   importSkillFolder: () => Promise<{ ok: boolean; id?: string; error?: string }>
-  send: (text?: string, opts?: { turnSystemHint?: string }) => Promise<void>
+  send: (text?: string, opts?: { turnSystemHint?: string; replaceUserMessageId?: string }) => Promise<boolean>
   /** Switch to Agent, bind plan file, open AI panel, and start executing the plan. */
   executePlanFile: (absPath: string) => Promise<void>
   abort: () => Promise<void>
@@ -218,6 +224,7 @@ export const useAiStore = create<AiState>((set, get) => ({
   streaming: false,
   streamBuffer: '',
   streamMessageId: null,
+  agentRunId: null,
   agentPhase: 'idle',
   agentToolName: null,
   error: null,
@@ -572,19 +579,25 @@ export const useAiStore = create<AiState>((set, get) => ({
   },
 
   send: async (text, opts) => {
+    const replacing = opts?.replaceUserMessageId
+    if (get().streaming && !replacing) return false
     const draftText = (text ?? get().draft).trim()
     const chipSkill = get().composerSkillId?.trim() || null
     const pendingAttachments = get().composerAttachments
-    if ((!draftText && !chipSkill && !pendingAttachments.length) || get().streaming) return
     let session = get().session
+    if (!replacing && (!draftText && !chipSkill && !pendingAttachments.length)) return false
+    if (replacing && !draftText) {
+      const existing = session?.messages.find((m) => m.id === replacing)
+      if (!existing?.skillId && !(existing?.attachedPaths || []).length) return false
+    }
     if (!session) {
       await get().newChat()
       session = get().session
     }
-    if (!session) return
+    if (!session) return false
     if (!get().settings?.hasApiKey) {
       set({ error: 'API key is not set. Open Settings → AI.' })
-      return
+      return false
     }
 
     const ratio = get().contextUsed / Math.max(1, get().contextLimit)
@@ -593,7 +606,34 @@ export const useAiStore = create<AiState>((set, get) => ({
         error:
           'Context window is nearly full. Create a new chat — history will not be silently reset.'
       })
-      return
+      return false
+    }
+
+    const replaceMsg = replacing
+      ? session.messages.find((m) => m.id === replacing && m.role === 'user')
+      : undefined
+    if (replacing) {
+      const lastUser = [...session.messages].reverse().find((m) => m.role === 'user')
+      if (!replaceMsg || lastUser?.id !== replacing) return false
+      const restores = collectFileRestoresAfterUser(
+        session.messages,
+        session.proposals || [],
+        replacing
+      )
+      if (restores.length) {
+        const names = restores.map((r) => r.path.replace(/\\/g, '/'))
+        const shown = names.slice(0, 12)
+        const extra = names.length > 12 ? `\n… +${names.length - 12}` : ''
+        const ok = await askConfirm({
+          title: i18n.t('ai.rewindFilesTitle'),
+          message: i18n.t('ai.rewindFilesMessage', { files: shown.join('\n') + extra }),
+          confirmLabel: i18n.t('ai.rewindFilesConfirm'),
+          cancelLabel: i18n.t('ai.rewindFilesCancel'),
+          danger: true
+        })
+        if (!ok) return false
+        await useAppStore.getState().syncTabsAfterFileRewind(restores)
+      }
     }
 
     const MODE_CMDS = new Set(['agent', 'plan', 'outline', 'ask', 'new'])
@@ -601,7 +641,12 @@ export const useAiStore = create<AiState>((set, get) => ({
     let sendText = draftText
     let turnSystemHint = opts?.turnSystemHint
     let skillId: string | undefined
-    if (chipSkill && !MODE_CMDS.has(chipSkill)) {
+    const attachments = replacing
+      ? replaceMsg?.attachedPaths || []
+      : pendingAttachments
+    if (replacing) {
+      skillId = replaceMsg?.skillId
+    } else if (chipSkill && !MODE_CMDS.has(chipSkill)) {
       skillId = chipSkill
       sendText = draftText || `Follow skill /${skillId} for this request.`
     } else if (skillInvoke && !MODE_CMDS.has(skillInvoke[1])) {
@@ -620,20 +665,39 @@ export const useAiStore = create<AiState>((set, get) => ({
         .join('\n')
     }
 
-    const attachments = pendingAttachments
-    set({
-      streaming: true,
-      error: null,
-      draft: '',
-      streamBuffer: '',
-      agentPhase: 'thinking',
-      agentToolName: null,
-      composerAttachments: [],
-      composerSkillId: null
-    })
+    const runId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `run-${Date.now()}-${Math.random().toString(16).slice(2)}`
+
     // @mentions only — composer chips go via attachedPaths (CRITICAL + user-message bind).
     const fromAt = Array.from(sendText.matchAll(/@([^\s@]+)/g)).map((m) => m[1])
     const mentions = Array.from(new Set(fromAt.map((p) => p.replace(/\\/g, '/'))))
+
+    if (replacing) {
+      set({
+        streaming: true,
+        error: null,
+        streamBuffer: '',
+        streamMessageId: null,
+        agentPhase: 'thinking',
+        agentToolName: null,
+        agentRunId: runId
+      })
+    } else {
+      set({
+        streaming: true,
+        error: null,
+        draft: '',
+        streamBuffer: '',
+        streamMessageId: null,
+        agentPhase: 'thinking',
+        agentToolName: null,
+        composerAttachments: [],
+        composerSkillId: null,
+        agentRunId: runId
+      })
+    }
     try {
       const res = await getPlatform().aiSend({
         sessionId: session.id,
@@ -642,6 +706,8 @@ export const useAiStore = create<AiState>((set, get) => ({
         planFileRel: get().session?.planFileRel ?? undefined,
         turnSystemHint,
         skillId,
+        replaceUserMessageId: replacing,
+        runId,
         editor: getEditorContext(mentions, attachments.map((p) => p.replace(/\\/g, '/')))
       })
       if (!res?.ok) {
@@ -651,7 +717,9 @@ export const useAiStore = create<AiState>((set, get) => ({
           agentToolName: null,
           error: i18n.t('ai.sendFailed')
         })
+        return false
       }
+      return true
     } catch (err) {
       set({
         streaming: false,
@@ -659,6 +727,7 @@ export const useAiStore = create<AiState>((set, get) => ({
         agentToolName: null,
         error: err instanceof Error ? err.message : String(err)
       })
+      return false
     }
   },
 
@@ -707,7 +776,7 @@ export const useAiStore = create<AiState>((set, get) => ({
     const lastUser = [...session.messages].reverse().find((m) => m.role === 'user')
     if (!lastUser) return
     set({ error: null })
-    await get().send(lastUser.content)
+    await get().send(lastUser.content, { replaceUserMessageId: lastUser.id })
   },
 
   applyProposal: async (id) => {
@@ -773,11 +842,21 @@ export const useAiStore = create<AiState>((set, get) => ({
 
   bindEvents: () => {
     const p = getPlatform()
+    const fromThisRun = (payload: unknown): boolean => {
+      if (!payload || typeof payload !== 'object') return true
+      const id = (payload as { runId?: string }).runId
+      if (!id) return true
+      const cur = get().agentRunId
+      if (!cur) return true
+      return id === cur
+    }
     const offs = [
-      p.onAiEvent('ai:assistant_start', () => {
+      p.onAiEvent('ai:assistant_start', (payload) => {
+        if (!fromThisRun(payload)) return
         set({ agentPhase: 'thinking', agentToolName: null })
       }),
       p.onAiEvent('ai:chunk', (payload) => {
+        if (!fromThisRun(payload)) return
         const data = payload as { messageId: string; text: string }
         set((s) => ({
           streamMessageId: data.messageId,
@@ -787,8 +866,15 @@ export const useAiStore = create<AiState>((set, get) => ({
         }))
       }),
       p.onAiEvent('ai:session', (payload) => {
+        if (!fromThisRun(payload)) return
+        const wrapped = payload as { session?: AiSession; id?: string; messages?: AiChatMessage[] }
+        const session =
+          wrapped.session && Array.isArray(wrapped.session.messages)
+            ? wrapped.session
+            : (payload as AiSession)
+        if (!session?.id || !Array.isArray(session.messages)) return
         set((s) => ({
-          session: payload as AiSession,
+          session,
           streamBuffer: '',
           // Keep thinking between tool rounds while still streaming
           agentPhase: s.streaming && s.agentPhase !== 'tool' ? 'thinking' : s.agentPhase
@@ -797,6 +883,7 @@ export const useAiStore = create<AiState>((set, get) => ({
         void get().refreshSessions()
       }),
       p.onAiEvent('ai:tool', (payload) => {
+        if (!fromThisRun(payload)) return
         const data = payload as { name: string; status: string }
         if (data.status === 'running') {
           set({ agentPhase: 'tool', agentToolName: data.name, streaming: true })
@@ -805,6 +892,7 @@ export const useAiStore = create<AiState>((set, get) => ({
         }
       }),
       p.onAiEvent('ai:error', (payload) => {
+        if (!fromThisRun(payload)) return
         const data = payload as { message: string }
         set({
           error: data.message,
@@ -813,13 +901,15 @@ export const useAiStore = create<AiState>((set, get) => ({
           agentToolName: null
         })
       }),
-      p.onAiEvent('ai:done', () => {
+      p.onAiEvent('ai:done', (payload) => {
+        if (!fromThisRun(payload)) return
         set({
           streaming: false,
           streamBuffer: '',
           streamMessageId: null,
           agentPhase: 'idle',
-          agentToolName: null
+          agentToolName: null,
+          agentRunId: null
         })
         void get().refreshContextUsage()
       }),
@@ -897,6 +987,7 @@ export const useAiStore = create<AiState>((set, get) => ({
         const data = payload as {
           op: string
           path?: string
+          absPath?: string
           line?: number
           from?: string
           to?: string
@@ -915,8 +1006,8 @@ export const useAiStore = create<AiState>((set, get) => ({
             return
           }
 
-          if (data.op === 'fsDeleted' && data.path) {
-            const abs = absFromRel(data.path)
+          if (data.op === 'fsDeleted' && (data.path || data.absPath)) {
+            const abs = data.absPath || absFromRel(data.path || '')
             const absLower = abs.replace(/\\/g, '/').toLowerCase()
             const tabs = useAppStore.getState().tabs.filter((t) => {
               const p = t.path.replace(/\\/g, '/').toLowerCase()

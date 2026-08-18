@@ -671,21 +671,26 @@ export function AiComposer() {
                 applySlashItem(slashItems[slashIndex] || slashItems[0])
                 return
               }
-              if (e.key === 'Escape') {
-                e.preventDefault()
-                setSlashOpen(false)
-                return
-              }
-              if (e.key === 'Tab') {
-                e.preventDefault()
-                applySlashItem(slashItems[slashIndex] || slashItems[0])
-                return
-              }
-            }
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (e.key === 'Escape') {
               e.preventDefault()
-              void send()
+              setSlashOpen(false)
+              return
             }
+            if (e.key === 'Tab') {
+              e.preventDefault()
+              applySlashItem(slashItems[slashIndex] || slashItems[0])
+              return
+            }
+          }
+          if (e.key === 'Escape' && streaming) {
+            e.preventDefault()
+            void abort()
+            return
+          }
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            if (!streaming) void send()
+          }
           }}
         />
       </div>

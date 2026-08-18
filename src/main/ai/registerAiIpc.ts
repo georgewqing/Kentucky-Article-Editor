@@ -157,6 +157,8 @@ export function registerAiIpc(): void {
         planFileRel?: string | null
         turnSystemHint?: string
         skillId?: string
+        replaceUserMessageId?: string
+        runId?: string
       }
     ) => {
       const win = winFromEvent(e)
@@ -190,7 +192,9 @@ export function registerAiIpc(): void {
         mode: payload.mode,
         planFileRel: payload.planFileRel,
         turnSystemHint: payload.turnSystemHint,
-        skillId: payload.skillId
+        skillId: payload.skillId,
+        replaceUserMessageId: payload.replaceUserMessageId,
+        runId: payload.runId
       })
       return { ok: true }
     }

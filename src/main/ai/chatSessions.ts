@@ -29,6 +29,8 @@ export interface ChatMessage {
   skillId?: string
   /** API-only expansion at send time (mounts + this turn's Editor context / skill). Replay this; do not re-read disk or rebuild L5. Not shown in the UI bubble. */
   apiContent?: string
+  /** Assistant turn was cut off by Stop (or a following edit/resend). */
+  aborted?: boolean
 }
 
 export interface PlanStep {
@@ -196,6 +198,40 @@ export function createSession(workspacePath: string | null): ChatSession {
 export function deleteSession(id: string): void {
   const p = sessionPath(id)
   if (existsSync(p)) unlinkSync(p)
+}
+
+export function lastUserMessage(session: ChatSession): ChatMessage | undefined {
+  for (let i = session.messages.length - 1; i >= 0; i--) {
+    if (session.messages[i].role === 'user') return session.messages[i]
+  }
+  return undefined
+}
+
+/** Cursor rule: only the last user turn can be rewritten. Drops following assistant/tool rows. */
+export function rewindToUserTurn(
+  session: ChatSession,
+  userMessageId: string,
+  nextContent: string
+): boolean {
+  const last = lastUserMessage(session)
+  if (!last || last.id !== userMessageId) return false
+  const idx = session.messages.findIndex((m) => m.id === userMessageId)
+  if (idx < 0 || session.messages[idx].role !== 'user') return false
+  const removed = session.messages.slice(idx + 1)
+  const removedAssistantIds = new Set(
+    removed.filter((m) => m.role === 'assistant').map((m) => m.id)
+  )
+  session.messages = session.messages.slice(0, idx + 1)
+  const user = session.messages[idx]
+  user.content = nextContent
+  delete user.apiContent
+  session.proposals = (session.proposals || []).filter(
+    (p) => !p.messageId || !removedAssistantIds.has(p.messageId)
+  )
+  session.gitOps = (session.gitOps || []).filter(
+    (g) => !g.messageId || !removedAssistantIds.has(g.messageId)
+  )
+  return true
 }
 
 export function estimateTokensFromText(text: string | null | undefined): number {

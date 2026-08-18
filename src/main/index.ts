@@ -977,6 +977,8 @@ const TEXT_EXTS = new Set([
   '.jsx',
   '.css',
   '.html',
+  '.yaml',
+  '.yml',
   '.png',
   '.mp4',
   '.pdf'

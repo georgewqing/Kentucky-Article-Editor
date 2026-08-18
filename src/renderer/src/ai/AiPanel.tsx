@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { History, Plus, X } from 'lucide-react'
+import { ArrowUp, History, Pencil, Plus, X } from 'lucide-react'
 import { ThinkingOrb } from 'thinking-orbs'
 import { useAiStore, type AiProposal, type AiGitOp, type AiChatMessage } from '@/state/aiStore'
 import { useSettingsStore } from '@/state/settingsStore'
@@ -51,28 +51,129 @@ function formatTokens(n: number): string {
   return n.toLocaleString()
 }
 
-function UserMessageBody({ message }: { message: AiChatMessage }) {
-  const paths = message.attachedPaths || []
+function userBubbleText(message: AiChatMessage): string {
   const skillId = message.skillId
   const boilerplate =
-    skillId &&
-    message.content.trim() === `Follow skill /${skillId} for this request.`
-  const text = boilerplate ? '' : message.content
+    skillId && message.content.trim() === `Follow skill /${skillId} for this request.`
+  return boilerplate ? '' : message.content
+}
+
+function UserMessageBody({
+  message,
+  editable,
+  editing,
+  onStartEdit,
+  onCancelEdit,
+  onSubmitEdit
+}: {
+  message: AiChatMessage
+  editable: boolean
+  editing: boolean
+  onStartEdit: () => void
+  onCancelEdit: () => void
+  onSubmitEdit: (text: string) => void
+}) {
+  const { t } = useTranslation()
+  const paths = message.attachedPaths || []
+  const skillId = message.skillId
+  const text = userBubbleText(message)
   const hasChips = Boolean(skillId) || paths.length > 0
+  const [draft, setDraft] = useState(text)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (editing) setDraft(userBubbleText(message))
+  }, [editing, message])
+
+  useLayoutEffect(() => {
+    if (!editing) return
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.max(el.scrollHeight, 24)}px`
+  }, [editing, draft])
+
+  useEffect(() => {
+    if (!editing) return
+    const el = inputRef.current
+    if (!el) return
+    el.focus()
+    const len = el.value.length
+    el.setSelectionRange(len, len)
+  }, [editing])
+
+  const canSubmit = Boolean(draft.trim() || skillId || paths.length)
+
+  if (editing) {
+    return (
+      <div className="ai-msg-user-content ai-msg-user-editing">
+        {hasChips ? (
+          <div className="ai-msg-user-chips">
+            {skillId ? <span className="ai-skill-chip ai-skill-chip-msg">/{skillId}</span> : null}
+            {paths.map((path) => (
+              <FileMountChip key={path} path={path} variant="message" />
+            ))}
+          </div>
+        ) : null}
+        <textarea
+          ref={inputRef}
+          className="ai-msg-user-edit"
+          value={draft}
+          rows={1}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              onCancelEdit()
+              return
+            }
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && canSubmit) {
+              e.preventDefault()
+              onSubmitEdit(draft)
+            }
+          }}
+        />
+        <div className="ai-msg-user-edit-actions">
+          <button type="button" className="ai-msg-user-edit-cancel" onClick={onCancelEdit}>
+            {t('ai.cancelEdit')}
+          </button>
+          <button
+            type="button"
+            className="ai-composer-send"
+            title={t('ai.send')}
+            aria-label={t('ai.send')}
+            disabled={!canSubmit}
+            onClick={() => onSubmitEdit(draft)}
+          >
+            <ArrowUp size={14} strokeWidth={2} aria-hidden />
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="ai-msg-user-content">
       {hasChips ? (
         <div className="ai-msg-user-chips">
-          {skillId ? (
-            <span className="ai-skill-chip ai-skill-chip-msg">/{skillId}</span>
-          ) : null}
+          {skillId ? <span className="ai-skill-chip ai-skill-chip-msg">/{skillId}</span> : null}
           {paths.map((path) => (
             <FileMountChip key={path} path={path} variant="message" />
           ))}
         </div>
       ) : null}
       {text ? <div className="ai-msg-user-text">{text}</div> : null}
+      {editable ? (
+        <button
+          type="button"
+          className="ai-msg-edit-btn"
+          title={t('ai.editMessage')}
+          aria-label={t('ai.editMessage')}
+          onClick={onStartEdit}
+        >
+          <Pencil size={13} strokeWidth={1.75} aria-hidden />
+        </button>
+      ) : null}
     </div>
   )
 }
@@ -359,9 +460,12 @@ export function AiPanel() {
   const openSession = useAiStore((s) => s.openSession)
   const deleteSession = useAiStore((s) => s.deleteSession)
   const retryLast = useAiStore((s) => s.retryLast)
+  const send = useAiStore((s) => s.send)
+  const abort = useAiStore((s) => s.abort)
   const setPanelVisible = useAiStore((s) => s.setPanelVisible)
   const listRef = useRef<HTMLDivElement>(null)
   const historyRef = useRef<HTMLDivElement>(null)
+  const [editingUserId, setEditingUserId] = useState<string | null>(null)
   useOverlayScroll(listRef)
   useOverlayScroll(historyRef)
   const fileWork = agentPhase === 'tool' && isFileMutatingTool(agentToolName)
@@ -379,6 +483,14 @@ export function AiPanel() {
     () => [...messages].reverse().find((m) => m.role === 'assistant')?.id,
     [messages]
   )
+  const lastUserId = useMemo(
+    () => [...messages].reverse().find((m) => m.role === 'user')?.id ?? null,
+    [messages]
+  )
+
+  useEffect(() => {
+    if (editingUserId && editingUserId !== lastUserId) setEditingUserId(null)
+  }, [editingUserId, lastUserId])
   const proposals = session?.proposals || []
   const gitOps = session?.gitOps || []
 
@@ -481,19 +593,43 @@ export function AiPanel() {
               m.role === 'assistant' ? visibleAssistantText(m.content) : ''
             const hasBody = m.role === 'user' || Boolean(assistantText)
             const hasCards = turnProposals.length > 0 || turnGitOps.length > 0
+            const editable = m.role === 'user' && m.id === lastUserId
+            const editing = editable && editingUserId === m.id
             if (!hasBody && !hasCards) return null
             return (
               <div
                 key={m.id}
-                className={`ai-msg ai-msg-${m.role}`}
+                className={`ai-msg ai-msg-${m.role}${editable ? ' is-editable' : ''}${editing ? ' is-editing' : ''}`}
                 aria-label={m.role === 'user' ? t('ai.you') : t('ai.agent')}
               >
                 {hasBody ? (
                   <div className="ai-msg-body">
                     {m.role === 'assistant' ? (
-                      <SimpleMarkdown text={assistantText} />
+                      <>
+                        <SimpleMarkdown text={assistantText} />
+                        {m.aborted ? (
+                          <div className="ai-msg-stopped">{t('ai.stopped')}</div>
+                        ) : null}
+                      </>
                     ) : (
-                      <UserMessageBody message={m} />
+                      <UserMessageBody
+                        message={m}
+                        editable={editable}
+                        editing={editing}
+                        onStartEdit={() => {
+                          void (async () => {
+                            if (streaming) await abort()
+                            setEditingUserId(m.id)
+                          })()
+                        }}
+                        onCancelEdit={() => setEditingUserId(null)}
+                        onSubmitEdit={(next) => {
+                          void (async () => {
+                            const ok = await send(next, { replaceUserMessageId: m.id })
+                            if (ok) setEditingUserId(null)
+                          })()
+                        }}
+                      />
                     )}
                   </div>
                 ) : null}
@@ -510,12 +646,12 @@ export function AiPanel() {
               </div>
             )
           })}
-          {streaming && streamBuffer ? (
+          {streamBuffer ? (
             <div className="ai-msg ai-msg-assistant" aria-label={t('ai.agent')}>
               <div className="ai-msg-body ai-msg-streaming">
                 <SimpleMarkdown text={visibleAssistantText(streamBuffer) || streamBuffer} />
               </div>
-              {agentPhase === 'tool' && agentToolName ? (
+              {streaming && agentPhase === 'tool' && agentToolName ? (
                 <div className="ai-msg-proposals">
                   <ToolBlock
                     title={agentToolName}
@@ -523,11 +659,13 @@ export function AiPanel() {
                     pending
                   />
                 </div>
-              ) : (
+              ) : streaming ? (
                 <div className="ai-thinking ai-thinking-inline" aria-live="polite">
                   <ThinkingMark fileWork={fileWork} />
                   <span>{t('ai.thinkingMore')}</span>
                 </div>
+              ) : (
+                <div className="ai-msg-stopped">{t('ai.stopped')}</div>
               )}
             </div>
           ) : null}

@@ -1,12 +1,13 @@
 import { BrowserWindow } from 'electron'
 import { getWindowMeta } from '../windowRegistry'
-import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
-import { join, resolve } from 'path'
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'fs'
+import { dirname, join, resolve } from 'path'
 import { randomUUID } from 'crypto'
 import {
   loadSession,
   saveSession,
   estimateSessionTokens,
+  rewindToUserTurn,
   type ChatMessage,
   type ChatSession,
   type FileProposal,
@@ -28,7 +29,9 @@ import {
   resolveWorkspacePath,
   type AgentToolMode
 } from './tools'
-import { isDialogReadAllowed } from './workspacePath'
+import { assertInsideWorkspace, isDialogReadAllowed } from './workspacePath'
+import { docApplyRewindWrite, docEvict } from '../documentHub'
+import { collectFileRestoresAfterUser, type RewindFileRestore } from '../../shared/rewindFiles'
 import { parseCharactersCsv } from './formats'
 import {
   decideAutoApply,
@@ -39,7 +42,8 @@ import { skillsCatalogText, cavemanSystemBlock, loadSkill } from './skills'
 import { buildDesignL5Summary, workspaceHasDesignTree } from './designGddL5'
 import { looksLikeToolDump, sanitizeAskAssistantContent } from './askGuard'
 
-const activeAborts = new Map<number, AbortController>()
+type ActiveRun = { ac: AbortController; runId: string }
+const activeRuns = new Map<number, ActiveRun>()
 const MAX_CTX_FILE_CHARS = 24000
 const MAX_CHAR_SUMMARY_CHARS = 6000
 
@@ -552,11 +556,75 @@ async function executeGitPendingOp(
 }
 
 export function abortAiForWebContents(wcId: number): void {
-  const c = activeAborts.get(wcId)
-  if (c) {
-    c.abort()
-    activeAborts.delete(wcId)
+  activeRuns.get(wcId)?.ac.abort()
+}
+
+function isCurrentRun(wcId: number, runId: string): boolean {
+  return activeRuns.get(wcId)?.runId === runId
+}
+
+function beginRun(wcId: number, runId?: string): ActiveRun {
+  abortAiForWebContents(wcId)
+  const run: ActiveRun = { ac: new AbortController(), runId: runId || randomUUID() }
+  activeRuns.set(wcId, run)
+  return run
+}
+
+function endRun(wcId: number, runId: string): boolean {
+  if (!isCurrentRun(wcId, runId)) return false
+  activeRuns.delete(wcId)
+  return true
+}
+
+function closeIncompleteToolRound(session: ChatSession): void {
+  type Asst = ChatMessage & { toolCalls?: Array<{ id: string; name: string; arguments: string }> }
+  const lastAsst = [...session.messages].reverse().find((m) => m.role === 'assistant') as
+    | Asst
+    | undefined
+  if (!lastAsst?.toolCalls?.length) return
+  const have = new Set(
+    session.messages.filter((m) => m.role === 'tool' && m.toolCallId).map((m) => m.toolCallId)
+  )
+  for (const tc of lastAsst.toolCalls) {
+    if (have.has(tc.id)) continue
+    session.messages.push({
+      id: randomUUID(),
+      role: 'tool',
+      content: JSON.stringify({ error: 'Aborted by user' }),
+      createdAt: Date.now(),
+      toolName: tc.name,
+      toolCallId: tc.id
+    })
   }
+}
+
+function applyRewindFileRestores(
+  restores: RewindFileRestore[],
+  workspaceRoot: string | null,
+  emit: (channel: string, payload: unknown) => void
+): void {
+  for (const r of restores) {
+    try {
+      if (workspaceRoot) assertInsideWorkspace(workspaceRoot, r.absPath)
+      if (r.isNew) {
+        if (existsSync(r.absPath)) unlinkSync(r.absPath)
+        docEvict(r.absPath)
+        emit('ai:workspaceOp', {
+          op: 'fsDeleted',
+          path: r.path.replace(/\\/g, '/'),
+          absPath: r.absPath
+        })
+      } else {
+        const dir = dirname(r.absPath)
+        if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+        writeFileSync(r.absPath, r.before, 'utf-8')
+        docApplyRewindWrite(r.absPath, r.before)
+      }
+    } catch {
+      /* keep restoring the rest */
+    }
+  }
+  if (restores.length) emit('ai:workspaceOp', { op: 'refreshTree' })
 }
 
 export async function runAgentTurn(opts: {
@@ -571,21 +639,42 @@ export async function runAgentTurn(opts: {
   turnSystemHint?: string
   /** Composer skill chip id (persisted on the user message). */
   skillId?: string
+  /** Rewrite this last user bubble and drop everything after it (Cursor edit). */
+  replaceUserMessageId?: string
+  /** Renderer generation id so in-flight IPC from a replaced turn is ignored. */
+  runId?: string
 }): Promise<void> {
   const mode: AgentToolMode =
     opts.mode === 'ask' || opts.mode === 'plan' || opts.mode === 'outline' || opts.mode === 'agent'
       ? opts.mode
       : loadAiSettings().agentMode || 'agent'
   const wcId = opts.win.webContents.id
-  abortAiForWebContents(wcId)
-  const ac = new AbortController()
-  activeAborts.set(wcId, ac)
+  const { ac, runId } = beginRun(wcId, opts.runId)
+  const alive = (): boolean => isCurrentRun(wcId, runId)
+  const emit = (channel: string, payload: unknown): void => {
+    if (!alive()) return
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      send(opts.win, channel, { ...(payload as Record<string, unknown>), runId })
+      return
+    }
+    send(opts.win, channel, { runId, payload })
+  }
 
   const session = loadSession(opts.sessionId)
   if (!session) {
-    send(opts.win, 'ai:error', { message: 'Session not found' })
-    send(opts.win, 'ai:done', { sessionId: opts.sessionId })
+    endRun(wcId, runId)
+    send(opts.win, 'ai:error', { message: 'Session not found', runId })
+    send(opts.win, 'ai:done', { sessionId: opts.sessionId, runId })
     return
+  }
+  const persist = (): boolean => {
+    if (!alive()) return false
+    saveSession(session)
+    return true
+  }
+  const emitSession = (): void => {
+    if (!alive()) return
+    send(opts.win, 'ai:session', { session, runId })
   }
 
   const winRoot = getWindowMeta(opts.win)?.workspacePath
@@ -598,18 +687,6 @@ export async function runAgentTurn(opts: {
     session.planFileRel = opts.planFileRel
   }
 
-  const settings = loadAiSettings()
-  const used = estimateSessionTokens(session)
-  if (used >= settings.contextWindow * 0.98) {
-    send(opts.win, 'ai:error', {
-      message:
-        'Context window is nearly full. Create a new chat or delete older messages — history was not silently reset.'
-    })
-    send(opts.win, 'ai:done', { sessionId: opts.sessionId })
-    activeAborts.delete(wcId)
-    return
-  }
-
   const attachedPaths = Array.from(
     new Set(
       (opts.editor.attachedPaths || [])
@@ -617,27 +694,78 @@ export async function runAgentTurn(opts: {
         .filter(Boolean)
     )
   )
-  const skillId =
+  const requestedSkill =
     typeof opts.skillId === 'string' && /^[A-Za-z0-9._-]+$/.test(opts.skillId.trim())
       ? opts.skillId.trim()
       : undefined
-  const userTurnId = randomUUID()
-  session.messages.push({
-    id: userTurnId,
-    role: 'user',
-    content: opts.userText,
-    createdAt: Date.now(),
-    ...(attachedPaths.length ? { attachedPaths } : {}),
-    ...(skillId ? { skillId } : {})
-  })
-  if (session.title === 'New chat') {
-    const titleSrc = skillId
-      ? `/${skillId}${opts.userText.trim() ? ` ${opts.userText.trim()}` : ''}`
-      : opts.userText.trim()
-    if (titleSrc) session.title = titleSrc.slice(0, 48)
+
+  let userTurnId: string
+  let skillId: string | undefined
+  if (opts.replaceUserMessageId) {
+    const restores = collectFileRestoresAfterUser(
+      session.messages,
+      session.proposals || [],
+      opts.replaceUserMessageId
+    )
+    if (!rewindToUserTurn(session, opts.replaceUserMessageId, opts.userText)) {
+      endRun(wcId, runId)
+      send(opts.win, 'ai:error', {
+        message: 'Only the latest question can be edited.',
+        runId,
+        sessionId: opts.sessionId
+      })
+      send(opts.win, 'ai:done', { sessionId: opts.sessionId, runId })
+      return
+    }
+    applyRewindFileRestores(restores, session.workspacePath, emit)
+    userTurnId = opts.replaceUserMessageId
+    const user = session.messages.find((m) => m.id === userTurnId)
+    if (user && attachedPaths.length) user.attachedPaths = attachedPaths
+    const kept = user?.skillId
+    skillId =
+      typeof kept === 'string' && /^[A-Za-z0-9._-]+$/.test(kept) ? kept : requestedSkill
+    const firstUser = session.messages.find((m) => m.role === 'user')
+    if (firstUser?.id === userTurnId) {
+      const titleSrc = skillId
+        ? `/${skillId}${opts.userText.trim() ? ` ${opts.userText.trim()}` : ''}`
+        : opts.userText.trim()
+      if (titleSrc) session.title = titleSrc.slice(0, 48)
+    }
+  } else {
+    skillId = requestedSkill
+    userTurnId = randomUUID()
+    session.messages.push({
+      id: userTurnId,
+      role: 'user',
+      content: opts.userText,
+      createdAt: Date.now(),
+      ...(attachedPaths.length ? { attachedPaths } : {}),
+      ...(skillId ? { skillId } : {})
+    })
+    if (session.title === 'New chat') {
+      const titleSrc = skillId
+        ? `/${skillId}${opts.userText.trim() ? ` ${opts.userText.trim()}` : ''}`
+        : opts.userText.trim()
+      if (titleSrc) session.title = titleSrc.slice(0, 48)
+    }
   }
-  saveSession(session)
-  send(opts.win, 'ai:session', session)
+
+  const settings = loadAiSettings()
+  const used = estimateSessionTokens(session)
+  if (used >= settings.contextWindow * 0.98) {
+    send(opts.win, 'ai:error', {
+      message:
+        'Context window is nearly full. Create a new chat or delete older messages — history was not silently reset.',
+      runId,
+      sessionId: opts.sessionId
+    })
+    send(opts.win, 'ai:done', { sessionId: opts.sessionId, runId })
+    endRun(wcId, runId)
+    return
+  }
+
+  persist()
+  emitSession()
 
   let turnHint = opts.turnSystemHint?.trim() || ''
   if (skillId) {
@@ -697,17 +825,17 @@ export async function runAgentTurn(opts: {
     if (m.role === 'user' && m.id !== userTurnId) ensureUserApiContent(m, workspaceRoot)
   }
   const editorContextText = await buildEditorContextText(opts.editor, session, mode)
-  saveSession(session)
+  persist()
 
   try {
     while (steps < maxSteps) {
       steps += 1
-      if (ac.signal.aborted) break
+      if (ac.signal.aborted || !alive()) break
 
       const assistantId = randomUUID()
       let content = ''
       const toolAcc = new Map<number, { id: string; name: string; arguments: string }>()
-      send(opts.win, 'ai:assistant_start', { messageId: assistantId, sessionId: session.id })
+      emit('ai:assistant_start', { messageId: assistantId, sessionId: session.id })
 
       await new Promise<void>((resolve) => {
         void (async () => {
@@ -717,7 +845,7 @@ export async function runAgentTurn(opts: {
             userTurnId,
             flattenToolHistory: !toolsAllowed
           })
-          if (steps === 1) saveSession(session)
+          if (steps === 1) persist()
           await streamChatCompletion({
             messages,
             tools,
@@ -728,7 +856,7 @@ export async function runAgentTurn(opts: {
                 if (mode === 'ask' && looksLikeToolDump(content)) {
                   return
                 }
-                send(opts.win, 'ai:chunk', {
+                emit('ai:chunk', {
                   sessionId: session.id,
                   messageId: assistantId,
                   text: ev.text
@@ -740,14 +868,14 @@ export async function runAgentTurn(opts: {
                 if (ev.argumentsDelta) cur.arguments += ev.argumentsDelta
                 toolAcc.set(ev.index, cur)
               } else if (ev.type === 'error') {
-                send(opts.win, 'ai:error', { message: ev.message, sessionId: session.id })
+                emit('ai:error', { message: ev.message, sessionId: session.id })
               } else if (ev.type === 'done') {
                 resolve()
               }
             }
           })
         })().catch((err) => {
-          send(opts.win, 'ai:error', {
+          emit('ai:error', {
             message: err instanceof Error ? err.message : String(err),
             sessionId: session.id
           })
@@ -755,7 +883,24 @@ export async function runAgentTurn(opts: {
         })
       })
 
-      if (ac.signal.aborted) break
+      if (ac.signal.aborted || !alive()) {
+        if (alive()) {
+          const trimmed = content.trim()
+          if (trimmed) {
+            session.messages.push({
+              id: assistantId,
+              role: 'assistant',
+              content: mode === 'ask' ? sanitizeAskAssistantContent(content) : content,
+              createdAt: Date.now(),
+              aborted: true
+            })
+          }
+          closeIncompleteToolRound(session)
+          persist()
+          emitSession()
+        }
+        break
+      }
 
       const toolCalls = Array.from(toolAcc.entries())
         .sort((a, b) => a[0] - b[0])
@@ -776,8 +921,8 @@ export async function runAgentTurn(opts: {
           content: content || '(empty)',
           createdAt: Date.now()
         })
-        saveSession(session)
-        send(opts.win, 'ai:session', session)
+        persist()
+        emitSession()
         break
       }
 
@@ -793,16 +938,24 @@ export async function runAgentTurn(opts: {
       session.messages.push(assistantMsg)
 
       if (!workspaceRoot) {
-        send(opts.win, 'ai:error', { message: 'Open a workspace folder to use agent tools.' })
-        saveSession(session)
+        emit('ai:error', { message: 'Open a workspace folder to use agent tools.' })
+        persist()
         break
       }
 
       for (const tc of toolCalls) {
-        send(opts.win, 'ai:tool', { sessionId: session.id, name: tc.name, status: 'running' })
+        if (ac.signal.aborted || !alive()) break
+        emit('ai:tool', { sessionId: session.id, name: tc.name, status: 'running' })
         const result = await runTool(tc.name, tc.arguments, {
           workspaceRoot,
           onProposal: (p) => {
+            if (!alive() || ac.signal.aborted) {
+              return {
+                autoApplied: false,
+                writeDisk: false,
+                gate: { reason: 'aborted', kind: 'other', otherTurnPaths: 0 }
+              }
+            }
             const r = commitProposal(
               opts.win,
               session,
@@ -821,17 +974,29 @@ export async function runAgentTurn(opts: {
               }
             }
           },
-          onGitOp: (partial) => commitGitOp(opts.win, session, assistantId, partial),
+          onGitOp: async (partial) => {
+            if (!alive() || ac.signal.aborted) {
+              return {
+                ...partial,
+                status: 'rejected' as const,
+                error: 'Aborted',
+                messageId: assistantId
+              }
+            }
+            return commitGitOp(opts.win, session, assistantId, partial)
+          },
           onPlan: (stepsIn, planFileRel) => {
+            if (!alive() || ac.signal.aborted) return
             session.plan = stepsIn
             if (planFileRel) session.planFileRel = planFileRel
-            send(opts.win, 'ai:plan', {
+            emit('ai:plan', {
               sessionId: session.id,
               plan: session.plan,
               planFileRel: session.planFileRel ?? null
             })
           },
           onPlanUpdate: (patch) => {
+            if (!alive() || ac.signal.aborted) return
             let step: PlanStep | undefined
             if (patch.id) step = session.plan.find((s) => s.id === patch.id)
             else if (typeof patch.index === 'number') step = session.plan[patch.index]
@@ -844,17 +1009,19 @@ export async function runAgentTurn(opts: {
               step.status = patch.status
             }
             if (patch.text) step.text = patch.text
-            send(opts.win, 'ai:plan', {
+            emit('ai:plan', {
               sessionId: session.id,
               plan: session.plan,
               planFileRel: session.planFileRel ?? null
             })
           },
           onOpenFile: (relPath, line) => {
-            send(opts.win, 'ai:workspaceOp', { op: 'openFile', path: relPath, line })
+            if (!alive()) return
+            emit('ai:workspaceOp', { op: 'openFile', path: relPath, line })
           },
           onWorkspaceFs: (payload) => {
-            send(opts.win, 'ai:workspaceOp', payload)
+            if (!alive()) return
+            emit('ai:workspaceOp', payload)
           },
           getPlan: () => session.plan,
           getPlanFileRel: () => session.planFileRel,
@@ -862,6 +1029,7 @@ export async function runAgentTurn(opts: {
           webSearchProvider: settings.webSearchProvider,
           webSearchMaxResults: settings.webSearchMaxResults
         })
+        if (!alive()) break
         session.messages.push({
           id: randomUUID(),
           role: 'tool',
@@ -870,7 +1038,7 @@ export async function runAgentTurn(opts: {
           toolName: tc.name,
           toolCallId: tc.id
         })
-        send(opts.win, 'ai:tool', {
+        emit('ai:tool', {
           sessionId: session.id,
           name: tc.name,
           status: 'done',
@@ -878,14 +1046,24 @@ export async function runAgentTurn(opts: {
         })
       }
 
-      saveSession(session)
-      send(opts.win, 'ai:session', session)
+      if (ac.signal.aborted || !alive()) {
+        if (alive()) {
+          closeIncompleteToolRound(session)
+          persist()
+          emitSession()
+        }
+        break
+      }
+
+      persist()
+      emitSession()
     }
   } finally {
-    activeAborts.delete(wcId)
-    send(opts.win, 'ai:done', { sessionId: opts.sessionId })
-    const latest = loadSession(opts.sessionId)
-    if (latest) send(opts.win, 'ai:session', latest)
+    if (endRun(wcId, runId)) {
+      send(opts.win, 'ai:done', { sessionId: opts.sessionId, runId })
+      const latest = loadSession(opts.sessionId)
+      if (latest) send(opts.win, 'ai:session', { session: latest, runId })
+    }
   }
 }
 

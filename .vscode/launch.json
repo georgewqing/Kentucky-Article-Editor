@@ -2,69 +2,46 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Win: Debug Main Process",
+      "name": "Debug Main Process",
       "type": "node",
       "request": "launch",
-      "cwd": "${workspaceFolder}/win",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--sourcemap"],
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron-vite",
       "windows": {
-        "runtimeExecutable": "npm.cmd"
+        "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron-vite.cmd"
       },
+      "runtimeArgs": ["--sourcemap"],
       "env": {
         "REMOTE_DEBUGGING_PORT": "9222"
       },
-      "console": "integratedTerminal",
-      "autoAttachChildProcesses": true,
-      "skipFiles": ["<node_internals>/**"],
-      "presentation": {
-        "group": "Kentucky",
-        "order": 2
-      }
+      "console": "integratedTerminal"
     },
     {
-      "name": "Win: Debug Renderer Process",
+      "name": "Debug Renderer Process",
       "type": "chrome",
       "request": "attach",
       "port": 9222,
-      "webRoot": "${workspaceFolder}/win/src/renderer",
+      "webRoot": "${workspaceFolder}/src/renderer",
       "timeout": 60000,
       "presentation": {
-        "hidden": true,
-        "group": "Kentucky",
-        "order": 3
+        "hidden": true
       }
     },
     {
-      "name": "Win: Run Dev",
+      "name": "Run Dev (no debugger)",
       "type": "node-terminal",
       "request": "launch",
       "command": "npm run dev",
-      "cwd": "${workspaceFolder}/win",
-      "presentation": {
-        "group": "Kentucky",
-        "order": 4
-      }
-    },
-    {
-      "name": "Android: Vite Dev",
-      "type": "node-terminal",
-      "request": "launch",
-      "command": "npm run dev",
-      "cwd": "${workspaceFolder}/android",
-      "presentation": {
-        "group": "Kentucky",
-        "order": 5
-      }
+      "cwd": "${workspaceFolder}"
     }
   ],
   "compounds": [
     {
       "name": "Debug All",
-      "configurations": ["Win: Debug Main Process", "Win: Debug Renderer Process"],
+      "configurations": ["Debug Main Process", "Debug Renderer Process"],
       "stopAll": true,
       "presentation": {
-        "group": "Kentucky",
+        "group": "Kentucky-Win",
         "order": 1
       }
     }

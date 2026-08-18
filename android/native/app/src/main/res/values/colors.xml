@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="colorPrimary">#141414</color>
-    <color name="colorPrimaryDark">#000000</color>
-    <color name="colorAccent">#88C0D0</color>
-    <color name="app_background">#141414</color>
-    <color name="system_bar_black">#000000</color>
-</resources>

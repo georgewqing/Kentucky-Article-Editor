@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, ChevronRight, History, Plus, X } from 'lucide-react'
+import { History, Plus, X } from 'lucide-react'
 import { ThinkingOrb } from 'thinking-orbs'
 import { useAiStore, type AiProposal, type AiGitOp, type AiChatMessage } from '@/state/aiStore'
 import { useSettingsStore } from '@/state/settingsStore'
@@ -128,13 +128,11 @@ function ContextBar() {
         className="ai-context-trigger"
         aria-expanded={open}
         title={t('ai.contextUsageTitle')}
+        aria-label={`${t('ai.context')} ${pct}%`}
         onClick={() => setOpen((v) => !v)}
       >
         <div className="ai-context-meta">
           <span>{t('ai.context')}</span>
-          <span>
-            {used.toLocaleString()} / {limit.toLocaleString()} ({pct}%)
-          </span>
         </div>
         <div className="ai-context-track" aria-hidden>
           {stacked.length > 0 ? (
@@ -197,58 +195,102 @@ function ContextBar() {
   )
 }
 
+function visibleAssistantText(content: string): string {
+  return content
+    .split('\n')
+    .filter((line) => !/^[⚙⚙️]\s*[\w./-]+\s*$/.test(line.trim()))
+    .join('\n')
+    .replace(/^\(empty\)\s*$/m, '')
+    .trim()
+}
+
+function toolTagFor(name: string): string {
+  if (name.startsWith('git_')) return 'git'
+  if (
+    name.startsWith('propose_') ||
+    name.startsWith('workspace_') ||
+    name === 'export_workspace_pdf'
+  ) {
+    return 'edit'
+  }
+  return 'tool'
+}
+
+function ToolBlock({
+  title,
+  tag,
+  body,
+  error,
+  pending,
+  expandable,
+  titleClassName,
+  children
+}: {
+  title: string
+  tag: string
+  body?: string
+  error?: string
+  pending?: boolean
+  expandable?: boolean
+  titleClassName?: string
+  children?: ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  const raw = (error || body || '').trim()
+  const clipped = raw ? clipLines(raw) : ''
+  const canExpand = Boolean(expandable && raw && clipped !== raw)
+  const interactive = canExpand || Boolean(children)
+  const shown = open || !canExpand ? raw : clipped
+
+  return (
+    <div
+      className={`ai-tool-block${pending ? ' is-pending' : ''}${error ? ' is-failed' : ''}${open ? ' is-open' : ''}`}
+    >
+      {interactive ? (
+        <button
+          type="button"
+          className="ai-tool-block-head"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span className="ai-tool-prompt" aria-hidden>
+            &gt;_
+          </span>
+          <span className={`ai-tool-block-title ${titleClassName || ''}`.trim()}>{title}</span>
+          <span className="ai-tool-block-tag">{tag}</span>
+        </button>
+      ) : (
+        <div className="ai-tool-block-head">
+          <span className="ai-tool-prompt" aria-hidden>
+            &gt;_
+          </span>
+          <span className={`ai-tool-block-title ${titleClassName || ''}`.trim()}>{title}</span>
+          <span className="ai-tool-block-tag">{tag}</span>
+        </div>
+      )}
+      {shown ? <pre className="ai-tool-block-body">{shown}</pre> : null}
+      {open && children ? <div className="ai-tool-block-extra">{children}</div> : null}
+    </div>
+  )
+}
+
 /** Auto-written change summary — yellow/blue match tab marks. Collapsed by default. */
 function AppliedChangeCard({ proposal }: { proposal: AiProposal }) {
   const { t } = useTranslation()
-  const streaming = useAiStore((s) => s.streaming)
-  const [expanded, setExpanded] = useState(false)
-  const wasStreaming = useRef(streaming)
-
-  useEffect(() => {
-    if (wasStreaming.current && !streaming) setExpanded(false)
-    wasStreaming.current = streaming
-  }, [streaming])
-
   const base = proposal.path.split(/[/\\]/).pop() || proposal.path
   const isNew = !proposal.before
 
   return (
-    <div
-      className={`ai-proposal applied ${isNew ? 'is-new' : 'is-modified'} ${expanded ? 'is-expanded' : 'is-collapsed'}`}
+    <ToolBlock
+      title={base}
+      tag={t('ai.toolTagFile')}
+      body={proposal.summary ? clipLines(proposal.summary) : undefined}
+      titleClassName={isNew ? 'is-file-new' : 'is-file-dirty'}
     >
-      <button
-        type="button"
-        className="ai-proposal-head"
-        aria-expanded={expanded}
-        title={expanded ? t('ai.collapseChange') : t('ai.expandChange')}
-        onClick={() => setExpanded((v) => !v)}
-      >
-        <span className="ai-proposal-title">
-          {expanded ? (
-            <ChevronDown size={14} className="ai-proposal-chevron" aria-hidden />
-          ) : (
-            <ChevronRight size={14} className="ai-proposal-chevron" aria-hidden />
-          )}
-          <strong title={proposal.path}>
-            <span className={isNew ? 'tab-new' : 'tab-dirty'}>● </span>
-            {base}
-          </strong>
-        </span>
-        <span className="ai-proposal-status">
-          {isNew ? t('editor.tabNew') : t('ai.statusApplied')}
-        </span>
-      </button>
-      {expanded ? (
-        <>
-          <p className="ai-proposal-summary">{proposal.summary}</p>
-          <pre className="ai-proposal-diff">
-            {formatProposalDiff(proposal.before, proposal.after, 32)}
-          </pre>
-        </>
-      ) : proposal.summary ? (
-        <p className="ai-proposal-summary ai-proposal-summary-collapsed">{proposal.summary}</p>
-      ) : null}
-    </div>
+      <pre className="ai-proposal-diff">
+        {formatProposalDiff(proposal.before, proposal.after, 32)}
+      </pre>
+    </ToolBlock>
   )
 }
 
@@ -277,13 +319,6 @@ function gitOpsForMessage(
 
 function GitResultCard({ op }: { op: AiGitOp }) {
   const { t } = useTranslation()
-  const [flash, setFlash] = useState(true)
-
-  useEffect(() => {
-    const id = window.setTimeout(() => setFlash(false), 2200)
-    return () => window.clearTimeout(id)
-  }, [op.id])
-
   const kindLabel =
     op.kind === 'add'
       ? t('ai.gitKindAdd')
@@ -292,32 +327,18 @@ function GitResultCard({ op }: { op: AiGitOp }) {
         : op.kind === 'remote_remove'
           ? t('ai.gitKindRemoteRemove')
           : t('ai.gitKindRemoteAdd')
-
-  const statusLabel =
-    op.status === 'applied'
-      ? t('ai.gitStatusApplied')
-      : op.status === 'rejected'
-        ? t('ai.gitStatusFailed')
-        : t('ai.gitStatusPending')
+  const title = op.summary || kindLabel
+  const body = op.status === 'rejected' ? undefined : op.resultNote || op.detail
 
   return (
-    <div
-      className={`ai-proposal ai-git-op ${op.status}${flash ? ' is-flash' : ''}`}
-      data-git-op={op.id}
-    >
-      <div className="ai-proposal-head ai-git-op-head">
-        <span className="ai-proposal-title">
-          <strong>
-            <span className="ai-git-badge">{t('ai.gitBadge')}</span> {kindLabel}
-          </strong>
-        </span>
-        <span className="ai-proposal-status">{statusLabel}</span>
-      </div>
-      <p className="ai-proposal-summary">{op.summary}</p>
-      {op.detail ? <pre className="ai-proposal-diff ai-git-detail">{op.detail}</pre> : null}
-      {op.resultNote ? <p className="ai-git-result">{clipLines(op.resultNote)}</p> : null}
-      {op.error ? <p className="ai-git-error">{clipLines(op.error)}</p> : null}
-    </div>
+    <ToolBlock
+      title={title}
+      tag={t('ai.toolTagGit')}
+      body={body}
+      error={op.status === 'rejected' ? op.error : undefined}
+      pending={op.status === 'pending'}
+      expandable
+    />
   )
 }
 
@@ -371,7 +392,6 @@ export function AiPanel() {
       <header className="ai-panel-header">
         <div className="ai-panel-title">
           <span className="ai-panel-brand">{t('ai.title')}</span>
-          <span className="ai-panel-model">{settings?.model || '—'}</span>
         </div>
         <div className="ai-panel-actions">
           <button
@@ -457,17 +477,27 @@ export function AiPanel() {
               m.role === 'assistant' ? proposalsForMessage(m.id, proposals, lastAssistantId) : []
             const turnGitOps =
               m.role === 'assistant' ? gitOpsForMessage(m.id, gitOps, lastAssistantId) : []
+            const assistantText =
+              m.role === 'assistant' ? visibleAssistantText(m.content) : ''
+            const hasBody = m.role === 'user' || Boolean(assistantText)
+            const hasCards = turnProposals.length > 0 || turnGitOps.length > 0
+            if (!hasBody && !hasCards) return null
             return (
-              <div key={m.id} className={`ai-msg ai-msg-${m.role}`}>
-                <div className="ai-msg-role">{m.role === 'user' ? t('ai.you') : t('ai.agent')}</div>
-                <div className="ai-msg-body">
-                  {m.role === 'assistant' ? (
-                    <SimpleMarkdown text={m.content} />
-                  ) : (
-                    <UserMessageBody message={m} />
-                  )}
-                </div>
-                {turnProposals.length > 0 || turnGitOps.length > 0 ? (
+              <div
+                key={m.id}
+                className={`ai-msg ai-msg-${m.role}`}
+                aria-label={m.role === 'user' ? t('ai.you') : t('ai.agent')}
+              >
+                {hasBody ? (
+                  <div className="ai-msg-body">
+                    {m.role === 'assistant' ? (
+                      <SimpleMarkdown text={assistantText} />
+                    ) : (
+                      <UserMessageBody message={m} />
+                    )}
+                  </div>
+                ) : null}
+                {hasCards ? (
                   <div className="ai-msg-proposals">
                     {turnProposals.map((p) => (
                       <AppliedChangeCard key={p.id} proposal={p} />
@@ -481,32 +511,40 @@ export function AiPanel() {
             )
           })}
           {streaming && streamBuffer ? (
-            <div className="ai-msg ai-msg-assistant">
-              <div className="ai-msg-role">{t('ai.agent')}</div>
+            <div className="ai-msg ai-msg-assistant" aria-label={t('ai.agent')}>
               <div className="ai-msg-body ai-msg-streaming">
-                <SimpleMarkdown text={streamBuffer} />
+                <SimpleMarkdown text={visibleAssistantText(streamBuffer) || streamBuffer} />
               </div>
-              <div className="ai-thinking ai-thinking-inline" aria-live="polite">
-                <ThinkingMark fileWork={fileWork} />
-                <span>
-                  {agentPhase === 'tool' && agentToolName
-                    ? t('ai.toolRunning', { name: agentToolName })
-                    : t('ai.thinkingMore')}
-                </span>
-              </div>
+              {agentPhase === 'tool' && agentToolName ? (
+                <div className="ai-msg-proposals">
+                  <ToolBlock
+                    title={agentToolName}
+                    tag={toolTagFor(agentToolName)}
+                    pending
+                  />
+                </div>
+              ) : (
+                <div className="ai-thinking ai-thinking-inline" aria-live="polite">
+                  <ThinkingMark fileWork={fileWork} />
+                  <span>{t('ai.thinkingMore')}</span>
+                </div>
+              )}
             </div>
           ) : null}
           {streaming && !streamBuffer ? (
-            <div className="ai-msg ai-msg-assistant ai-msg-activity">
-              <div className="ai-msg-role">{t('ai.agent')}</div>
-              <div className="ai-thinking" aria-live="polite">
-                <ThinkingMark fileWork={fileWork} />
-                <span>
-                  {agentPhase === 'tool' && agentToolName
-                    ? t('ai.toolRunning', { name: agentToolName })
-                    : t('ai.thinking')}
-                </span>
-              </div>
+            <div className="ai-msg ai-msg-assistant ai-msg-activity" aria-label={t('ai.agent')}>
+              {agentPhase === 'tool' && agentToolName ? (
+                <ToolBlock
+                  title={agentToolName}
+                  tag={toolTagFor(agentToolName)}
+                  pending
+                />
+              ) : (
+                <div className="ai-thinking" aria-live="polite">
+                  <ThinkingMark fileWork={fileWork} />
+                  <span>{t('ai.thinking')}</span>
+                </div>
+              )}
             </div>
           ) : null}
         </div>

@@ -786,7 +786,7 @@ export async function runAgentTurn(opts: {
       } = {
         id: assistantId,
         role: 'assistant',
-        content: content || toolCalls.map((t) => `⚙ ${t.name}`).join('\n'),
+        content: content || '',
         createdAt: Date.now(),
         toolCalls
       }

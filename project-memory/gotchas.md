@@ -102,7 +102,7 @@
 - 开场：检视器可设唯一开场节点（互斥）；落盘 CSV 第一行；删除开场后回退无入边最左上；`diskFromGraph` 优先 `isOpening`，勿再用位置覆盖用户选择。
 - 角色表 `operable` 列：勾选可操作（玩家）；缺列/空=NPC 自动过句；执行器须按当前行 `speaker` 查表，不可一律等确认。
 - UI 动效：Toast/Dialog 离开须本地 retain DOM（`ToastLayer` / `AnimatedDialogShell`），勿在 store 清内容后立刻卸载导致空白闪一下；duration 与 CSS token 对齐（toast 180ms / modal 220ms）。
-- `prefers-reduced-motion: reduce` 时须停无限动画（dialogue edge-flow、ai-spin、boot-slide、`.ai-composer-glow-*` 边缘流光）；覆盖层可瞬切。
+- `prefers-reduced-motion: reduce` 时须停无限动画（dialogue edge-flow、boot-slide、作曲框 `border-beam`）；思考指示用 `thinking-orbs`（库内减动效冻帧）。覆盖层可瞬切。流式气泡不再用闪烁 `○`。
 - `@starting-style` 入场依赖较新 Chromium（Electron 内可用）；无支持时退化为无入场动画，不影响功能。- 新建台词文件名由场景 stem + 对话标识自动生成；信息卡不提供改名，改名用资源管理器右键。
 - 活动栏：视窗键=`home`（起始页、藏侧栏、不关项目）；文件夹键=`explorer`；勿把视窗键做成 `closeWorkspace`。
 - 应用图标：底稿 `build/icon.svg`；`scripts/rasterize-icon.js` 生成 1024² `build/icon.png`（透明圆角）+ `resources/icon.png`。窗口 `windowIcon()` 与 electron-builder 用 PNG。菜单栏 logo 直接引 SVG（`@brand/icon.svg`）。不要手改 PNG。
@@ -122,7 +122,8 @@
 - DeepSeek `fetch failed` 是网络层（代理/防火墙），不是模型名错误（错模型多为 HTTP 4xx）。
 - AI 导图：勿让模型手填密网格坐标；用 `autoLayout` / `layout_kmind`。乱成网时先砍交叉边再建树，单靠布局救不了完全二分图。
 - AI 台词图：整段脚本用 `propose_dialogue_graph`（线性也写空 text options；勿再用「缺 choices=线性」）；乱画布用 `layout_dialogue`；`nodes` 空才删 choices。choices/layout 与 csv 同轮写入时一律自动落盘（无 Accept）。
-- AI Skills：只读 `SKILL.md` / reference / examples；**永不**执行 skill 内 `scripts/`。技能在软件本体 `data/ai-skills/`，不跟工作区走。厂家 `resources/ai-skills/` 只 **copy-if-missing**（用户改过的 `SKILL.md` / `examples.md` 永不覆盖；缺的 extra 文件会补上）。`seenBundledSkillIds` 只把从未见过的 bundled id 追加进白名单；用户关掉后下次启动不得再打开。游戏策划文档硬约定工作区根 `design/`。有 `design/` 树：系统提示 Design playbook；**Design L5** 列出本根实际存在的 gdd/concept/characters/glossary/dialogue csv（无 `gdd.md` 也会出 L5）。纯小说工作区无 `design/` 则两套都不注入。`/game-narrative` 挂载时注入 `examples.md`。
+- AI Skills：只读 `SKILL.md` / reference / examples；**永不**执行 skill 内 `scripts/`。技能在软件本体 `data/ai-skills/`，不跟工作区走。厂家 `resources/ai-skills/` 只 **copy-if-missing**（用户改过的 `SKILL.md` / `examples.md` 永不覆盖；缺的 extra 文件会补上）。`seenBundledSkillIds` 只把从未见过的 bundled id 追加进白名单；用户关掉后下次启动不得再打开。**caveman** 是内置：开启则每轮把 `SKILL.md` 注入系统提示，catalog 标明已应用、勿再 `read_skill`。游戏策划文档硬约定工作区根 `design/`。有 `design/` 树：系统提示 Design playbook；**Design L5** 列出本根实际存在的 gdd/concept/characters/glossary/dialogue csv（无 `gdd.md` 也会出 L5）。纯小说工作区无 `design/` 则两套都不注入。`/game-narrative` 挂载时注入 `examples.md`。
+- 思考强度随配置档：High / Mid / Low（默认 Mid）。请求带 `reasoning_effort`（mid → `medium`）。非推理模型 400 且报该字段时，去掉再试一次。须完整退出后再测。
 - AI 联网：默认关；DDG 超时自动回退 Bing；搜索结果会抓取前几条页面写入 `excerpt`（天气站可解析预报卡）；需要更深可读 `web_fetch`。Brave/Tavily 未实现。
 - **Ask 无工具、不写盘**：请求 `tool_choice: none`；同会话里先前 Agent 的 tool_calls 会压成纯文本再发给模型。模型若仍吐出 `read_file` / `propose_text_patch`，主进程**不执行**。DeepSeek 可能把 DSML XML 写成气泡正文——Ask 会丢掉并改成「请切 Agent」。气泡标题「代理人」只是助手角色名，不是当前模式——看输入栏模式胶囊。Ask 启动时 `ai:contextUsage` 不得因空工具列表抛错，否则会黑屏。测 C1 须完整退出后再开（Ask 引入时 `2026-08-13-d`；**当前全局** `toolApi: 2026-08-14-a`）。
 - Plan 模式：计划真相是工作区 `plans/<slug>.plan.md`（同 slug 覆盖），**不是**会话 JSON  alone；AI 面板**不**再挂常驻计划列表。`update_plan_step` 只改 Todos 勾选，勿整文件覆盖冲掉用户改的正文。`plans/` 可随项目提交。

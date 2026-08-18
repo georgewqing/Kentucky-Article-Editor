@@ -1354,6 +1354,42 @@ Win 目录包测的设置回弹 / 转圈 / abort / MD 复制，抽成现行契�
 
 原容器仓里的 `win/` 升为本目录软件根；`android/` 迁到并列文件夹 `Kentucky for Android/`，自带 git 与文档。本仓库不再包含 Capacitor / Gradle。F5 的 `cwd` 为本根。安卓对话协议副本在那边的 `extras/`。
 
+## 168. 内置 caveman + 思考强度（high / mid / low）
+
+Agent 随包装 `resources/ai-skills/caveman/SKILL.md`（copy-if-missing）。开启则每轮注入系统提示（Ask 也注入），普通问题短答；catalog 标明已应用，勿 `read_skill("caveman")`。`/` 菜单不列出（已内置）。设置 Skills 可关。
+
+配置档新增 **思考** High / Mid / Low（默认 Mid）。请求带 OpenAI 兼容 `reasoning_effort`（mid → `medium`）。网关 400 不认该字段则去掉再试一次。分段控件点选立刻存档（不是文本栏 draft）。不 bump `toolApi`。须**完整退出**后再测。
+
+**文件：** `skills.ts` · `tools.ts` · `agentLoop.ts` · `openaiCompatClient.ts` · `aiProfiles.ts` · `aiSettings.ts` · `SettingsPage.tsx` · i18n。
+
+## 169. Caveman 留一点人情味
+
+短答不变：先答、不铺垫、不教程。语气改成同事桌边说话，允许一句轻点头；禁止冷到像电报，也禁止打气/段子/表情。厂家源与开发态 `data/ai-skills/caveman/SKILL.md` 已同步（copy-if-missing 不会覆盖已有文件）。
+
+## 170. 作曲框改用 border-beam
+
+Agent 输入卡外包 `BorderBeam size="md" colorVariant="colorful"`，跟应用深/浅色。去掉自绘 conic 彗星。`prefers-reduced-motion` 时 `active={false}`。无 framer-motion。Ctrl+R 即可。
+
+## 171. 作曲框菜单不再被光圈透过
+
+`border-beam` 的 `::before`/`::after`/bloom 叠在卡片子树之上，模式/配置档/斜杠菜单会透出彩光。菜单改挂在外壳上（光圈外面），不透明底。Ctrl+R 即可。
+
+## 172. 思考圈换成 ThinkingOrb
+
+Agent「思考中 / 正在调用工具」的 CSS spinner 换成 `thinking-orbs`：思考为 `breathing`，写盘为 `shaping`，`size={20}`。思考指示：`[Orb] 思考中…` 单独一行，图标在句首、与文字垂直居中。出字时不再把 Orb 塞进正文末尾。写盘为 `shaping`，其余 `breathing`。Ctrl+R 即可。
+
+## 173. 资源管理器按 Cursor 排版
+
+脏/新建圆点从「图标和文件名中间」改到**行尾**，同级文件名对齐。文件名仍黄/蓝。文件夹若有未保存子孙，名称着色 + 行尾点。侧栏不再显示「资源管理器」四字，只留操作按钮。按钮水平居中；拖拽分栏最窄 184px（六枚按钮排得下），与 Cursor 一样不会把图标挤没。Ctrl+R 即可。
+
+## 174. 活动栏 Git 图标
+
+原先那条残缺 path 在 20px 下只剩细锯齿线。换成三个实心节点 + 圆角连线，视觉重量跟底下齿轮接近。Ctrl+R 即可。
+
+## 175. Git 提示截成前几行
+
+提交/推送 toast 和结果卡不再铺满 `create mode 100644 …`。只留前 4 行（并限字数），超出改成 `…`。Ctrl+R 即可。
+
 
 
 

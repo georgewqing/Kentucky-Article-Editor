@@ -19,6 +19,7 @@ import {
 } from '@/editors/dialogueCsv'
 import i18n from '@/i18n'
 import { askUnsavedConfirm } from '@/state/unsavedDialogStore'
+import { clipLines } from '@shared/clipLines'
 
 export type EditorKind = 'text' | 'mindmap' | 'dialogue' | 'characters' | 'storyboard' | 'image' | 'video' | 'pdf'
 export type ActiveView = 'explorer' | 'settings' | 'home' | 'scm'
@@ -82,6 +83,10 @@ export type Toast = { id: number; message: string; type: 'error' | 'info' } | nu
 
 /** True while applying a remote DocumentHub snapshot (skip doc:patch echo). */
 let applyingFromHub = false
+
+/** Explorer action row (6×26px buttons + gaps + 8px pad). Sash cannot go below this. */
+export const SIDEBAR_MIN_WIDTH = 184
+export const SIDEBAR_MAX_WIDTH = 480
 
 interface AppState {
   windowRole: WindowRole
@@ -365,7 +370,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setWindowRole: (role) => set({ windowRole: role }),
   setSidebarVisible: (v) => set({ sidebarVisible: v }),
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
-  setSidebarWidth: (w) => set({ sidebarWidth: Math.min(480, Math.max(160, w)) }),
+  setSidebarWidth: (w) =>
+    set({ sidebarWidth: Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.round(w))) }),
   setActiveView: (v) => set({ activeView: v }),
 
   setAgentChangeRanges: (absPath, ranges) =>
@@ -388,7 +394,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   showToast: (message, type = 'error') => {
     const id = Date.now()
-    set({ toast: { id, message, type } })
+    set({ toast: { id, message: clipLines(message), type } })
     window.setTimeout(() => {
       const cur = get().toast
       if (cur?.id === id) set({ toast: null })

@@ -8,7 +8,9 @@ import {
   clearProfileKey,
   getActiveProfileId,
   upsertProfile,
-  setActiveProfile
+  setActiveProfile,
+  parseThinkingLevel,
+  type ThinkingLevel
 } from './aiProfiles'
 
 export type AgentMode = 'ask' | 'plan' | 'outline' | 'agent'
@@ -19,6 +21,8 @@ export interface AiPublicSettings {
   baseUrl: string
   model: string
   contextWindow: number
+  /** Per-profile reasoning effort (API: mid → medium). */
+  thinkingLevel: ThinkingLevel
   agentEnabled: boolean
   applyWritesToDisk: boolean
   /** When true, never auto-apply (overrides G3 auto kinds). */
@@ -45,7 +49,10 @@ export interface AiPublicSettings {
   gitPath: string
 }
 
-const DEFAULTS: Omit<AiPublicSettings, 'baseUrl' | 'model' | 'contextWindow' | 'activeProfileId'> & {
+const DEFAULTS: Omit<
+  AiPublicSettings,
+  'baseUrl' | 'model' | 'contextWindow' | 'thinkingLevel' | 'activeProfileId'
+> & {
   baseUrl: string
   model: string
   contextWindow: number
@@ -125,6 +132,7 @@ export function loadAiSettings(): AiPublicSettings {
     baseUrl: profile.baseUrl,
     model: profile.model,
     contextWindow: profile.contextWindow,
+    thinkingLevel: parseThinkingLevel(profile.thinkingLevel),
     agentEnabled: raw.agentEnabled !== false,
     // Legacy: agent always writes disk now; keep fields for schema compat but force off review.
     applyWritesToDisk: true,
@@ -184,7 +192,8 @@ export function saveAiSettings(partial: Partial<AiPublicSettings>): AiPublicSett
   if (
     partial.baseUrl !== undefined ||
     partial.model !== undefined ||
-    partial.contextWindow !== undefined
+    partial.contextWindow !== undefined ||
+    partial.thinkingLevel !== undefined
   ) {
     const active = getActiveProfile()
     upsertProfile({
@@ -192,7 +201,8 @@ export function saveAiSettings(partial: Partial<AiPublicSettings>): AiPublicSett
       label: active.label,
       baseUrl: partial.baseUrl ?? active.baseUrl,
       model: partial.model ?? active.model,
-      contextWindow: partial.contextWindow ?? active.contextWindow
+      contextWindow: partial.contextWindow ?? active.contextWindow,
+      thinkingLevel: partial.thinkingLevel ?? active.thinkingLevel
     })
   }
 

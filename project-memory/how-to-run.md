@@ -97,10 +97,10 @@ npm run dist
 
 ## AI 代理人（0.2.0 起；当前 app 0.3.2）
 
-1. 设置 → **AI**：填写 OpenAI 兼容 Base URL、模型、API Key（加密存软件本体 `data/`，开发态为 `dev-data/data/`）。
-2. 活动栏 AI 图标或 `Ctrl+L` 打开右侧栏。
+1. 设置 → **AI**：填写 OpenAI 兼容 Base URL、模型、API Key（加密存软件本体 `data/`，开发态为 `dev-data/data/`）。思考强度 High / Mid / Low 跟配置档走（默认 Mid）。
+2. 活动栏 AI 图标或 `Ctrl+L` 打开右侧栏。内置 **caveman** 默认开：普通问题短答；写章节/GDD 仍可长文。可在设置 Skills 关掉。
 3. **Ask** 不执行工具、不写盘。**Agent** 始终自动写盘（无 Accept）。黄● = 相对上次 Ctrl+S。只读变更卡来自 `session.proposals`。
-4. 改过的文件标签/侧栏为**黄 ●**，新建为**蓝 ●**；保存后圆点消失。AI 改多文件时**不切换**当前编辑页。
+4. 改过的文件标签为**黄 ●**、新建为**蓝 ●**；资源管理器是文件名着色、圆点在行尾（文件夹有未保存子孙时同理）。保存后消失。AI 改多文件时**不切换**当前编辑页。
 5. 等待回复时有「思考中 / 正在调用工具」指示；上下文占用见顶栏进度条；接近满时请新建对话。
 6. 浮窗（精简窗）不带 AI 栏。
 7. DeepSeek 等：填写对照见 [`PACKAGED-AI-UX.md`](./PACKAGED-AI-UX.md) §5。Base URL 可用 `https://api.deepseek.com`（或带 `/v1`）；模型 `deepseek-v4-flash`。`This operation was aborted` 不是填错（§3）；`fetch failed` 多为网络/代理；错模型一般是 HTTP 4xx。

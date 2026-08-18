@@ -435,7 +435,7 @@ input[type='color'] {
   background: var(--bg-sidebar);
   display: flex;
   flex-direction: column;
-  min-width: 0;
+  min-width: 184px;
   flex-shrink: 0;
   position: relative;
   z-index: 4;
@@ -445,12 +445,8 @@ input[type='color'] {
   height: var(--title-height);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 14px;
-  text-transform: uppercase;
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  color: var(--fg-muted);
+  justify-content: center;
+  padding: 0 8px;
   flex-shrink: 0;
 }
 
@@ -672,7 +668,7 @@ input[type='color'] {
   align-items: center;
   gap: 4px;
   height: 26px;
-  padding-right: 8px;
+  padding-right: 10px;
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
@@ -819,6 +815,8 @@ input[type='color'] {
 }
 
 .tree-name {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -829,6 +827,22 @@ input[type='color'] {
 
 .tree-name-new {
   color: #6cb6ff;
+}
+
+.tree-status {
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.tree-status-dirty {
+  background: var(--dirty);
+}
+
+.tree-status-new {
+  background: #6cb6ff;
 }
 
 .sash {
@@ -2843,6 +2857,10 @@ input[type='color'] {
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
   z-index: 100;
   max-width: 360px;
+  max-height: 7.5em;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
   opacity: 1;
   transform: translateY(0);
   transition:
@@ -4340,34 +4358,16 @@ input[type='color'] {
   padding: 4px 0;
   color: var(--fg-muted);
   font-size: 12px;
+  line-height: 20px;
 }
 .ai-thinking-inline {
   margin-top: 6px;
 }
-.ai-thinking-spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  border-top-color: var(--accent);
-  border-radius: 50%;
+.ai-thinking-orb {
+  display: block;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
-  animation: ai-spin 0.7s linear infinite;
-}
-@keyframes ai-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-.ai-msg-streaming::after {
-  content: '\25cb';
-  display: inline;
-  margin-left: 1px;
-  animation: ai-blink 1s step-end infinite;
-}
-@keyframes ai-blink {
-  50% {
-    opacity: 0;
-  }
 }
 
 .ai-proposal {
@@ -4472,6 +4472,8 @@ input[type='color'] {
   margin: 6px 0 0;
   font-size: 12px;
   color: var(--fg-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .ai-git-error {
   margin: 6px 0 0;
@@ -4710,10 +4712,25 @@ input[type='color'] {
   border-color: var(--accent);
 }
 
-.ai-composer {
-  --ai-composer-fill: color-mix(in srgb, var(--bg-elev-3) 92%, var(--accent) 8%);
+.ai-composer-shell {
   margin: 8px 10px 12px;
   flex-shrink: 0;
+  z-index: 5;
+  position: relative;
+}
+.ai-composer-beam {
+  display: block;
+  position: relative;
+  z-index: 0;
+}
+.ai-composer-shell > .ai-slash-menu,
+.ai-composer-shell > .ai-composer-menu {
+  z-index: 30;
+}
+
+.ai-composer {
+  --ai-composer-fill: color-mix(in srgb, var(--bg-elev-3) 92%, var(--accent) 8%);
+  margin: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -4723,16 +4740,10 @@ input[type='color'] {
   background: var(--ai-composer-fill);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, var(--border));
   position: relative;
-  z-index: 5;
-  isolation: isolate;
   transition:
     border-color var(--duration-chrome) ease,
     box-shadow var(--duration-chrome) ease,
     background var(--duration-chrome) ease;
-}
-.ai-composer > *:not(.ai-composer-glow):not(.ai-slash-menu) {
-  position: relative;
-  z-index: 1;
 }
 .ai-composer.is-drop-target {
   --ai-composer-fill: color-mix(in srgb, var(--bg-elev-3) 78%, var(--accent) 22%);
@@ -4741,74 +4752,6 @@ input[type='color'] {
     0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-/* Apple/Gemini-style edge comet: GPU rotate, mask ring, soft bloom */
-.ai-composer-glow {
-  position: absolute;
-  inset: -12px;
-  border-radius: 26px;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 0;
-}
-.ai-composer-glow-bloom,
-.ai-composer-glow-spin {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 220%;
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  background: conic-gradient(
-    from 0deg,
-    transparent 0 8%,
-    color-mix(in srgb, var(--accent) 25%, transparent) 14%,
-    var(--accent) 22%,
-    color-mix(in srgb, var(--accent) 70%, #f5d0fe) 32%,
-    color-mix(in srgb, var(--accent) 55%, #fecdd3) 40%,
-    rgba(255, 255, 255, 0.88) 46%,
-    color-mix(in srgb, var(--accent) 35%, transparent) 54%,
-    transparent 62% 100%
-  );
-  animation: ai-composer-edge-flow 8s linear infinite;
-}
-.ai-composer-glow-bloom {
-  filter: blur(16px);
-  opacity: 0.42;
-  width: 240%;
-}
-.ai-composer-glow-ring {
-  position: absolute;
-  inset: 12px;
-  border-radius: 14px;
-  overflow: hidden;
-}
-.ai-composer-glow-ring::after {
-  content: '';
-  position: absolute;
-  inset: 1.5px;
-  border-radius: 12.5px;
-  background: var(--ai-composer-fill);
-  z-index: 1;
-}
-.ai-composer-glow-spin {
-  z-index: 0;
-}
-:root[data-theme='light'] .ai-composer-glow-bloom {
-  opacity: 0.28;
-}
-.ai-composer:focus-within .ai-composer-glow-bloom,
-.ai-composer.is-streaming .ai-composer-glow-bloom {
-  opacity: 0.62;
-}
-.ai-composer:focus-within .ai-composer-glow-spin,
-.ai-composer.is-streaming .ai-composer-glow-spin {
-  opacity: 1;
-}
-@keyframes ai-composer-edge-flow {
-  to {
-    transform: translate(-50%, -50%) rotate(360deg);
-  }
-}
 .ai-slash-menu {
   position: absolute;
   left: 0;
@@ -4821,6 +4764,7 @@ input[type='color'] {
   border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--bg-elev-4);
+  isolation: isolate;
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5);
   z-index: 40;
   scrollbar-width: none;
@@ -5122,7 +5066,7 @@ input[type='color'] {
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--bg-elev-4);
-  opacity: 1;
+  isolation: isolate;
   box-shadow: 0 8px 28px color-mix(in srgb, #000 45%, transparent);
   display: flex;
   flex-direction: column;
@@ -5230,19 +5174,11 @@ input[type='color'] {
   .dialogue-graph-canvas .react-flow__edge.animated path {
     animation: none !important;
   }
-  .ai-thinking-spinner {
+  .ai-composer-beam[data-beam],
+  .ai-composer-beam[data-beam]::before,
+  .ai-composer-beam[data-beam]::after,
+  .ai-composer-beam [data-beam-bloom] {
     animation: none !important;
-  }
-  .ai-msg-streaming::after {
-    animation: none !important;
-  }
-  .ai-composer-glow-bloom,
-  .ai-composer-glow-spin {
-    animation: none !important;
-    transform: translate(-50%, -50%) rotate(28deg);
-  }
-  .ai-composer-glow-bloom {
-    opacity: 0.28;
   }
   .toast,
   .toast.is-leaving,

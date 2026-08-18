@@ -3163,14 +3163,21 @@ export function modeSystemPrefix(mode: AgentToolMode): string {
 export function LITERARY_SYSTEM_PROMPT(
   styleMemo: string,
   mode: AgentToolMode = 'agent',
-  extras?: { skillsCatalog?: string; webSearchEnabled?: boolean; designDiscipline?: boolean }
+  extras?: {
+    skillsCatalog?: string
+    webSearchEnabled?: boolean
+    designDiscipline?: boolean
+    cavemanBody?: string
+  }
 ): string {
+  const caveman = extras?.cavemanBody?.trim() || ''
   if (mode === 'ask') {
     return [
       modeSystemPrefix('ask'),
       '',
       'You are KENTUCKY Writing Agent in Ask mode — talk only, no workspace side effects.',
       'Prefer Chinese or English to match the user. Be concise and craft-focused.',
+      caveman,
       extras?.skillsCatalog?.trim()
         ? `Skills exist in Agent mode only (names for advice, do not call them):\n${extras.skillsCatalog.trim()}`
         : '',
@@ -3187,6 +3194,7 @@ export function LITERARY_SYSTEM_PROMPT(
     'You are KENTUCKY Writing Agent — a literary assistant inside a local writing app.',
     'Help with fiction, scripts, dialogue CSV, outlines, and mind maps.',
     'Prefer Chinese or English to match the user. Be concise and craft-focused.',
+    caveman,
     'Never run shell commands. ALL file tools are sandboxed to the open workspace folder — absolute paths on other drives, `..` escapes, and system dirs are refused (Path escapes workspace).',
     'Workspace structure: use workspace_mkdir / workspace_copy / workspace_move / workspace_delete (Node FS, not shell) for folders and archival moves — still inside the workspace only. Prefer move/copy tools over reading files and rewriting them with propose_write_file.',
     'PDF: when the user asks to export/save Markdown as PDF into the workspace, call export_workspace_pdf(path) (optional dest). Writes immediately, default sibling stem.pdf, overwrite OK. Only .md — not kmind/dialogue/storyboard/txt.',

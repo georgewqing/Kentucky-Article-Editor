@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, writeFileSync, unlinkSync, rmSync, readFileSync,
 import { dirname, join, resolve, relative, isAbsolute } from 'path'
 import { fileURLToPath } from 'url'
 import { promisify } from 'util'
+import { clipLines } from '../../shared/clipLines'
 import { assertSafeExternalGitPath, assertSafeWorkspaceRoot, resolveWorkspacePath } from '../ai/workspacePath'
 
 const execFileAsync = promisify(execFile)
@@ -552,7 +553,7 @@ export async function gitCommit(
       stdout: r.stdout.slice(0, 4000)
     }
   }
-  return { ok: true, stdout: r.stdout.slice(0, 4000) }
+  return { ok: true, stdout: clipLines(r.stdout) }
 }
 
 /** Accept https/ssh/git/file URLs, scp-like, and local paths (spaces allowed — e.g. Windows dirs). */

@@ -5,10 +5,13 @@ import i18n from '@/i18n'
 
 export type AgentMode = 'ask' | 'plan' | 'outline' | 'agent'
 
+export type ThinkingLevel = 'high' | 'mid' | 'low'
+
 export interface AiSettingsView {
   baseUrl: string
   model: string
   contextWindow: number
+  thinkingLevel: ThinkingLevel
   agentEnabled: boolean
   applyWritesToDisk: boolean
   forceReviewAllWrites: boolean
@@ -44,6 +47,7 @@ export interface AiProfileView {
   baseUrl: string
   model: string
   contextWindow: number
+  thinkingLevel: ThinkingLevel
   hasKey: boolean
 }
 

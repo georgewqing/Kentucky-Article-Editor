@@ -146,7 +146,7 @@ AiPanel / aiStore
   git_add/commit/remote_* → commitGitOp → ai:gitOp → GitResultCard + Toast
   git_remote_add / git_push（本地）→ ensureLocalBareRepo
   ```
-- Skills：`skills.ts` → `data/ai-skills/`；仓内 `resources/ai-skills/` copy-if-missing（含 examples.md）；`seenBundledSkillIds`；catalog 注入系统提示；`list_skills` / `read_skill`；挂载时注入 extraFiles；Design playbook + Design L5（存在探测）：`designGddL5.ts`
+- Skills：`skills.ts` → `data/ai-skills/`；仓内 `resources/ai-skills/` copy-if-missing（含 examples.md）；`seenBundledSkillIds`；**caveman 开启则每轮注入系统提示**；其余 catalog + `list_skills` / `read_skill`；挂载时注入 extraFiles；Design playbook + Design L5（存在探测）：`designGddL5.ts`
 - 联网：`webSearch.ts`（DuckDuckGo）；`web_search` / `web_research`；设置开关
 - 设置页 AI 档案：本地 draft，失焦写入。流式：连接 45s 只等到响应头（立刻清 timer）。MD 排版复制为人话。现行契约：[PACKAGED-AI-UX.md](./PACKAGED-AI-UX.md)
 
@@ -303,7 +303,7 @@ AiPanel / aiStore
 - 文章字数：`countArticleWords` — 非空白码点计数（与 UI「字」一致）
 - 侧栏右键 reveal：文件 `shell.showItemInFolder`；目录/工作区根 `shell.openPath`（打开该夹，而非上一级）
 - 显示名：`explorerNames.ts` 隐藏已知后缀（含 `.kyboard` / `.png` / `.mp4` / `.pdf`）；新建/重命名只改主名；分镜头图标 **SB**；PNG / MP4 / PDF 图标
-- 脏/新建标记：标签 `.tab-dirty`（黄）/ `.tab-new`（蓝）；树 `.tree-name-dirty` / `.tree-name-new` 跟 `tabs[]` 同步
+- 脏/新建标记：标签 `.tab-dirty`（黄）/ `.tab-new`（蓝）；树里文件名着色，圆点在**行尾**（Cursor 排版）；文件夹有未保存子孙时同样着色 + 行尾点
 - 资源树可见扩展：主进程 `TEXT_EXTS`（含 `.png` / `.mp4` / `.pdf`）
 
 ## 视频预览（`.mp4`，changelog §119）

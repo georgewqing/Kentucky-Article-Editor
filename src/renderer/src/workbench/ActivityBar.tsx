@@ -192,8 +192,17 @@ export function ActivityBar() {
           }
         }}
       >
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-          <path d="M6 3a3 3 0 0 1 2.83 4H11a1 1 0 0 1 1 1v5.17a3.001 3.001 0 1 1-2 0V9H8.83A3.001 3.001 0 1 1 6 3zm0 2a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm9 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2z" />
+        <svg viewBox="0 0 24 24" aria-hidden>
+          <circle cx="6.5" cy="6" r="2.7" fill="currentColor" />
+          <circle cx="6.5" cy="18" r="2.7" fill="currentColor" />
+          <circle cx="17.25" cy="8" r="2.7" fill="currentColor" />
+          <path
+            d="M6.5 8.7v6.6M6.5 13c0-3.2 3.4-5 8.05-5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
         </svg>
       </button>
       <button

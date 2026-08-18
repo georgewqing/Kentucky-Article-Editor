@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronRight, History, Plus, X } from 'lucide-react'
+import { ThinkingOrb } from 'thinking-orbs'
 import { useAiStore, type AiProposal, type AiGitOp, type AiChatMessage } from '@/state/aiStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { accentTone, CONTEXT_BUCKET_STRENGTH } from '@/theme/applyTheme'
@@ -9,8 +10,37 @@ import { AiComposer } from './AiComposer'
 import { FileMountChip } from './FileMountChip'
 import { SimpleMarkdown } from './simpleMarkdown'
 import { formatProposalDiff } from './proposalDiff'
+import { clipLines } from '@shared/clipLines'
 
 const headerIcon = { size: 16, strokeWidth: 1.75 } as const
+
+function isFileMutatingTool(name: string | null): boolean {
+  if (!name) return false
+  return (
+    name.startsWith('propose_') ||
+    name.startsWith('workspace_') ||
+    name === 'export_workspace_pdf' ||
+    name === 'layout_dialogue' ||
+    name === 'layout_kmind' ||
+    name === 'scene_to_kmind' ||
+    name === 'kmind_to_scene_outline' ||
+    name === 'create_plan' ||
+    name === 'update_plan_step'
+  )
+}
+
+function ThinkingMark({ fileWork }: { fileWork?: boolean }) {
+  const themeMode = useSettingsStore((s) => s.themeMode)
+  return (
+    <ThinkingOrb
+      state={fileWork ? 'shaping' : 'breathing'}
+      size={20}
+      theme={themeMode}
+      className="ai-thinking-orb"
+      aria-hidden
+    />
+  )
+}
 
 function formatTokens(n: number): string {
   if (n >= 10000) return `${Math.round(n / 1000)}K`
@@ -285,8 +315,8 @@ function GitResultCard({ op }: { op: AiGitOp }) {
       </div>
       <p className="ai-proposal-summary">{op.summary}</p>
       {op.detail ? <pre className="ai-proposal-diff ai-git-detail">{op.detail}</pre> : null}
-      {op.resultNote ? <p className="ai-git-result">{op.resultNote}</p> : null}
-      {op.error ? <p className="ai-git-error">{op.error}</p> : null}
+      {op.resultNote ? <p className="ai-git-result">{clipLines(op.resultNote)}</p> : null}
+      {op.error ? <p className="ai-git-error">{clipLines(op.error)}</p> : null}
     </div>
   )
 }
@@ -313,6 +343,7 @@ export function AiPanel() {
   const historyRef = useRef<HTMLDivElement>(null)
   useOverlayScroll(listRef)
   useOverlayScroll(historyRef)
+  const fileWork = agentPhase === 'tool' && isFileMutatingTool(agentToolName)
 
   // HMR / partial reloads can reset the store; reload from disk instead of showing a false "no key".
   useEffect(() => {
@@ -455,23 +486,21 @@ export function AiPanel() {
               <div className="ai-msg-body ai-msg-streaming">
                 <SimpleMarkdown text={streamBuffer} />
               </div>
-              {agentPhase === 'tool' || agentPhase === 'thinking' ? (
-                <div className="ai-thinking ai-thinking-inline" aria-live="polite">
-                  <span className="ai-thinking-spinner" aria-hidden />
-                  <span>
-                    {agentPhase === 'tool' && agentToolName
-                      ? t('ai.toolRunning', { name: agentToolName })
-                      : t('ai.thinkingMore')}
-                  </span>
-                </div>
-              ) : null}
+              <div className="ai-thinking ai-thinking-inline" aria-live="polite">
+                <ThinkingMark fileWork={fileWork} />
+                <span>
+                  {agentPhase === 'tool' && agentToolName
+                    ? t('ai.toolRunning', { name: agentToolName })
+                    : t('ai.thinkingMore')}
+                </span>
+              </div>
             </div>
           ) : null}
           {streaming && !streamBuffer ? (
             <div className="ai-msg ai-msg-assistant ai-msg-activity">
               <div className="ai-msg-role">{t('ai.agent')}</div>
               <div className="ai-thinking" aria-live="polite">
-                <span className="ai-thinking-spinner" aria-hidden />
+                <ThinkingMark fileWork={fileWork} />
                 <span>
                   {agentPhase === 'tool' && agentToolName
                     ? t('ai.toolRunning', { name: agentToolName })

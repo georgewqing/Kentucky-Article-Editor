@@ -35,7 +35,7 @@ import {
   type FileProposalEx,
   type GateDecision
 } from './proposalGate'
-import { skillsCatalogText, loadSkill } from './skills'
+import { skillsCatalogText, cavemanSystemBlock, loadSkill } from './skills'
 import { buildDesignL5Summary, workspaceHasDesignTree } from './designGddL5'
 import { looksLikeToolDump, sanitizeAskAssistantContent } from './askGuard'
 
@@ -371,7 +371,8 @@ function toApiMessagesWithTools(
       content: LITERARY_SYSTEM_PROMPT(settings.styleMemo, mode, {
         skillsCatalog: skillsCatalogText(),
         webSearchEnabled: settings.webSearchEnabled,
-        designDiscipline: workspaceHasDesignTree(editor.workspacePath)
+        designDiscipline: workspaceHasDesignTree(editor.workspacePath),
+        cavemanBody: cavemanSystemBlock()
       })
     }
   ]

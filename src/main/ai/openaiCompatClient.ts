@@ -37,6 +37,20 @@ function normalizeBaseUrl(url: string): string {
   return url.replace(/\/+$/, '')
 }
 
+function toReasoningEffort(level: string): 'low' | 'medium' | 'high' {
+  if (level === 'high') return 'high'
+  if (level === 'low') return 'low'
+  return 'medium'
+}
+
+function shouldDropReasoning(status: number, text: string): boolean {
+  if (status !== 400 && status !== 422) return false
+  const t = text.toLowerCase()
+  return /reasoning_effort|reasoning\.effort|unrecognized|unknown parameter|unexpected keyword|extra inputs|unknown field/.test(
+    t
+  )
+}
+
 const CONNECT_TIMEOUT_MS = 45_000
 
 export async function streamChatCompletion(opts: {
@@ -66,7 +80,8 @@ export async function streamChatCompletion(opts: {
     model: settings.model,
     messages: opts.messages,
     temperature: settings.temperature,
-    stream: true
+    stream: true,
+    reasoning_effort: toReasoningEffort(settings.thinkingLevel)
   }
   if (opts.tools && opts.tools.length > 0 && settings.agentEnabled) {
     body.tools = opts.tools
@@ -87,18 +102,21 @@ export async function streamChatCompletion(opts: {
   if (opts.signal?.aborted) ac.abort()
   else opts.signal?.addEventListener('abort', onUserAbort)
 
+  const post = (payload: Record<string, unknown>): Promise<Response> =>
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${key}`
+      },
+      body: JSON.stringify(payload),
+      signal: ac.signal
+    })
+
   try {
     let res: Response
     try {
-      res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${key}`
-        },
-        body: JSON.stringify(body),
-        signal: ac.signal
-      })
+      res = await post(body)
       // Headers received: drop the connect timer so long SSE/tool turns are not aborted at 45s.
       clearTimeout(timer)
     } catch (err) {
@@ -118,12 +136,30 @@ export async function streamChatCompletion(opts: {
 
     if (!res.ok) {
       const text = await res.text().catch(() => '')
-      opts.onEvent({
-        type: 'error',
-        message: `HTTP ${res.status}: ${text.slice(0, 500) || res.statusText}`
-      })
-      opts.onEvent({ type: 'done', finishReason: 'error' })
-      return
+      if (body.reasoning_effort !== undefined && shouldDropReasoning(res.status, text)) {
+        delete body.reasoning_effort
+        try {
+          res = await post(body)
+        } catch (err) {
+          if (opts.signal?.aborted) {
+            opts.onEvent({ type: 'done', finishReason: 'abort' })
+            return
+          }
+          const msg = err instanceof Error ? err.message : String(err)
+          opts.onEvent({ type: 'error', message: msg })
+          opts.onEvent({ type: 'done', finishReason: 'error' })
+          return
+        }
+      }
+      if (!res.ok) {
+        const retryText = body.reasoning_effort === undefined ? await res.text().catch(() => '') : text
+        opts.onEvent({
+          type: 'error',
+          message: `HTTP ${res.status}: ${(retryText || text).slice(0, 500) || res.statusText}`
+        })
+        opts.onEvent({ type: 'done', finishReason: 'error' })
+        return
+      }
     }
 
     if (!res.body) {

@@ -4,12 +4,21 @@ import { join } from 'path'
 import { randomUUID } from 'crypto'
 import { getDataDir, getAiKeyPath, getAiSettingsPath } from './appBodyPaths'
 
+export type ThinkingLevel = 'high' | 'mid' | 'low'
+
 export interface AiProfileMeta {
   id: string
   label: string
   baseUrl: string
   model: string
   contextWindow: number
+  thinkingLevel: ThinkingLevel
+}
+
+export function parseThinkingLevel(v: unknown): ThinkingLevel {
+  if (v === 'high' || v === 'low' || v === 'mid') return v
+  if (v === 'medium') return 'mid'
+  return 'mid'
 }
 
 export interface AiProfilePublic extends AiProfileMeta {
@@ -26,7 +35,8 @@ const DEFAULT_PROFILE: AiProfileMeta = {
   label: 'Default',
   baseUrl: 'https://api.openai.com/v1',
   model: 'gpt-4o-mini',
-  contextWindow: 128000
+  contextWindow: 128000,
+  thinkingLevel: 'mid'
 }
 
 function profilesPath(): string {
@@ -117,7 +127,8 @@ export function ensureProfilesMigrated(): ProfilesFile {
     label: 'Default',
     baseUrl,
     model,
-    contextWindow
+    contextWindow,
+    thinkingLevel: DEFAULT_PROFILE.thinkingLevel
   }
   const file: ProfilesFile = { activeId: profile.id, profiles: [profile] }
   writeProfiles(file)
@@ -143,6 +154,7 @@ export function listProfiles(): AiProfilePublic[] {
   return file.profiles.map((p) => ({
     ...p,
     contextWindow: clampContext(p.contextWindow),
+    thinkingLevel: parseThinkingLevel(p.thinkingLevel),
     hasKey: Boolean(decryptRead(keyPath(p.id))?.trim())
   }))
 }
@@ -157,6 +169,7 @@ export function getActiveProfile(): AiProfilePublic {
   return {
     ...p,
     contextWindow: clampContext(p.contextWindow),
+    thinkingLevel: parseThinkingLevel(p.thinkingLevel),
     hasKey: Boolean(decryptRead(keyPath(p.id))?.trim())
   }
 }
@@ -184,6 +197,9 @@ export function upsertProfile(
       typeof partial.contextWindow === 'number'
         ? partial.contextWindow
         : (existing?.contextWindow ?? DEFAULT_PROFILE.contextWindow)
+    ),
+    thinkingLevel: parseThinkingLevel(
+      partial.thinkingLevel ?? existing?.thinkingLevel ?? DEFAULT_PROFILE.thinkingLevel
     )
   }
   if (existing) {

@@ -5,7 +5,7 @@ import {
 } from './chatSessions'
 import { loadAiSettings } from './aiSettings'
 import { LITERARY_SYSTEM_PROMPT, getWritingToolsForMode, type AgentToolMode } from './tools'
-import { skillsCatalogText } from './skills'
+import { skillsCatalogText, cavemanSystemBlock } from './skills'
 import { workspaceHasDesignTree } from './designGddL5'
 
 export type ContextBucketId =
@@ -43,23 +43,26 @@ export function estimateContextBreakdown(
   const settings = loadAiSettings()
   const limit = settings.contextWindow || 128000
   const catalog = skillsCatalogText()
+  const caveman = cavemanSystemBlock()
   const styleMemo = (settings.styleMemo || '').trim()
 
   const systemText = LITERARY_SYSTEM_PROMPT('', mode, {
     skillsCatalog: '', // counted under skills
+    cavemanBody: '',
     webSearchEnabled: settings.webSearchEnabled,
     designDiscipline: workspaceHasDesignTree(workspaceRoot || session?.workspacePath || '')
   })
   const toolsJson = JSON.stringify(
     getWritingToolsForMode(mode, { webSearchEnabled: settings.webSearchEnabled }) ?? []
   )
+  const skillsText = [catalog, caveman].filter(Boolean).join('\n')
 
   const buckets: ContextBucket[] = [
     { id: 'system', tokens: estimateTokensFromText(systemText) },
     { id: 'tools', tokens: toolsJson ? estimateTokensFromText(toolsJson) : 0 },
     {
       id: 'skills',
-      tokens: catalog ? estimateTokensFromText(catalog) : 0
+      tokens: skillsText ? estimateTokensFromText(skillsText) : 0
     },
     {
       id: 'rules',

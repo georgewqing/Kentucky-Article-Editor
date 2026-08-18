@@ -31,6 +31,9 @@ export interface SkillDetail extends SkillMeta {
   extraFiles: Record<string, string>
 }
 
+/** Built-in always-applied voice skill (seeded like game skills; user may disable). */
+export const CAVEMAN_SKILL_ID = 'caveman'
+
 /** Factory game-design skills shipped in resources/ai-skills. */
 export const BUNDLED_GAME_SKILL_IDS = [
   'game-brainstorm',
@@ -42,6 +45,8 @@ export const BUNDLED_GAME_SKILL_IDS = [
   'game-store',
   'game-consistency'
 ] as const
+
+const BUNDLED_SKILL_IDS = [CAVEMAN_SKILL_ID, ...BUNDLED_GAME_SKILL_IDS] as const
 
 const SAMPLE_ID = 'literary-voice'
 const SAMPLE_SKILL = `---
@@ -113,7 +118,7 @@ function seedBundledGameSkills(destRoot: string): void {
   const srcRoot = bundledSkillsRoot()
   if (!srcRoot) return
   const present: string[] = []
-  for (const id of BUNDLED_GAME_SKILL_IDS) {
+  for (const id of BUNDLED_SKILL_IDS) {
     const srcDir = join(srcRoot, id)
     const destDir = join(destRoot, id)
     let hasSkill = false
@@ -214,11 +219,30 @@ export function listEnabledSkills(): SkillMeta[] {
 
 export function skillsCatalogText(): string {
   const skills = listEnabledSkills()
-  if (!skills.length) return ''
-  const lines = skills.map((s) => `- ${s.id}: ${s.description || s.name}`)
+  const optional = skills.filter((s) => s.id !== CAVEMAN_SKILL_ID)
+  const cavemanOn = skills.some((s) => s.id === CAVEMAN_SKILL_ID)
+  const lines: string[] = []
+  if (cavemanOn) {
+    lines.push(
+      `Built-in /${CAVEMAN_SKILL_ID} is already in the system prompt this turn — do not call read_skill for it.`
+    )
+  }
+  if (optional.length) {
+    lines.push('Available agent skills (call read_skill for full instructions when relevant):')
+    for (const s of optional) {
+      lines.push(`- ${s.id}: ${s.description || s.name}`)
+    }
+  }
+  return lines.join('\n')
+}
+
+/** Full caveman body when the built-in skill is enabled; empty if disabled/missing. */
+export function cavemanSystemBlock(): string {
+  const loaded = loadSkill(CAVEMAN_SKILL_ID)
+  if ('error' in loaded) return ''
   return [
-    'Available agent skills (call read_skill for full instructions when relevant):',
-    ...lines
+    `CRITICAL built-in skill /${CAVEMAN_SKILL_ID} (already applied — do not call read_skill for it):`,
+    loaded.body
   ].join('\n')
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FilePlus, FolderPlus, MessagesSquare, RefreshCw, Waypoints, Clapperboard } from 'lucide-react'
-import { useAppStore } from '@/state/appStore'
+import { useAppStore, SIDEBAR_MIN_WIDTH } from '@/state/appStore'
 import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 import { FileTree } from './FileTree'
 import { ScmPane } from './ScmPane'
@@ -174,7 +174,7 @@ export function Sidebar() {
   if (activeView === 'scm') {
     return (
       <>
-        <aside className="sidebar" style={{ width: sidebarWidth }}>
+        <aside className="sidebar" style={{ width: sidebarWidth, minWidth: SIDEBAR_MIN_WIDTH }}>
           <ScmPane />
         </aside>
         <div className="sash" onMouseDown={onSashDown} />
@@ -184,9 +184,12 @@ export function Sidebar() {
 
   return (
     <>
-      <aside className="sidebar" style={{ width: sidebarWidth }}>
+      <aside
+        className="sidebar"
+        style={{ width: sidebarWidth, minWidth: SIDEBAR_MIN_WIDTH }}
+        aria-label={t('explorer.title')}
+      >
         <div className="sidebar-header">
-          <span>{t('explorer.title')}</span>
           <div className="sidebar-actions">
             <button
               type="button"

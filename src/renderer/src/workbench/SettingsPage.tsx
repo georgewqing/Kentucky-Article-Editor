@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '@/state/settingsStore'
-import { useAiStore, type AiProfileView, type AiSkillView } from '@/state/aiStore'
+import { useAiStore, type AiProfileView, type AiSkillView, type ThinkingLevel } from '@/state/aiStore'
 import { ACCENT_PRESETS } from '@/theme/applyTheme'
 import i18n, { setStoredLocale, type AppLocale } from '@/i18n'
 import { useOverlayScroll } from '@/hooks/useOverlayScroll'
@@ -201,7 +201,8 @@ export function SettingsPage() {
                           label: t('settings.newProfile'),
                           baseUrl: 'https://api.openai.com/v1',
                           model: 'gpt-4o-mini',
-                          contextWindow: 128000
+                          contextWindow: 128000,
+                          thinkingLevel: 'mid'
                         }).then((p) => {
                           if (p) {
                             setEditId(p.id)
@@ -293,6 +294,24 @@ export function SettingsPage() {
                         />
                       </div>
                     </div>
+                    <div className="settings-field settings-field--inline">
+                      <span className="settings-label">{t('settings.aiThinking')}</span>
+                      <SegmentedControl
+                        aria-label={t('settings.aiThinking')}
+                        value={(editing.thinkingLevel ?? 'mid') as ThinkingLevel}
+                        onChange={(thinkingLevel) => {
+                          if (thinkingLevel !== editing.thinkingLevel) {
+                            void upsertProfile({ id: editing.id, thinkingLevel })
+                          }
+                        }}
+                        options={[
+                          { value: 'high' as const, label: t('settings.aiThinkingHigh') },
+                          { value: 'mid' as const, label: t('settings.aiThinkingMid') },
+                          { value: 'low' as const, label: t('settings.aiThinkingLow') }
+                        ]}
+                      />
+                    </div>
+                    <p className="settings-hint">{t('settings.aiThinkingHint')}</p>
                     <div className="settings-field">
                       <span className="settings-label">{t('settings.aiKey')}</span>
                       <div className="settings-key-block">

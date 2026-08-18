@@ -65,12 +65,12 @@
 
 | 项 | 决定 |
 |----|------|
-| 协议 | OpenAI 兼容；**多配置档**（label/baseUrl/model/contextWindow + 每档加密 Key），输入栏切换 |
+| 协议 | OpenAI 兼容；**多配置档**（label/baseUrl/model/contextWindow/**thinkingLevel** high·mid·low + 每档加密 Key），输入栏切换。请求带 `reasoning_effort`（mid → medium）；网关 400 不认则去掉再试一次 |
 | UI | 编辑区右侧面板；**Cursor 风格 composer**（模式 / 配置档 / **行内挂载芯片**；资源树拖入挂载；**Skill 暖色胶囊** + 发送注入 SKILL 正文 / 上传 / 发送）；主题色变量 |
 | 模式 | **Ask** 无工具且主进程拒绝执行任何 tool_call（`tool_choice: none`，历史 tool 记录压成文本）；**Plan** 只读调研 + `create_plan`；**Outline** 结构/导图；**Agent** 全工具且**始终自动写盘**（无 Accept）。计划真相 = md 文件；**对话栏上方不挂常驻计划列表**。计划 md 顶栏 **开始执行 / Build**：切 Agent、绑定 `planFileRel`、发执行提示。Agent 若会话有 `planFileRel` 则 InjectPath；`update_plan_step` Soft 勾选 md（保留正文） |
 | 工作区文件结构 | Agent 可用 **`workspace_mkdir` / `workspace_copy` / `workspace_move` / `workspace_delete`**（主进程 Node FS，**非** Shell）。用于归档/迁移；move/delete 同步台词 sidecar 与 `.kmind` assets；UI 刷新树并关闭受影响标签。路径必须在打开的工作区内（§121 IPC 与 Agent 同一套沙箱）。 |
 | 写文件 | **始终自动写盘**（无 Accept/Reject）。黄● = 相对上次 Ctrl+S/打开/Git 重载的 baseline。AiPanel 只读变更卡 + diff。误改靠 **Source Control 丢弃** 或编辑器 Undo。 |
-| 脏/新建色 | 改过未保存 = **黄 ●**；新建 = **蓝 ●**（标签栏 + 资源管理器同步）；保存后清除 |
+| 脏/新建色 | 改过未保存 = **黄**；新建 = **蓝**。标签栏仍是名前 ●；资源管理器是文件名着色、圆点在**行尾**（Cursor）。保存后清除 |
 | Git | 工作区打开时若无仓则**自动**在**该根** `git init` + 默认 `.gitignore`（`kentucky.autoInit`）；**不向上**复用父仓。**`.git`/点文件在资源管理器与 `list_dir` 不可见**。活动栏 SCM：status/diff/discard/stage/commit。Agent 工具见下行。无任意 Shell。完整说明：[`AGENT-GIT.md`](./AGENT-GIT.md)。 |
 | Git Agent 工具 | **全部立即执行**（无 Confirm）：`git_status`/`git_diff`/`git_log`/`git_pull`/`git_push`/`git_add`/`git_commit`/`git_remote_add`/`git_remote_remove`。写操作 → **高亮卡 + Toast**。本地/`file://` URL（可含空格）；缺失本地路径 → 自动 `git init --bare`。空提交 → 清晰 Nothing to commit/staged。remote 重加后 push 用 setUpstream。每轮 **Git (L5)** + **`GIT_AGENT_PLAYBOOK`**。**禁止** force。指纹 `toolApi: 2026-08-14-a`。文件工具沙箱仅本工作区；**打开工作区拒绝主目录/盘符根/系统目录**（§121）。工作区可放 `agent-GIT环境说明.md` 固化**本根**远程/分支（勿跨仓复用）。 |
 | 焦点 | AI 改多文件时**不切换**当前标签（不闪页）；后台挂标签并刷新树 |
@@ -84,7 +84,7 @@
 | 快照上限 | `maxRevisionSnaps`（默认 20，AI 设置可配）；满则删最旧再写入，不拒建 |
 | 导图可读性 | AI 须建树/分层 DAG（非角色↔场景全连接网）；缺省 Sugiyama/LR；乱图可 `layout_kmind` |
 | 台词图能力 | AI 按协议 **v1.3** 读写：`read_dialogue` 看 options / 空 text 链；角色 `operable`；`propose_dialogue_graph` 整图（csv+choices+layout，线性也写空 text options）；`propose_set_dialogue_choices` / `layout_dialogue` / 行级增改排；speaker=角色 id；`propose_upsert_character` 可写 operable |
-| Skills | 全局 `data/ai-skills/<id>/SKILL.md`；随包装 `literary-voice` + **8 个中文游戏策划 skill**（双主线默认开，纯小说可关）；`copy-if-missing` 不覆盖用户已有文件（含 `examples.md`）；`seenBundledSkillIds` 只欢迎从未见过的 bundled id（关掉后不复活）；catalog；`list_skills` / `read_skill`；挂载 skill 时注入 examples/reference。**不**执行 scripts。工作区硬约定 `design/`。详见 [`REQ-indie-game-skills.md`](./REQ-indie-game-skills.md) |
+| Skills | 全局 `data/ai-skills/<id>/SKILL.md`；随包装 **caveman（内置，开启则每轮注入系统提示，勿 `read_skill`）** + `literary-voice` + **8 个中文游戏策划 skill**（双主线默认开，纯小说可关）；`copy-if-missing` 不覆盖用户已有文件（含 `examples.md`）；`seenBundledSkillIds` 只欢迎从未见过的 bundled id（关掉后不复活）；catalog；`list_skills` / `read_skill`；挂载 skill 时注入 examples/reference。**不**执行 scripts。工作区硬约定 `design/`。详见 [`REQ-indie-game-skills.md`](./REQ-indie-game-skills.md) |
 | 联网搜索 | 设置 `webSearchEnabled`（默认关）；`web_search` + `web_research`；DuckDuckGo 失败自动回退 Bing；可直选 Bing |
 
 | 加载态 | 思考中 / 调工具时必须有可见指示，禁止长时间空白像卡死 |

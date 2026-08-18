@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Paperclip, ArrowUp, Square, ChevronDown, Infinity } from 'lucide-react'
+import { BorderBeam } from 'border-beam'
 import { useAiStore, type AgentMode, type AiSkillView } from '@/state/aiStore'
 import { useAppStore } from '@/state/appStore'
+import { useSettingsStore } from '@/state/settingsStore'
 import type { FileEntry } from '@/platform'
 import { getPlatform } from '@/platform'
 import { KENTUCKY_PATH_MIME } from '@/workbench/dnd'
@@ -48,6 +50,33 @@ function pathHasKentuckyDrag(e: DragEvent): boolean {
   return types.includes(KENTUCKY_PATH_MIME) || types.includes('text/plain')
 }
 
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(() =>
+    typeof window !== 'undefined'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      : false
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const onChange = (): void => setReduced(mq.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  return reduced
+}
+
+function popoverOffset(
+  shell: HTMLElement,
+  trigger: HTMLElement
+): { left: number; bottom: number } {
+  const s = shell.getBoundingClientRect()
+  const b = trigger.getBoundingClientRect()
+  return {
+    left: b.left - s.left,
+    bottom: s.bottom - b.top + 6
+  }
+}
+
 export function AiComposer() {
   const { t } = useTranslation()
   const draft = useAiStore((s) => s.draft)
@@ -70,6 +99,8 @@ export function AiComposer() {
   const listSkills = useAiStore((s) => s.listSkills)
   const workspacePath = useAppStore((s) => s.workspacePath)
   const fileTree = useAppStore((s) => s.fileTree)
+  const themeMode = useSettingsStore((s) => s.themeMode)
+  const reduceMotion = usePrefersReducedMotion()
 
   const [modeOpen, setModeOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
@@ -80,7 +111,13 @@ export function AiComposer() {
   const [dropActive, setDropActive] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const modeBtnRef = useRef<HTMLButtonElement>(null)
+  const profileBtnRef = useRef<HTMLButtonElement>(null)
   const dragDepth = useRef(0)
+  const [modeMenuPos, setModeMenuPos] = useState<{ left: number; bottom: number } | null>(null)
+  const [profileMenuPos, setProfileMenuPos] = useState<{ left: number; bottom: number } | null>(
+    null
+  )
 
   const activeProfile =
     profiles.find((p) => p.id === settings?.activeProfileId) || profiles[0] || null
@@ -95,7 +132,9 @@ export function AiComposer() {
     }
     setSlashOpen(true)
     setSlashIndex(0)
-    void listSkills().then((list) => setSkills(list.filter((s) => s.enabled)))
+    void listSkills().then((list) =>
+      setSkills(list.filter((s) => s.enabled && s.id !== 'caveman'))
+    )
   }, [slashToken?.query, slashToken?.start, listSkills])
 
   const slashItems = useMemo(() => {
@@ -170,6 +209,26 @@ export function AiComposer() {
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
   }, [modeOpen, profileOpen, slashOpen])
+
+  useLayoutEffect(() => {
+    const shell = rootRef.current
+    const btn = modeBtnRef.current
+    if (!modeOpen || !shell || !btn) {
+      setModeMenuPos(null)
+      return
+    }
+    setModeMenuPos(popoverOffset(shell, btn))
+  }, [modeOpen])
+
+  useLayoutEffect(() => {
+    const shell = rootRef.current
+    const btn = profileBtnRef.current
+    if (!profileOpen || !shell || !btn) {
+      setProfileMenuPos(null)
+      return
+    }
+    setProfileMenuPos(popoverOffset(shell, btn))
+  }, [profileOpen])
 
   const applySlashItem = (item: SlashItem): void => {
     if (!slashToken) return
@@ -267,20 +326,164 @@ export function AiComposer() {
   }
 
   return (
-    <div
-      className={`ai-composer${dropActive ? ' is-drop-target' : ''}${streaming ? ' is-streaming' : ''}`}
-      ref={rootRef}
-      onDragEnter={onDragEnter}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
+    <div className="ai-composer-shell" ref={rootRef}>
+    <BorderBeam
+      size="md"
+      colorVariant="colorful"
+      theme={themeMode}
+      borderRadius={14}
+      active={!reduceMotion}
+      className="ai-composer-beam"
     >
-      <span className="ai-composer-glow" aria-hidden="true">
-        <span className="ai-composer-glow-bloom" />
-        <span className="ai-composer-glow-ring">
-          <span className="ai-composer-glow-spin" />
-        </span>
-      </span>
+      <div
+        className={`ai-composer${dropActive ? ' is-drop-target' : ''}${streaming ? ' is-streaming' : ''}`}
+        onDragEnter={onDragEnter}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
+      <div className="ai-composer-input-wrap">
+        {composerSkillId || attachments.length > 0 ? (
+          <div className="ai-composer-mounts">
+            {composerSkillId ? (
+              <span className="ai-skill-chip" title={`/${composerSkillId}`}>
+                <span className="ai-skill-chip-label">/{composerSkillId}</span>
+                <button
+                  type="button"
+                  className="ai-skill-chip-x"
+                  aria-label={t('ai.removeSkill')}
+                  onClick={() => setComposerSkillId(null)}
+                >
+                  ×
+                </button>
+              </span>
+            ) : null}
+            {attachments.map((path) => (
+              <FileMountChip
+                key={path}
+                path={path}
+                variant="composer"
+                removeLabel={t('ai.removeAttachment')}
+                onRemove={() => removeAttachment(path)}
+              />
+            ))}
+          </div>
+        ) : null}
+        <textarea
+          ref={inputRef}
+          className="ai-composer-input"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder={t('ai.composerPlaceholder')}
+          rows={2}
+          onKeyDown={(e) => {
+            if (slashOpen && slashItems.length > 0) {
+              if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                setSlashIndex((i) => (i + 1) % slashItems.length)
+                return
+              }
+              if (e.key === 'ArrowUp') {
+                e.preventDefault()
+                setSlashIndex((i) => (i - 1 + slashItems.length) % slashItems.length)
+                return
+              }
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                applySlashItem(slashItems[slashIndex] || slashItems[0])
+                return
+              }
+              if (e.key === 'Escape') {
+                e.preventDefault()
+                setSlashOpen(false)
+                return
+              }
+              if (e.key === 'Tab') {
+                e.preventDefault()
+                applySlashItem(slashItems[slashIndex] || slashItems[0])
+                return
+              }
+            }
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              void send()
+            }
+          }}
+        />
+      </div>
+
+      <div className="ai-composer-toolbar">
+        <div className="ai-composer-toolbar-left">
+          <div className="ai-composer-menu-wrap">
+            <button
+              ref={modeBtnRef}
+              type="button"
+              className="ai-composer-pill"
+              aria-expanded={modeOpen}
+              onClick={() => {
+                setModeOpen((v) => !v)
+                setProfileOpen(false)
+              }}
+            >
+              <Infinity size={14} aria-hidden />
+              <span>{t(`ai.mode.${agentMode}`)}</span>
+              <ChevronDown size={14} aria-hidden />
+            </button>
+          </div>
+
+          <div className="ai-composer-menu-wrap">
+            <button
+              ref={profileBtnRef}
+              type="button"
+              className="ai-composer-model"
+              aria-expanded={profileOpen}
+              onClick={() => {
+                setProfileOpen((v) => !v)
+                setModeOpen(false)
+              }}
+            >
+              <span>{activeProfile?.label || activeProfile?.model || t('ai.noProfile')}</span>
+              <ChevronDown size={14} aria-hidden />
+            </button>
+          </div>
+        </div>
+
+        <div className="ai-composer-toolbar-right">
+          <button
+            type="button"
+            className="ai-composer-icon-btn"
+            title={t('ai.attachFiles')}
+            aria-label={t('ai.attachFiles')}
+            onClick={() => void pickAttachments()}
+          >
+            <Paperclip size={16} aria-hidden />
+          </button>
+          {streaming ? (
+            <button
+              type="button"
+              className="ai-composer-send is-stop"
+              title={t('ai.stop')}
+              aria-label={t('ai.stop')}
+              onClick={() => void abort()}
+            >
+              <Square size={14} fill="currentColor" aria-hidden />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="ai-composer-send"
+              title={t('ai.send')}
+              aria-label={t('ai.send')}
+              disabled={!draft.trim() && !composerSkillId && attachments.length === 0}
+              onClick={() => void send()}
+            >
+              <ArrowUp size={16} aria-hidden />
+            </button>
+          )}
+        </div>
+      </div>
+      </div>
+    </BorderBeam>
       {slashOpen && slashToken ? (
         <div className="ai-slash-menu" role="listbox" aria-label={t('ai.slashMenu')}>
           {skillMatchCount > 0 ? (
@@ -372,188 +575,59 @@ export function AiComposer() {
         </div>
       ) : null}
 
-      <div className="ai-composer-input-wrap">
-        {composerSkillId || attachments.length > 0 ? (
-          <div className="ai-composer-mounts">
-            {composerSkillId ? (
-              <span className="ai-skill-chip" title={`/${composerSkillId}`}>
-                <span className="ai-skill-chip-label">/{composerSkillId}</span>
-                <button
-                  type="button"
-                  className="ai-skill-chip-x"
-                  aria-label={t('ai.removeSkill')}
-                  onClick={() => setComposerSkillId(null)}
-                >
-                  ×
-                </button>
-              </span>
-            ) : null}
-            {attachments.map((path) => (
-              <FileMountChip
-                key={path}
-                path={path}
-                variant="composer"
-                removeLabel={t('ai.removeAttachment')}
-                onRemove={() => removeAttachment(path)}
-              />
-            ))}
-          </div>
-        ) : null}
-        <textarea
-          ref={inputRef}
-          className="ai-composer-input"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={t('ai.composerPlaceholder')}
-          rows={2}
-          onKeyDown={(e) => {
-            if (slashOpen && slashItems.length > 0) {
-              if (e.key === 'ArrowDown') {
-                e.preventDefault()
-                setSlashIndex((i) => (i + 1) % slashItems.length)
-                return
-              }
-              if (e.key === 'ArrowUp') {
-                e.preventDefault()
-                setSlashIndex((i) => (i - 1 + slashItems.length) % slashItems.length)
-                return
-              }
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                applySlashItem(slashItems[slashIndex] || slashItems[0])
-                return
-              }
-              if (e.key === 'Escape') {
-                e.preventDefault()
-                setSlashOpen(false)
-                return
-              }
-              if (e.key === 'Tab') {
-                e.preventDefault()
-                applySlashItem(slashItems[slashIndex] || slashItems[0])
-                return
-              }
-            }
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              void send()
-            }
-          }}
-        />
-      </div>
-
-      <div className="ai-composer-toolbar">
-        <div className="ai-composer-toolbar-left">
-          <div className="ai-composer-menu-wrap">
+      {modeOpen && modeMenuPos ? (
+        <div
+          className="ai-composer-menu"
+          role="menu"
+          style={{ left: modeMenuPos.left, bottom: modeMenuPos.bottom }}
+        >
+          {MODES.map((m) => (
             <button
+              key={m}
               type="button"
-              className="ai-composer-pill"
-              aria-expanded={modeOpen}
+              role="menuitem"
+              className={m === agentMode ? 'active' : ''}
               onClick={() => {
-                setModeOpen((v) => !v)
-                setProfileOpen(false)
-              }}
-            >
-              <Infinity size={14} aria-hidden />
-              <span>{t(`ai.mode.${agentMode}`)}</span>
-              <ChevronDown size={14} aria-hidden />
-            </button>
-            {modeOpen ? (
-              <div className="ai-composer-menu" role="menu">
-                {MODES.map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    role="menuitem"
-                    className={m === agentMode ? 'active' : ''}
-                    onClick={() => {
-                      setAgentMode(m)
-                      setModeOpen(false)
-                    }}
-                  >
-                    <span>{t(`ai.mode.${m}`)}</span>
-                    <small>{t(`ai.modeHint.${m}`)}</small>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="ai-composer-menu-wrap">
-            <button
-              type="button"
-              className="ai-composer-model"
-              aria-expanded={profileOpen}
-              onClick={() => {
-                setProfileOpen((v) => !v)
+                setAgentMode(m)
                 setModeOpen(false)
               }}
             >
-              <span>{activeProfile?.label || activeProfile?.model || t('ai.noProfile')}</span>
-              <ChevronDown size={14} aria-hidden />
+              <span>{t(`ai.mode.${m}`)}</span>
+              <small>{t(`ai.modeHint.${m}`)}</small>
             </button>
-            {profileOpen ? (
-              <div className="ai-composer-menu ai-composer-menu-wide" role="menu">
-                {profiles.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    role="menuitem"
-                    className={p.id === activeProfile?.id ? 'active' : ''}
-                    onClick={() => {
-                      void setActiveProfile(p.id)
-                      setProfileOpen(false)
-                    }}
-                  >
-                    <span>
-                      {p.label}
-                      {!p.hasKey ? ` · ${t('ai.noKey')}` : ''}
-                    </span>
-                    <small>{p.model}</small>
-                  </button>
-                ))}
-                <button type="button" role="menuitem" className="ai-composer-manage" onClick={openManageProfiles}>
-                  {t('ai.manageProfiles')}
-                </button>
-              </div>
-            ) : null}
-          </div>
+          ))}
         </div>
+      ) : null}
 
-        <div className="ai-composer-toolbar-right">
-          <button
-            type="button"
-            className="ai-composer-icon-btn"
-            title={t('ai.attachFiles')}
-            aria-label={t('ai.attachFiles')}
-            onClick={() => void pickAttachments()}
-          >
-            <Paperclip size={16} aria-hidden />
+      {profileOpen && profileMenuPos ? (
+        <div
+          className="ai-composer-menu ai-composer-menu-wide"
+          role="menu"
+          style={{ left: profileMenuPos.left, bottom: profileMenuPos.bottom }}
+        >
+          {profiles.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              role="menuitem"
+              className={p.id === activeProfile?.id ? 'active' : ''}
+              onClick={() => {
+                void setActiveProfile(p.id)
+                setProfileOpen(false)
+              }}
+            >
+              <span>
+                {p.label}
+                {!p.hasKey ? ` · ${t('ai.noKey')}` : ''}
+              </span>
+              <small>{p.model}</small>
+            </button>
+          ))}
+          <button type="button" role="menuitem" className="ai-composer-manage" onClick={openManageProfiles}>
+            {t('ai.manageProfiles')}
           </button>
-          {streaming ? (
-            <button
-              type="button"
-              className="ai-composer-send is-stop"
-              title={t('ai.stop')}
-              aria-label={t('ai.stop')}
-              onClick={() => void abort()}
-            >
-              <Square size={14} fill="currentColor" aria-hidden />
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="ai-composer-send"
-              title={t('ai.send')}
-              aria-label={t('ai.send')}
-              disabled={!draft.trim() && !composerSkillId && attachments.length === 0}
-              onClick={() => void send()}
-            >
-              <ArrowUp size={16} aria-hidden />
-            </button>
-          )}
         </div>
-      </div>
+      ) : null}
     </div>
   )
 }

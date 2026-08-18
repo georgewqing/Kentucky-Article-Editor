@@ -119,28 +119,50 @@ function TreeTwistie({
   )
 }
 
-function useFileMark(path: string): 'new' | 'dirty' | null {
+function normalizeTreePath(p: string): string {
+  return p.replace(/[/\\]/g, '\\').replace(/\\+$/, '').toLowerCase()
+}
+
+function useTreeMark(path: string, folder = false): 'new' | 'dirty' | null {
   return useAppStore((s) => {
-    const tab = s.tabs.find(
-      (t) =>
-        t.path.replace(/[/\\]/g, '\\').toLowerCase() === path.replace(/[/\\]/g, '\\').toLowerCase()
-    )
-    if (!tab) return null
-    if (tab.isNew) return 'new'
-    if (tab.dirty) return 'dirty'
+    const key = normalizeTreePath(path)
+    let hasNew = false
+    let hasDirty = false
+    for (const t of s.tabs) {
+      const tp = normalizeTreePath(t.path)
+      const match = folder ? tp === key || tp.startsWith(key + '\\') : tp === key
+      if (!match) continue
+      if (t.isNew) hasNew = true
+      else if (t.dirty) hasDirty = true
+      if (!folder) break
+    }
+    if (hasDirty) return 'dirty'
+    if (hasNew) return 'new'
     return null
   })
 }
 
-function TreeName({ path, label }: { path: string; label: string }) {
-  const mark = useFileMark(path)
+function TreeLabel({ path, label, folder }: { path: string; label: string; folder?: boolean }) {
+  const mark = useTreeMark(path, folder)
   return (
     <span
       className={`tree-name ${mark === 'new' ? 'tree-name-new' : mark === 'dirty' ? 'tree-name-dirty' : ''}`}
     >
-      {mark ? <span className={mark === 'new' ? 'tab-new' : 'tab-dirty'}>● </span> : null}
       {label}
     </span>
+  )
+}
+
+function TreeStatus({ path, folder }: { path: string; folder?: boolean }) {
+  const { t } = useTranslation()
+  const mark = useTreeMark(path, folder)
+  if (!mark) return null
+  return (
+    <span
+      className={`tree-status ${mark === 'new' ? 'tree-status-new' : 'tree-status-dirty'}`}
+      title={mark === 'new' ? t('editor.tabNew') : t('editor.tabDirty')}
+      aria-hidden
+    />
   )
 }
 
@@ -242,7 +264,8 @@ function TreeNode({
         >
           <TreeTwistie open={open} />
           <FolderGlyph open={open} />
-          <span className="tree-name">{label}</span>
+          <TreeLabel path={entry.path} label={label} folder />
+          <TreeStatus path={entry.path} folder />
         </div>
         {open && entry.children && (
           <ul>
@@ -282,8 +305,9 @@ function TreeNode({
             title={entry.name}
           >
             <FileIcon entry={entry} />
-            <TreeName path={entry.path} label={label} />
+            <TreeLabel path={entry.path} label={label} />
           </button>
+          <TreeStatus path={entry.path} />
         </div>
         {open && nestedKids ? (
           <ul>
@@ -311,7 +335,8 @@ function TreeNode({
       >
         <TreeTwistie open={false} visible={false} />
         <FileIcon entry={entry} />
-        <TreeName path={entry.path} label={label} />
+        <TreeLabel path={entry.path} label={label} />
+        <TreeStatus path={entry.path} />
       </div>
     </li>
   )
@@ -545,7 +570,8 @@ export function FileTree({
               >
                 <TreeTwistie open={rootOpen} />
                 <FolderGlyph open={rootOpen} />
-                <span className="tree-name">{rootName}</span>
+                <TreeLabel path={workspacePath} label={rootName} folder />
+                <TreeStatus path={workspacePath} folder />
               </div>
               {rootOpen ? (
                 <ul>

@@ -41,6 +41,7 @@ Win 目录包测（0.3.0→0.3.2）三件叠在一起：设置改不了 → 一�
 - 四个栏位用 **本地 draft**（`draftLabel` / `draftBaseUrl` / `draftModel` / `draftContext`）。
 - `useEffect` **只在 `editing?.id` 变化**时把档案灌进 draft。禁止依赖 `editing.baseUrl` 整对象，否则保存后也会把光标里的字打回去。
 - **失焦（`onBlur`）才 `upsertProfile`**。值没变则不写盘。
+- **思考强度**（High / Mid / Low）是分段控件，点选立刻 `upsertProfile`。不是文本栏，不要给它做 draft，也不适用「禁止每个按键写盘」。
 - 上下文：`Number` 有限则钳到 `4096…2_000_000`；`Number('')` 不是合法窗口，回退到当前档案值。**禁止** `Number(x) \|\| 128000`。
 - 空 Base URL 允许暂存（下一轮发送应立刻报「Base URL is empty」，不要再挂死）。
 - 点「+ 新建」仍可种子默认 OpenAI URL/模型；那是新档案初始值，不是编辑时的回弹。

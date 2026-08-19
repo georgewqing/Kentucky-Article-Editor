@@ -1,9 +1,9 @@
 # Agent 工具反馈总清单（Win 已修 · Android 待对齐）
 
 > **权威清单**：创作侧长会话反馈 → 工具侧缺陷与修复对照。  
-> Win 实现以本文件 + 源码为准。安卓是独立工程，对照移植时打开该工程，不要从本仓库 import。  
+> Win 实现以本文件 + 源码为准。安卓从零对照移植，不要从本仓库 import。交接：[`../android-port-brief/04-agent-tools.md`](../android-port-brief/04-agent-tools.md)。  
 > 会话交接短文：[`SESSION-TOOL-FEEDBACK.md`](./SESSION-TOOL-FEEDBACK.md)  
-> Android：独立工程 `../Kentucky for Android/project-memory/BOARD.md`
+> Android：忽略旧 `../Kentucky for Android/`；新工程自建 BOARD。
 
 | 字段 | 值 |
 |------|-----|
@@ -13,14 +13,14 @@
 | Git 专档 | [`AGENT-GIT.md`](./AGENT-GIT.md)（SCM + Agent 完整契约 §80–89；**§121 不向上找父仓**） |
 | 本机沙箱 | [`SECURITY-AUDIT.md`](./SECURITY-AUDIT.md)（Win IPC / 工作区根 / 导航锁；Android 移植时须对齐，不得只抄 UI） |
 | 测试基线 | [`AGENT-TOOL-TEST-BASELINE.md`](./AGENT-TOOL-TEST-BASELINE.md)（9 项实证） |
-| Android 状态 | 独立工程维护（见该工程 BOARD） |
+| Android 状态 | 从零独立工程（[`android-port-brief`](../android-port-brief/README.md)） |
 
 ---
 
 ## 0. 跨端原则
 
 1. **业务规则两端一致**：写入门禁、工具名/schema、返回字段语义、continuity 结构、Plan 文件协议。
-2. **IO 层不同**：Win = Node `fs`（`src/main/ai/`）；Android 独立工程 = `WorkspaceIo`（`src/ai-runtime/`）。对照时改执行体，不改契约。
+2. **IO 层不同**：Win = Node `fs`（`src/main/ai/`）；新安卓工程 = SAF/`WorkspaceIo`（建议 `src/ai-runtime/`）。对照时改执行体，不改契约。不要假设旧 Capacitor 树已存在。
 3. **UI 项 agent 观测不到**：diff hunk、只读变更卡在面板上；应用结果字段给 agent，面板给人。**无** Accept / 批量 Apply。
 4. **验证指纹**：任一端若工具结果无 `toolApi`，视为旧运行时，勿当「未修」。
 
@@ -240,10 +240,10 @@ Win 实现入口：`literaryTools.ts` / `literaryContinuity.ts` / `memoryNudge.t
 
 ---
 
-## 7. 安卓对照（独立工程）
+## 7. 安卓对照（从零独立工程）
 
-1. 对照 §1 总表，在安卓工程 `src/ai-runtime/` 逐项 diff（含 **`ghostNames.ts`**）。
+1. 对照 §1 总表，在**新**安卓工程 `src/ai-runtime/`（或等价目录）逐项实现（含 **`ghostNames.ts`**）。交接：[`../android-port-brief/`](../android-port-brief/README.md)。
 2. 优先：`proposalGate` + `emitProposal` 字段 + characters 落盘 + continuity/ghost + append 建表 + plan 返回值。
 3. 其次：FS 工具、`propose_upsert_characters`、web_search snippet、AiPanel diff/批量。
-4. 文学记忆详约在安卓工程 `open/literary-memory.md`；进度只改那边的 `BOARD.md`。
-5. 真机回归在安卓工程完成，不要把 Capacitor 代码合进本仓库。
+4. 文学记忆：Win [`REQ-literary-agent-capability-upgrade.md`](./REQ-literary-agent-capability-upgrade.md) + brief `04-agent-tools.md`。进度写在新工程 `BOARD.md`。
+5. 真机回归在安卓工程完成，不要把 Capacitor 代码合进本仓库。忽略旧 `../Kentucky for Android/`。

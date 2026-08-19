@@ -190,7 +190,7 @@
 - **检视器显示不全**：检视器在 `overflow:hidden` 行内须 `max-height:100%` 自滚；窄栏稿本链接换行，勿只靠横滑。
 - UI：**禁止**另起 PR 深蓝皮肤；跟主题变量。动效不加 framer-motion；时间码/细拖勿加过渡。样式拆 `storyboard-nle.css` + `storyboard-pages.css`。
 - `.kyboard` 立即写盘，**同时**把 JSON 写入 DocumentHub 标签缓冲（`persistDoc` / `storyboardDocFlush`）。只 `writeFile` 不清缓冲时，Ctrl+S / 退出保存会用打开时的空时间线盖盘，粗剪看起来被重置。
-- Android **要移植**（BOARD A3 ❌）；IO/ffmpeg 按 PORTING 重写，勿 import `win/`。
+- Android **要从零移植**（`android-port-brief` P5）；IO/ffmpeg 重写，勿 import 本仓库。
 - schema **v1 只增不改**；改字段须用户同意 + 迁移策略（`mediaDurationSec`、`audioClips`、`camera.keys` 为可选增量）。
 - **多音轨**：`MAX_AUDIO_TRACKS=4`、每轨一条 MP3；读写走 `listAudioClips` / `ensureAudioClipsMut` / `firstEmptyAudioTrack`；`serializeKyboard` 必须 `syncLegacyAudioClip`（`audioClip === audioClips[0]`）。播放用 `Map<clipId, HTMLAudioElement>`，勿共用一个 `audioRef`。导出单轨 `anull`、多轨 `amix=duration=longest`，再 `-shortest`。
 - **监视器镜头（§113–§115，顺序很重要）**：

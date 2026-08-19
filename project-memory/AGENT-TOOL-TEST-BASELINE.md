@@ -5,7 +5,7 @@
 > **工具版本轨迹**：旧版 → `d` → `e` → `f` → **`2026-08-11-g`**（MD patch 修复）  
 > **状态**：正式工作区已清空；本文为后续参考基线  
 > **权威缺陷/契约表**：[`AGENT-TOOL-FEEDBACK.md`](./AGENT-TOOL-FEEDBACK.md)  
-> **Android：** 独立工程 `../Kentucky for Android/project-memory/BOARD.md`
+> **Android：** 从零独立工程。交接 [`../android-port-brief/`](../android-port-brief/README.md)。忽略旧 BOARD。
 
 ---
 

@@ -1,10 +1,10 @@
 # 打包 / 真机：AI 设置、流式、MD 复制
 
 > **现行契约**（Win **0.3.2**）。changelog **§162 / §164 / §165** 是历史，不要当「现在怎么写代码」。  
-> Android **必须遵守**。对照移植或整文件覆盖时，禁止回退到本节「禁止」列。  
+> 安卓从零移植 **必须遵守**（交接 [`../android-port-brief/`](../android-port-brief/README.md)）。禁止回退到本节「禁止」列。  
 > 不 bump `toolApi`（这些不是工具协议）。
 
-两端源码独立：Win `src/main/ai` + renderer；Android `src/ai-runtime` + WebView。行为对齐，禁止 `import ../win`。
+两端源码独立：Win `src/main/ai` + renderer；新安卓工程自建 `ai-runtime` + WebView。行为对齐，禁止 `import` Win 树。不要假设旧 Capacitor 工程里已经有一份实现。
 
 ---
 

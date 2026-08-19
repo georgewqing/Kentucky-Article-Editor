@@ -26,7 +26,7 @@ Architecture and decision notes: [`project-memory/`](./project-memory/README.md)
 - **Settings / 设置:** Dark/light, accent (presets + picker), font size, Chinese/English UI; menus follow locale; startup splash follows saved accent; **AI** (OpenAI-compatible URL/key/model, agent tools). / 深色/浅色、主体色、字号、中英 UI；启动闪屏跟主体色；**AI** 设置。
 - **AI writing agent / AI 写作代理人 (since v0.2.0):** Right Cursor-like panel (`Ctrl+L`); Ask / Plan / Agent; Agent **auto-writes** (no Accept); read-only change cards; multi-session history + encrypted key in app-body `data/`; optional Skills and web search (off by default); Git tools on desktop. / 右侧对话栏；Agent 始终写盘、无 Accept；可选 Skills 与联网搜索；桌面含 Git 工具。
 - **Source Control / Git:** Auto `git init` at the opened folder root (does not walk up); SCM pane + Agent `git_*` (no force). / 打开的文件夹根自动建仓；不向上找父仓。
-- **Platform / 平台抽象:** Renderer talks to the filesystem only through `Platform` (Electron preload). The Android tablet app is a **separate product** in its own folder (`../Kentucky for Android/`), not part of this repo. / 渲染层经 `Platform` 访问文件系统；安卓平板版是独立工程，不在本仓库。
+- **Platform / 平台抽象:** Renderer talks to the filesystem only through `Platform` (Electron preload). The Android tablet app is a **separate product** (greenfield; handoff in [`android-port-brief/`](./android-port-brief/README.md)), not part of this repo. / 渲染层经 `Platform` 访问文件系统；安卓平板版是独立工程，从零移植见 `android-port-brief/`。
 
 ## Out of scope (for now) / 明确不做（现阶段）
 

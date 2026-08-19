@@ -81,7 +81,7 @@ Renderer (React)
 ```
 
 - UI **不得** `require('fs')` 或散落 `window.kentucky`（菜单监听等经 `Platform` 封装）。
-- 安卓平板为**独立工程**（本机常见 `../Kentucky for Android/`，Capacitor 0.3.0），不在本 Electron 树内换 Platform。
+- 安卓平板为**独立新工程**（从零；交接 [`../android-port-brief/README.md`](../android-port-brief/README.md)），不在本 Electron 树内换 Platform。忽略旧 `../Kentucky for Android/`。
 - **多窗口：** `role: main | float`（`windowRegistry`）；文件正文权威在主进程 `documentHub`；各窗 Zustand 仅本地 UI。媒体预览（PNG/MP4/PDF）**不**进 DocumentHub。
 
 ### `kentucky-file` 协议

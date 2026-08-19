@@ -35,9 +35,9 @@
 | Godot 热编辑 | **同路径磁盘**；协议 **v1.3**。执行器读 csv/meta/characters（含 **operable**）/**choices**（忽略 layout）；空 text 按 speaker 可操作确认 / NPC 自动。Kentucky 不碰 `.import`（Keep File 由作者自检）。换篇是 Godot `dialogue_id` / override。参考 [ai_river_godot](https://github.com/CCFOX12/ai_river_godot) Louisville Station。完整说明书：`extras/godot-kentucky-dialogue/README.md`。不做 IPC / 表达式引擎 / 图格式替代 CSV |
 | 活动栏 | 视窗键=起始页（`home`，不关工作区、隐藏侧栏）；**工程徽章列表**（可多开）+ 末尾「+」开文件夹；**AI 对话键**=右侧 Agent 栏（`Ctrl+L`）；齿轮=设置 |
 | 多工程 | 同窗口多文件夹；切换保留各工程标签/树；聊天与面板记忆按路径隔离 |
-| 工作区布局 | 本目录是 Windows Electron 工程；安卓平板版在独立文件夹（本机常见 `../Kentucky for Android/`）。互不共享源码树与 git |
+| 工作区布局 | 本目录是 Windows Electron 工程；安卓平板版在**独立新工程**。互不共享源码树与 git。交接包：[`../android-port-brief/`](../android-port-brief/README.md) |
 | 开发优先级 | 本仓库只维护桌面端。安卓在自己的工程里对照功能，禁止从这里整目录覆盖那边的 `src/` |
-| 安卓 | 独立产品；大屏平板 + 优先外接键盘；不做手机布局；不移植 Electron 壳。进度在安卓工程 `project-memory/` |
+| 安卓 | 独立产品；大屏平板 + 优先外接键盘；不做手机布局；不移植 Electron 壳。**从零开始**（忽略旧 `../Kentucky for Android/`）。进度写在新安卓工程自己的 `project-memory/` |
 | **版本** | **v0.3.2**（当前包）：连接超时不得掐断 SSE。**v0.3.1** §162 设置/复制。功能面仍是 **v0.3.0** 分镜头 + v0.2.0 起文学向 AI 代理人 |
 | AI 设置 / 流式 / MD 复制 | 档案栏失焦才保存；连接超时只等响应头；排版复制为人话。两端禁止回退：[`PACKAGED-AI-UX.md`](./PACKAGED-AI-UX.md) |
 
@@ -57,7 +57,7 @@
 | UI | 工作台 Seg 稿纸/时间线/导出；`storyboard-nle.css` + `storyboard-pages.css`；主题与 Emil 同现有 chrome；**无** PR 孤岛皮肤 |
 | UX 技能 | 实现须遵 `emil-design-eng` + 本文动效条；验收见 [`STORYBOARD.md`](./STORYBOARD.md) §6/§8 |
 | AI | **不参与**；无 Agent 工具 |
-| 平台 | **Win 已发版**；Android **要移植**（BOARD A3 ❌；IO/ffmpeg 重写，勿 import `win/`） |
+| 平台 | **Win 已发版**；Android **要从零移植**（IO/ffmpeg 重写，勿 import 本仓库；见 `android-port-brief` P5） |
 | Schema | v1 **只增不改** |
 | 说明书 | [`STORYBOARD.md`](./STORYBOARD.md)（完整单一真源；polish **§97–§119**、改序/persist **§150–§155**） |
 
@@ -91,7 +91,7 @@
 | 文案 | Agent 写入标明已落盘；勿引导 Accept；误改指向 Source Control |
 | 费用 | **不做**账单累计 |
 | 失败 | 明确报错 + 手动「重试」 |
-| 范围 | 仅 `win/`；安卓冻结至 Win 正式版后再移植 |
+| 范围 | 本仓库仅桌面端。安卓从零另开工程（[`android-port-brief`](../android-port-brief/README.md)） |
 
 ## 资源管理器（相关）
 
@@ -102,7 +102,7 @@
 | PNG 预览 | 工作区 `.png` 可打开为只读图片预览（滚轮定点缩放 / 拖拽平移 / 适应 / Reveal）；不经文本 DocumentHub |
 | MP4 预览 | 工作区 `.mp4` 可打开为只读视频预览（原生 `<video controls>` / 时长 / Reveal）；`kentucky-file` **Range/206** 流式；与 PNG 共用 `isMediaPreviewKind`（跳过 `docOpen`）；不经 DocumentHub。**不做** jpg/webp/webm/mov、自定义播放器皮肤 |
 | PDF 预览 | 工作区 `.pdf` 可打开为只读预览（**pdf.js 自绘**：工作台配色、叠加主题滚动条、可拖宽缩略图栏、适应/缩放、Reveal）；与 PNG/MP4 共用 `isMediaPreviewKind`；文件经 `kentucky-file` fetch 成 ArrayBuffer。**不做** 批注/全文搜索/打印下载条。**仍不做** jpg/webp |
-| PDF 导出 | **UI**：当前标签（含未保存）`.md` → A4 竖版浅色印刷稿（TipTap HTML）；`.kmind` → 整板 fit 进一页横版位图。入口：MD/导图工具栏、文件菜单、资源树右键。另存为默认同目录 `主名.pdf`。**Agent**：`export_workspace_pdf` 把工作区 `.md` 直接写成 PDF（无对话框；默认同目录 `主名.pdf`；覆盖；未保存缓冲优先）。Win 主进程隐藏窗 `printToPDF`，无 puppeteer。HTML ≤ 2MB、PDF ≤ 50MB。不做台词图/分镜头/纯 `.txt`；导图 Agent 不导出。**Android 要移植**（BOARD A4；导出管线重写，不抄 `printToPDF`） |
+| PDF 导出 | **UI**：当前标签（含未保存）`.md` → A4 竖版浅色印刷稿（TipTap HTML）；`.kmind` → 整板 fit 进一页横版位图。入口：MD/导图工具栏、文件菜单、资源树右键。另存为默认同目录 `主名.pdf`。**Agent**：`export_workspace_pdf` 把工作区 `.md` 直接写成 PDF（无对话框；默认同目录 `主名.pdf`；覆盖；未保存缓冲优先）。Win 主进程隐藏窗 `printToPDF`，无 puppeteer。HTML ≤ 2MB、PDF ≤ 50MB。不做台词图/分镜头/纯 `.txt`；导图 Agent 不导出。**Android 要从零移植**（导出管线重写，不抄 `printToPDF`；见 `android-port-brief` P6） |
 | 本机安全 | 渲染层无 Node fs。IPC / `kentucky-file` / Git / Agent **锁在该窗工作区**（`ipcSandbox` + `workspacePath`）。**拒绝**把盘符根、`C:\Windows` 等系统目录、`C:\Users`、用户主目录当工作区打开（`Documents` 下项目可以）。导航锁禁止整页跳外站（preload 不回收）。Git **不向上**找父仓。MP4 导出 ≤ 15 分钟。审计与现契约：[`SECURITY-AUDIT.md`](./SECURITY-AUDIT.md) §121。 |
 
 ## MVP 页面范围

@@ -4,7 +4,7 @@
 > **时间线**：[`changelog.md`](./changelog.md) **§96–§119**、**§121**、**§149–§155**（§116 为工作台右键贴边，非分镜专属）  
 > **产品表**：[`product-decisions.md`](./product-decisions.md) · **踩坑**：[`gotchas.md`](./gotchas.md)  
 > **架构索引**：[`architecture.md`](./architecture.md)  
-> **Android：** 独立工程维护分镜实现（勿 import 本仓库）。进度见该工程 `project-memory/BOARD.md` A3。
+> **Android：** 从零独立实现（勿 import 本仓库）。交接 [`../android-port-brief/05-git-storyboard-pdf.md`](../android-port-brief/05-git-storyboard-pdf.md)。忽略旧 BOARD A3。
 
 本文是 Kentucky Win **分镜头稿本（sheet）+ 简化 Premiere 式时间线（PR）** 的单一完整说明：产品决定、schema、IPC、UI/UX、导出、**ffmpeg 捆绑**、工作区 **PNG / MP4 预览**、验收、源码索引。后续对话改本功能 **先读本文**。
 
@@ -29,7 +29,7 @@
 | 停留 | 工程 `defaults.panelDurationSec` 可配，**出厂 2s** |
 | 监视器 | 播放/暂停、**自定义 scrub 条**、时间码；拖拽/滚轮在**播放头**写入关键帧 |
 | AI | **不参与**；无 Agent 工具 |
-| 平台 | **Win 已发版**；Android **要移植**（BOARD A3；IO/ffmpeg 重写） |
+| 平台 | **Win 已发版**；Android **要从零移植**（IO/ffmpeg 重写；见 `android-port-brief` P5） |
 | 发版标准 | Win 上 **稿纸 + 时间线 + MP4** 齐备才称 0.3.0 |
 
 ### 明确不做

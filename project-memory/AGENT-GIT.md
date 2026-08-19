@@ -3,7 +3,7 @@
 > **状态**：已定稿落地 · 当前指纹 `toolApi: "2026-08-14-a"`（全局工具版本；Git 专档历史见表）；**本机沙箱扩展见 changelog §121**（须完整重启 Electron）  
 > **时间线**：[`changelog.md`](./changelog.md) §80–§95、**§120–§121**  
 > **产品表**：[`product-decisions.md`](./product-decisions.md) · **踩坑**：[`gotchas.md`](./gotchas.md)  
-> **Android：** 独立工程（本机常见 `../Kentucky for Android/`）用 isomorphic-git，禁止 `git.exe`。契约在该工程 `project-memory/open/auto-apply-git.md`。  
+> **Android：** 从零独立工程，用 isomorphic-git，禁止 `git.exe`。交接 [`../android-port-brief/05-git-storyboard-pdf.md`](../android-port-brief/05-git-storyboard-pdf.md)。忽略旧 `../Kentucky for Android/`。  
 > **交接**：[`SESSION-TOOL-FEEDBACK.md`](./SESSION-TOOL-FEEDBACK.md)
 
 本文是 Kentucky Win **Git（SCM UI + Agent 工具）** 的单一完整说明：产品决定、工具契约、自动行为、UI、冒烟结论、源码索引。后续对话改 Git **先读本文**。

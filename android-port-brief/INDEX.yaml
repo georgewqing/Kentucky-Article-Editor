@@ -1,0 +1,64 @@
+# Machine-readable index for the Android tablet port brief.
+# Human/AI read order: README.md
+
+win_repo: https://github.com/CCFOX12/Kentucky-Article-Editor
+win_package: "0.3.2"
+toolApi: "2026-08-14-a"
+godot_dialogue: "v1.3"
+kyboard_schema: 1
+created: "2026-08-19"
+greenfield: true
+ignore_prior_android: true
+device: tablet
+phone_layout: false
+
+read_order:
+  - README.md
+  - AGENTS.md
+  - GLOSSARY.md
+  - 00-mission.md
+  - 01-win-source-map.md
+  - 02-platform-io.md
+  - 03-workbench-editors.md
+  - 04-agent-tools.md
+  - 05-git-storyboard-pdf.md
+  - 06-security-and-data.md
+  - 07-build-plan.md
+  - 08-invariants.md
+  - 09-gotchas.md
+
+keep_open_while_coding:
+  - 08-invariants.md
+  - ../project-memory/product-decisions.md
+  - ../src/renderer/src/platform/index.ts
+
+win_deep_dives:
+  product: ../project-memory/product-decisions.md
+  agent_tools: ../project-memory/AGENT-TOOL-FEEDBACK.md
+  agent_ux: ../project-memory/PACKAGED-AI-UX.md
+  git: ../project-memory/AGENT-GIT.md
+  storyboard: ../project-memory/STORYBOARD.md
+  security: ../project-memory/SECURITY-AUDIT.md
+  literary: ../project-memory/REQ-literary-agent-capability-upgrade.md
+  game_skills: ../project-memory/REQ-indie-game-skills.md
+  godot: ../extras/godot-kentucky-dialogue/README.md
+  rewind: ../src/shared/rewindFiles.ts
+  kyboard: ../src/shared/kyboardSchema.ts
+
+stack_default:
+  host: capacitor-webview
+  ui: copy-src/renderer/src
+  agent: port-src/main/ai
+  git: isomorphic-git
+  workspace: android-saf-tree
+  app_data: android-app-private-files
+
+never:
+  - framer-motion
+  - ffmpeg-static
+  - window.confirm
+  - git-force
+  - agent-accept-ui
+  - phone-layout
+  - runtime-import-from-win-tree
+  - merge-android-into-this-repo

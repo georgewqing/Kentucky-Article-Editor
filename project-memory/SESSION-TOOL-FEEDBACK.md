@@ -6,7 +6,7 @@
 > **基线**：[`AGENT-TOOL-TEST-BASELINE.md`](./AGENT-TOOL-TEST-BASELINE.md)  
 > **总清单**：[`AGENT-TOOL-FEEDBACK.md`](./AGENT-TOOL-FEEDBACK.md)  
 > **需求归档**：[`REQ-literary-agent-capability-upgrade.md`](./REQ-literary-agent-capability-upgrade.md)  
-> **Android：** 独立工程。进度与详约在 `../Kentucky for Android/project-memory/`（BOARD + `open/`）。本仓库不再包含安卓源码。
+> **Android：** 从零独立工程。交接 [`../android-port-brief/`](../android-port-brief/README.md)。本仓库不再包含安卓源码。忽略旧 `../Kentucky for Android/`。
 
 ## 部署指纹
 

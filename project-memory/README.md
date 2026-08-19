@@ -3,7 +3,9 @@
 > **先扫本页「现状」和「硬规则」，再按任务打开其它文件。**  
 > [`changelog.md`](./changelog.md) 是历史，**不是**当前契约。旧节里的 `toolApi` 以当时为准。
 
-本目录就是 Windows / Electron 软件根。安卓平板版是**另一套独立工程**（本机常见并列目录 `../Kentucky for Android/`），不在本仓库。**禁止**跨工程 `import`。
+本目录就是 Windows / Electron 软件根。安卓平板版是**另一套独立工程**，不在本仓库。**禁止**跨工程 `import`。
+
+安卓从零移植的交接包：[`../android-port-brief/README.md`](../android-port-brief/README.md)。**忽略**本机旧目录 `../Kentucky for Android/` 的进度；那边不是真源。
 
 ---
 
@@ -18,7 +20,7 @@
 | Agent 写盘 | **始终自动写盘**；无 Accept。黄● = 相对上次 Ctrl+S。改动卡只读 |
 | Git | 工作区根自动 `git init`（**不向上**找父仓）；Agent `git_*` 立即执行、无 force |
 | 分镜头 | `.kyboard` 已发版；粗剪须 `persistDoc` + Save 前 flush（§155） |
-| Android | 独立工程 `../Kentucky for Android/`（Capacitor **0.3.0**）；不在本仓库构建或提交 |
+| Android | **从头**在独立工程做；交接 [`../android-port-brief/`](../android-port-brief/README.md)。勿把旧 Capacitor 树当已完成 |
 
 改协议 / preload / CSP / 导航锁 / IPC 沙箱后必须**完整退出 Electron**。`Ctrl+R` / F5 热重载不够。
 
@@ -53,7 +55,7 @@
 | 改 IPC / 协议 / 工作区根 | **[`SECURITY-AUDIT.md`](./SECURITY-AUDIT.md)**「现契约详解」 |
 | 怎么跑 / 打包 / 打开方式 | [`how-to-run.md`](./how-to-run.md) |
 | 文学记忆 / 游戏 skill | [`REQ-literary-agent-capability-upgrade.md`](./REQ-literary-agent-capability-upgrade.md) · [`REQ-indie-game-skills.md`](./REQ-indie-game-skills.md) |
-| 安卓对照 | 打开独立工程 `../Kentucky for Android/project-memory/README.md` |
+| 安卓平板从零移植 | **[`../android-port-brief/README.md`](../android-port-brief/README.md)**（忽略旧 `../Kentucky for Android/`） |
 | 「为什么以前那样」 | [`changelog.md`](./changelog.md) 对应节 |
 
 ---
@@ -78,6 +80,7 @@
 | [REQ-literary-agent-capability-upgrade.md](./REQ-literary-agent-capability-upgrade.md) | 文学记忆需求归档 |
 | [REQ-indie-game-skills.md](./REQ-indie-game-skills.md) | 8 个游戏策划 skill |
 | [../extras/godot-kentucky-dialogue/README.md](../extras/godot-kentucky-dialogue/README.md) | Godot 协议 **v1.3** |
+| [../android-port-brief/README.md](../android-port-brief/README.md) | 安卓平板**从零**移植交接包 |
 
 ---
 

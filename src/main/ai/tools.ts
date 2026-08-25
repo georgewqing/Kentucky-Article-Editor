@@ -77,6 +77,16 @@ import { loadAiSettings } from './aiSettings'
 import { REVISIONS_DIR } from './revisions'
 import { memoryToolsDisciplinePrompt, proseMemoryHint } from './memoryNudge'
 import { exportWorkspacePdf } from '../pdf/exportWorkspacePdf'
+import {
+  ASK_MAX_PER_TURN,
+  ASK_OTHER_ID,
+  parseAskUserArgs,
+  parseCiteLinks,
+  type AskUserAnswer,
+  type AskUserQuestion,
+  type CiteLink
+} from '../../shared/agentAsk'
+import { resolveJumpLine } from '../../shared/articleLine'
 
 export function getWritingTools(): ToolDef[] {
   return [
@@ -1078,14 +1088,88 @@ export function getWritingTools(): ToolDef[] {
       type: 'function',
       function: {
         name: 'open_in_editor',
-        description: 'Ask the UI to open a workspace file (optional 1-based line).',
+        description:
+          'WHEN: jump the workbench to a file / paragraph / sentence NOW — same highlight as the mind-map “链接到段落” tool. Call this when you name a specific passage (“打开这段”, “看这一句”, quote a line). Pass snippet (preferred) or 1-based line. Focuses that tab. To mention a file without stealing the editor, cite_workspace instead. Do not only paste [text](path).',
         parameters: {
           type: 'object',
           properties: {
             path: { type: 'string' },
-            line: { type: 'number' }
+            line: { type: 'number', description: '1-based markdown source line' },
+            snippet: {
+              type: 'string',
+              description:
+                'A sentence or heading from the file (same matcher as 链接到段落). Prefer this over guessing line numbers.'
+            }
           },
           required: ['path']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'cite_workspace',
+        description:
+          'WHEN: pointing at workspace files in your answer without switching the editor. Clickable chips (same jump as 链接到段落 when line/snippet is set). Prefer this over pasting dead [text](path). Missing files still appear (exists:false). Max 4 links per call.',
+        parameters: {
+          type: 'object',
+          properties: {
+            links: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  path: { type: 'string' },
+                  line: { type: 'number' },
+                  snippet: {
+                    type: 'string',
+                    description: 'Sentence to resolve to a line (mind-map 链接到段落 matcher).'
+                  },
+                  label: { type: 'string' }
+                },
+                required: ['path']
+              }
+            }
+          },
+          required: ['links']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'ask_user',
+        description:
+          'WHEN: mutually exclusive decisions the user must make (grill / scope-cut / preferences not on disk). NEVER ask facts you can list_dir or read_file. ≤3 questions per call; wait for the card. Mounted /grill skill: you MUST use this instead of markdown numbered questions. UI has an Other field per question.',
+        parameters: {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            questions: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  prompt: { type: 'string' },
+                  recommendedId: { type: 'string' },
+                  options: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        label: { type: 'string' }
+                      },
+                      required: ['id', 'label']
+                    }
+                  }
+                },
+                required: ['prompt', 'options']
+              }
+            }
+          },
+          required: ['questions']
         }
       }
     }
@@ -1199,6 +1283,16 @@ export interface ToolContext {
   webSearchEnabled: boolean
   webSearchProvider: WebSearchProvider
   webSearchMaxResults: number
+  sessionId: string
+  messageId: string
+  currentToolCallId: string
+  askUserCallsThisTurn: number
+  onAskUser: (payload: {
+    askId: string
+    title?: string
+    questions: AskUserQuestion[]
+  }) => Promise<{ cancelled: true } | { cancelled?: false; answers: AskUserAnswer[] }>
+  onCiteWorkspace: (links: CiteLink[]) => void
 }
 
 function emitProposal(ctx: ToolContext, proposal: FileProposal): Record<string, unknown> {
@@ -2733,9 +2827,116 @@ export async function runTool(
       }
       case 'open_in_editor': {
         const path = String(args.path || '')
-        resolveWorkspacePath(ctx.workspaceRoot, path)
-        ctx.onOpenFile(path, typeof args.line === 'number' ? args.line : undefined)
-        return JSON.stringify({ ok: true })
+        const abs = resolveWorkspacePath(ctx.workspaceRoot, path)
+        const lineArg = typeof args.line === 'number' ? args.line : undefined
+        const snippet = typeof args.snippet === 'string' ? args.snippet : ''
+        let line: number | undefined =
+          typeof lineArg === 'number' && Number.isFinite(lineArg) && lineArg >= 1
+            ? Math.floor(lineArg)
+            : undefined
+        if (snippet.trim() || line !== undefined) {
+          const text = readWorkspaceText(abs, null).text
+          if (!text && snippet.trim()) {
+            return JSON.stringify({
+              error: 'File is empty or missing; cannot match snippet.',
+              path,
+              toolApi: TOOL_API_VERSION
+            })
+          }
+          if (text) {
+            const resolved = resolveJumpLine(text, { line, snippet })
+            if ('error' in resolved) {
+              return JSON.stringify({
+                error: resolved.error,
+                path,
+                toolApi: TOOL_API_VERSION
+              })
+            }
+            line = resolved.line
+          }
+        }
+        ctx.onOpenFile(path, line)
+        return JSON.stringify({
+          ok: true,
+          path,
+          line,
+          focused: true,
+          toolApi: TOOL_API_VERSION
+        })
+      }
+      case 'cite_workspace': {
+        const parsed = parseCiteLinks(args)
+        if ('error' in parsed) {
+          return JSON.stringify({ error: parsed.error, toolApi: TOOL_API_VERSION })
+        }
+        const links: CiteLink[] = []
+        for (const link of parsed) {
+          try {
+            const abs = resolveWorkspacePath(ctx.workspaceRoot, link.path)
+            const exists = existsSync(abs) || Boolean(getDoc(abs))
+            let line = link.line
+            if (link.snippet || line !== undefined) {
+              const text = readWorkspaceText(abs, null).text
+              if (text) {
+                const resolved = resolveJumpLine(text, { line, snippet: link.snippet })
+                if ('line' in resolved) line = resolved.line
+              }
+            }
+            links.push({
+              path: toRel(ctx.workspaceRoot, abs) || link.path.replace(/\\/g, '/'),
+              line,
+              label: link.label,
+              exists
+            })
+          } catch (err) {
+            return JSON.stringify({
+              error: err instanceof Error ? err.message : String(err),
+              toolApi: TOOL_API_VERSION
+            })
+          }
+        }
+        ctx.onCiteWorkspace(links)
+        return JSON.stringify({ ok: true, links, toolApi: TOOL_API_VERSION })
+      }
+      case 'ask_user': {
+        const parsed = parseAskUserArgs(args)
+        if (!parsed.ok) {
+          return JSON.stringify({ error: parsed.error, toolApi: TOOL_API_VERSION })
+        }
+        if (ctx.askUserCallsThisTurn >= ASK_MAX_PER_TURN) {
+          return JSON.stringify({
+            error: `ask_user limit (${ASK_MAX_PER_TURN}) reached this turn. Stop asking; conclude or act.`,
+            toolApi: TOOL_API_VERSION
+          })
+        }
+        ctx.askUserCallsThisTurn += 1
+        const r = await ctx.onAskUser({
+          askId: ctx.currentToolCallId,
+          title: parsed.title,
+          questions: parsed.questions
+        })
+        if (r.cancelled) {
+          return JSON.stringify({
+            ok: false,
+            cancelled: true,
+            error: 'Cancelled by user',
+            toolApi: TOOL_API_VERSION
+          })
+        }
+        const answers = r.answers.map((a) => {
+          const q = parsed.questions.find((x) => x.id === a.questionId)
+          const opt =
+            a.optionId === ASK_OTHER_ID
+              ? { id: ASK_OTHER_ID, label: a.otherText?.trim() || '(other)' }
+              : q?.options.find((o) => o.id === a.optionId)
+          return {
+            questionId: a.questionId,
+            optionId: a.optionId,
+            label: opt?.label || a.otherText || a.optionId,
+            otherText: a.optionId === ASK_OTHER_ID ? a.otherText : undefined
+          }
+        })
+        return JSON.stringify({ ok: true, cancelled: false, answers, toolApi: TOOL_API_VERSION })
       }
       case 'list_skills': {
         return JSON.stringify({
@@ -3062,6 +3263,8 @@ const PLAN_TOOLS = new Set([
   'git_push',
   'git_log',
   'open_in_editor',
+  'cite_workspace',
+  'ask_user',
   'read_story_state',
   'read_foreshadow',
   'read_voice_anchor',
@@ -3096,6 +3299,8 @@ const OUTLINE_TOOLS = new Set([
   'list_skills',
   'read_skill',
   'open_in_editor',
+  'cite_workspace',
+  'ask_user',
   'read_story_state',
   'read_foreshadow',
   'read_voice_anchor',
@@ -3137,6 +3342,7 @@ export function modeSystemPrefix(mode: AgentToolMode): string {
         'MODE: Ask — conversation only. You have NO tools and cannot read, write, patch, list, or search files.',
         'Never emit tool calls, DSML, XML <invoke> / tool_calls blocks, function-call markup, or fake tool output.',
         'If the user asks to create or edit files, refuse and tell them to switch the composer from Ask to Agent, then resend.',
+        'If they mounted /grill: you cannot show clickable options here. Tell them to switch to Plan or Agent and resend. Do not fake numbered questions as buttons.',
         'Do not claim you read or edited anything this turn. Answer from Editor context already provided.'
       ].join('\n')
     case 'plan':
@@ -3144,17 +3350,20 @@ export function modeSystemPrefix(mode: AgentToolMode): string {
         'MODE: Plan — research with read-only tools, then write a Markdown plan via create_plan.',
         'create_plan writes plans/<slug>.plan.md (same name/slug overwrites) and opens it. That file is the plan truth — there is no sticky plan list in the chat UI.',
         'Do NOT use propose_write_file / propose_text_patch or other write tools. Only create_plan / update_plan_step may touch plans/*.plan.md.',
-        'When the plan is ready, tell the user to switch to Agent mode to execute the plan file.'
+        'When the plan is ready, tell the user to switch to Agent mode to execute the plan file.',
+        'Mutually exclusive decisions → ask_user (≤3 questions, wait). Naming a specific passage → open_in_editor(path, snippet or line) — same jump as 链接到段落. Mention without stealing the tab → cite_workspace with line/snippet.'
       ].join('\n')
     case 'outline':
       return [
         'MODE: Outline — structure only. Prefer scene_to_kmind and kmind_to_scene_outline for prose maps.',
         'For Godot dialogue graphs prefer propose_dialogue_graph / layout_dialogue (structure + branching), not long prose rewrites.',
-        'Do not rewrite existing long prose. Outline targets should be new/empty markdown. Keep mind maps as trees.'
+        'Do not rewrite existing long prose. Outline targets should be new/empty markdown. Keep mind maps as trees.',
+        'Mutually exclusive structure choices → ask_user. Specific passage → open_in_editor(path, snippet or line). Mention only → cite_workspace.'
       ].join('\n')
     default:
       return [
         'MODE: Agent — full writing tools. All file writes auto-apply to disk immediately (no Accept). Files stay yellow-dirty until the user Ctrl+S. Mistakes: user discards via Source Control. Soft: call update_plan_step as you finish todos.',
+        'Decisions the user must make (grill / scope) → ask_user, never markdown numbered Qs that cannot be clicked. Specific file/sentence the user should see → open_in_editor(path, snippet or line) (mind-map 链接到段落 jump). cite_workspace to mention without stealing the tab.',
         GIT_AGENT_PLAYBOOK
       ].join('\n')
   }
@@ -3247,6 +3456,12 @@ export function LITERARY_SYSTEM_PROMPT(
     '- Performance fields → propose_dialogue_performance. Cast orphans → dialogue_cast_check.',
     '',
     'When editing .kmind, prefer scene_to_kmind or propose_kmind_edit. To fix a tangled map, call layout_kmind.',
+    '',
+    'Asking the user (CRITICAL):',
+    '- Mutually exclusive product/story decisions the disk cannot answer → ask_user (≤3 questions per call, one confirm card, wait). Do not dump numbered Qs in markdown.',
+    '- Mounted /grill: you MUST call ask_user. Never fake clickable options in prose.',
+    '- Jump to a file or sentence with open_in_editor(path, snippet or line) — same highlight as mind-map 链接到段落. cite_workspace = chips without stealing the tab (still pass snippet/line). Do not only paste [text](path).',
+    '- Facts you can list_dir / read_file: never ask the user.',
     '',
     'Mind map readability (CRITICAL — follow strictly):',
     '1. Prefer a TREE or layered DAG: one root/theme → hubs → leaves. Never build a dense mesh.',

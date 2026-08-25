@@ -9,7 +9,7 @@
 |------|-----|
 | 反馈来源 | `test2/tool_feedback.md`（v1 → v2） |
 | Win 轮次 | Round A/B/C/D（2026-08-11） |
-| 部署指纹 | 写入类工具结果须含 `toolApi: "2026-08-14-a"` |
+| 部署指纹 | 写入类工具结果须含 `toolApi: "2026-08-25-a"` |
 | Git 专档 | [`AGENT-GIT.md`](./AGENT-GIT.md)（SCM + Agent 完整契约 §80–89；**§121 不向上找父仓**） |
 | 本机沙箱 | [`SECURITY-AUDIT.md`](./SECURITY-AUDIT.md)（Win IPC / 工作区根 / 导航锁；Android 移植时须对齐，不得只抄 UI） |
 | 测试基线 | [`AGENT-TOOL-TEST-BASELINE.md`](./AGENT-TOOL-TEST-BASELINE.md)（9 项实证） |
@@ -74,7 +74,7 @@
 
 ### 2.0 当前写入契约（覆盖 2.1 历史门禁）
 
-Win **U13/U14** 之后（changelog §80 起，当前 `toolApi: 2026-08-14-a`）：
+Win **U13/U14** 之后（changelog §80 起，当前 `toolApi: 2026-08-25-a`）：
 
 | 项 | 现行 |
 |----|------|
@@ -114,7 +114,7 @@ Win **U13/U14** 之后（changelog §80 起，当前 `toolApi: 2026-08-14-a`）�
   "writeDisk": true,
   "reviewHint": "auto: character_upsert",
   "gateDetail": { "reason": "character_upsert", "kind": "characters", "otherTurnPaths": 0 },
-  "toolApi": "2026-08-14-a",
+  "toolApi": "2026-08-25-a",
   "note": "..."
 }
 ```
@@ -154,7 +154,7 @@ Win **U13/U14** 之后（changelog §80 起，当前 `toolApi: 2026-08-14-a`）�
 
 | 项 | 契约 |
 |----|------|
-| 指纹 | `2026-08-14-a` |
+| 指纹 | `2026-08-25-a` |
 | 工作区文件 | 按需：`story_state.yaml` / `foreshadow.yaml` / `voice_*.yaml` / `glossary.yaml` / `materials/` / `revisions/` |
 | 启用态 | 状态表存在且 `chapters.length≥1`（stale + L5） |
 | 门禁 | `MEMORY_KINDS` → auto+强制落盘；`materials/*.md`→prose；restore 正文→**自动写盘**（无 Accept，见 U13/U14） |
@@ -177,7 +177,7 @@ Win 实现入口：`literaryTools.ts` / `literaryContinuity.ts` / `memoryNudge.t
 
 | 项 | 当前态 |
 |----|--------|
-| 指纹 | `toolApi: "2026-08-14-a"` |
+| 指纹 | `toolApi: "2026-08-25-a"` |
 | 建仓 | 打开工作区 `ensureWorkspaceGit`；**只看本根 `.git`，不向上**（§121）；点文件对 UI/`list_dir` 隐藏 |
 | 工作区根 | 拒盘符根 / 系统目录 / `C:\Users` / 用户主目录；见 [SECURITY-AUDIT.md](./SECURITY-AUDIT.md) |
 | Agent 工具 | status/diff/log/pull/push/add/commit/remote_add/remote_remove — 全部立即执行；**`git_diff` 越界与 `git_add` 同为 `Path escapes workspace: <完整路径>`**（§123） |
@@ -186,6 +186,21 @@ Win 实现入口：`literaryTools.ts` / `literaryContinuity.ts` / `memoryNudge.t
 | 新对话 | Git (L5) + `GIT_AGENT_PLAYBOOK` |
 | 禁止 | force / Shell / 任意 argv |
 | Android | 独立工程 `open/auto-apply-git.md`（isomorphic-git）；Win 真源 [AGENT-GIT.md](./AGENT-GIT.md) |
+
+---
+
+## 2c. Ask 多选 / 工作区引用（§184）
+
+| 项 | 契约 |
+|----|------|
+| 指纹 | `toolApi: "2026-08-25-a"` |
+| Ask 模式 | 仍零工具。`/grill` 挂在 Ask → 提示切 Plan/Agent，禁止 Markdown 假装按钮 |
+| `ask_user` | Plan/Outline/Agent；每调用 ≤3 题、单选+其他、一张卡统一确认；每轮最多 8 次；同批先跑其它工具再堵塞 |
+| `cite_workspace` | ≤4 链；可带 `line` / `snippet`；缺文件仍出卡 `exists:false`；**不**切编辑器标签 |
+| `open_in_editor` | 导图「链接到段落」同一跳转：开标签、滚到句、高亮。`snippet`（优先）或 1-based `line`。点名某一句时必须调用 |
+| Android | [`../android-port-brief/10-update-ask-csv-links.md`](../android-port-brief/10-update-ask-csv-links.md) |
+
+Win 实现：`tools.ts` · `agentLoop.ts` · `AskUserCard.tsx` · `CiteWorkspaceCard.tsx` · `simpleMarkdown.tsx` · `workspaceLinks.ts`。
 
 ---
 
@@ -217,7 +232,7 @@ Win 实现入口：`literaryTools.ts` / `literaryContinuity.ts` / `memoryNudge.t
 
 ## 5. 验证清单（任一端）
 
-1. 工具结果含 `toolApi: "2026-08-14-a"`（版本随契约 bump；清单里更早的 d/f/g/h/i/j/q 仅作历史）。
+1. 工具结果含 `toolApi: "2026-08-25-a"`（版本随契约 bump；清单里更早的 d/f/g/h/i/j/q 仅作历史）。
 2. `propose_upsert_characters`×6 → `written`+`writeDisk`；磁盘有 6 人。
 3. 同轮先 patch `.md` 再 upsert 角色 → 角色仍 auto（`gateDetail.reason=character_upsert`）。
 4. `continuity_check` → 有 `issues`，无 `excerpts`；不报第一章/钟楼会/张船票/老人/小字；能报老陈/管事。

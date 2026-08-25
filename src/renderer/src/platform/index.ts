@@ -156,6 +156,11 @@ export interface Platform {
   aiRejectProposal(payload: { sessionId: string; proposalId: string }): Promise<unknown>
   aiConfirmGitOp(payload: { sessionId: string; opId: string }): Promise<unknown>
   aiRejectGitOp(payload: { sessionId: string; opId: string }): Promise<unknown>
+  aiAnswerAskUser(payload: {
+    sessionId: string
+    askId: string
+    answers: Array<{ questionId: string; optionId: string; otherText?: string }>
+  }): Promise<boolean>
   aiApplyAllProposals(sessionId: string): Promise<unknown[]>
   aiListSkills(): Promise<unknown[]>
   aiSetSkillEnabled(id: string, enabled: boolean): Promise<unknown[]>
@@ -384,6 +389,7 @@ export function createElectronPlatform(): Platform {
     aiRejectProposal: (payload) => api.aiRejectProposal(payload),
     aiConfirmGitOp: (payload) => api.aiConfirmGitOp(payload),
     aiRejectGitOp: (payload) => api.aiRejectGitOp(payload),
+    aiAnswerAskUser: (payload) => api.aiAnswerAskUser(payload),
     aiApplyAllProposals: (sessionId) => api.aiApplyAllProposals(sessionId),
     aiListSkills: () => api.aiListSkills(),
     aiSetSkillEnabled: (id, enabled) => api.aiSetSkillEnabled(id, enabled),
@@ -551,6 +557,7 @@ export function createBrowserStubPlatform(): Platform {
     aiRejectProposal: async () => null,
     aiConfirmGitOp: async () => null,
     aiRejectGitOp: async () => null,
+    aiAnswerAskUser: async () => false,
     aiApplyAllProposals: async () => [],
     aiListSkills: async () => [],
     aiSetSkillEnabled: async () => [],

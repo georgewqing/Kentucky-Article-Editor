@@ -6,7 +6,7 @@ title: Mission, device, definition of done
 
 ## One sentence
 
-Ship a **tablet-native Kentucky** that opens a **local project folder**, edits the same on-disk formats as Win, and runs the **same Agent tool contract** (`toolApi: 2026-08-14-a`), without Electron.
+Ship a **tablet-native Kentucky** that opens a **local project folder**, edits the same on-disk formats as Win, and runs the **same Agent tool contract** (`toolApi: 2026-08-25-a`), without Electron.
 
 ## Device
 
@@ -33,7 +33,7 @@ Must exist on Android (same files, same semantics):
 7. `.kyboard` storyboard + NLE + PNG/MP3/MP4 in assets (ffmpeg or equivalent export).
 8. Read-only preview: workspace `.png` / `.mp4` / `.pdf`.
 9. Settings: dark/light, accent, font size, zh/en, AI profiles.
-10. Right AI panel: Ask / Plan / Outline / Agent; composer; `@` files; `/` skills; stop; edit last user bubble; rewind files with confirm.
+10. Right AI panel: Ask / Plan / Outline / Agent; composer; **`@` file picker** and **`/` skills menu** (Win popover, not a native `<select>` — `10-update-ask-csv-links.md` §3); stop; edit last user bubble; rewind files with confirm.
 11. Git SCM pane + Agent `git_*` (isomorphic-git). Auto-init **at workspace root only**. No force.
 12. PDF export for `.md` (and mind-map if Win does it) without Chromium `printToPDF` — rewrite the pipeline.
 

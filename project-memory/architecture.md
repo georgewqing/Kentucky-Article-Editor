@@ -1,7 +1,7 @@
 # 架构
 
 > **扫描**：先读 [`README.md`](./README.md)「现状」。本文是当前技术结构，不是 changelog。  
-> **当前**：Win **0.3.2** · `toolApi: 2026-08-14-a` · 2026-08-15。  
+> **当前**：Win **0.3.2** · `toolApi: 2026-08-25-a` · 2026-08-25。  
 > AI 代理人功能从 **0.2.0** 起内置；下节「AI 数据流」描述的是该子系统，不是整包版本号。
 
 ## 定位
@@ -139,7 +139,7 @@ AiPanel / aiStore
 - 工作区结构：`workspace_mkdir` / `copy` / `move` / `delete`（`tools.ts` + `ai:workspaceOp`）
 - `.kmind`：`kmindLayout.ts`（dagre Sugiyama）；`propose_kmind_edit`（shape/子树；非法 id → skipped）/ `layout_kmind`
 - `.dialogue.csv`：`formats.ts`；performance 校验 font_size/text_color；reorder 可报 openingChanged
-- Git：`main/git/gitService.ts` + Agent `git_*`（自动写 + 高亮卡 + L5/playbook + 本地裸仓 + 空提交可读错误）。**完整契约**：[AGENT-GIT.md](./AGENT-GIT.md)；当前指纹 `toolApi: 2026-08-14-a`（changelog §80–§95 为 Git 专档史）
+- Git：`main/git/gitService.ts` + Agent `git_*`（自动写 + 高亮卡 + L5/playbook + 本地裸仓 + 空提交可读错误）。**完整契约**：[AGENT-GIT.md](./AGENT-GIT.md)；当前指纹 `toolApi: 2026-08-25-a`（changelog §80–§95 为 Git 专档史）
   ```
   openWorkspace → gitEnsure
   agentLoop → Git (L5) + GIT_AGENT_PLAYBOOK

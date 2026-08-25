@@ -9,7 +9,10 @@ import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 import { AiComposer } from './AiComposer'
 import { FileMountChip } from './FileMountChip'
 import { SimpleMarkdown } from './simpleMarkdown'
-import { formatProposalDiff } from './proposalDiff'
+import { AskUserCard } from './AskUserCard'
+import { CiteWorkspaceCard } from './CiteWorkspaceCard'
+import { computeChangeRanges, formatProposalDiff } from './proposalDiff'
+import { openWorkspaceAbs, openWorkspaceHref } from '@/workbench/workspaceLinks'
 import { clipLines } from '@shared/clipLines'
 
 const headerIcon = { size: 16, strokeWidth: 1.75 } as const
@@ -325,6 +328,8 @@ function ToolBlock({
   pending,
   expandable,
   titleClassName,
+  onTitleClick,
+  titleAriaLabel,
   children
 }: {
   title: string
@@ -334,20 +339,40 @@ function ToolBlock({
   pending?: boolean
   expandable?: boolean
   titleClassName?: string
+  onTitleClick?: () => void
+  titleAriaLabel?: string
   children?: ReactNode
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const raw = (error || body || '').trim()
   const clipped = raw ? clipLines(raw) : ''
   const canExpand = Boolean(expandable && raw && clipped !== raw)
   const interactive = canExpand || Boolean(children)
   const shown = open || !canExpand ? raw : clipped
+  const titleClass = `ai-tool-block-title ${titleClassName || ''}`.trim()
+  const titleNode = onTitleClick ? (
+    <button
+      type="button"
+      className={titleClass}
+      aria-label={titleAriaLabel || title}
+      title={titleAriaLabel || title}
+      onClick={(e) => {
+        e.stopPropagation()
+        onTitleClick()
+      }}
+    >
+      {title}
+    </button>
+  ) : (
+    <span className={titleClass}>{title}</span>
+  )
 
   return (
     <div
       className={`ai-tool-block${pending ? ' is-pending' : ''}${error ? ' is-failed' : ''}${open ? ' is-open' : ''}`}
     >
-      {interactive ? (
+      {interactive && !onTitleClick ? (
         <button
           type="button"
           className="ai-tool-block-head"
@@ -357,7 +382,7 @@ function ToolBlock({
           <span className="ai-tool-prompt" aria-hidden>
             &gt;_
           </span>
-          <span className={`ai-tool-block-title ${titleClassName || ''}`.trim()}>{title}</span>
+          {titleNode}
           <span className="ai-tool-block-tag">{tag}</span>
         </button>
       ) : (
@@ -365,14 +390,30 @@ function ToolBlock({
           <span className="ai-tool-prompt" aria-hidden>
             &gt;_
           </span>
-          <span className={`ai-tool-block-title ${titleClassName || ''}`.trim()}>{title}</span>
-          <span className="ai-tool-block-tag">{tag}</span>
+          {titleNode}
+          {interactive ? (
+            <button
+              type="button"
+              className="ai-tool-block-fold"
+              aria-expanded={open}
+              aria-label={open ? t('ai.collapseChange') : t('ai.expandChange')}
+              onClick={() => setOpen((v) => !v)}
+            >
+              <span className="ai-tool-block-tag">{tag}</span>
+            </button>
+          ) : (
+            <span className="ai-tool-block-tag">{tag}</span>
+          )}
         </div>
       )}
       {shown ? <pre className="ai-tool-block-body">{shown}</pre> : null}
       {open && children ? <div className="ai-tool-block-extra">{children}</div> : null}
     </div>
   )
+}
+
+function firstChangeLine(before: string, after: string): number | undefined {
+  return computeChangeRanges(before, after)[0]?.startLine
 }
 
 /** Auto-written change summary — yellow/blue match tab marks. Collapsed by default. */
@@ -387,6 +428,17 @@ function AppliedChangeCard({ proposal }: { proposal: AiProposal }) {
       tag={t('ai.toolTagFile')}
       body={proposal.summary ? clipLines(proposal.summary) : undefined}
       titleClassName={isNew ? 'is-file-new' : 'is-file-dirty'}
+      titleAriaLabel={t('ai.openEditedFile', { name: base })}
+      onTitleClick={() => {
+        const line = firstChangeLine(proposal.before, proposal.after)
+        const abs = (proposal.absPath || '').trim()
+        if (abs) {
+          void openWorkspaceAbs(abs, line ? { line } : undefined)
+          return
+        }
+        const rel = (proposal.path || '').replace(/\\/g, '/')
+        void openWorkspaceHref(line ? `${rel}:${line}` : rel)
+      }}
     >
       <pre className="ai-proposal-diff">
         {formatProposalDiff(proposal.before, proposal.after, 32)}
@@ -462,6 +514,8 @@ export function AiPanel() {
   const retryLast = useAiStore((s) => s.retryLast)
   const send = useAiStore((s) => s.send)
   const abort = useAiStore((s) => s.abort)
+  const pendingAsk = useAiStore((s) => s.pendingAsk)
+  const answerPendingAsk = useAiStore((s) => s.answerPendingAsk)
   const setPanelVisible = useAiStore((s) => s.setPanelVisible)
   const listRef = useRef<HTMLDivElement>(null)
   const historyRef = useRef<HTMLDivElement>(null)
@@ -487,17 +541,22 @@ export function AiPanel() {
     () => [...messages].reverse().find((m) => m.role === 'user')?.id ?? null,
     [messages]
   )
+  const pendingOnList = Boolean(
+    pendingAsk && messages.some((m) => m.id === pendingAsk.messageId)
+  )
 
   useEffect(() => {
     if (editingUserId && editingUserId !== lastUserId) setEditingUserId(null)
   }, [editingUserId, lastUserId])
   const proposals = session?.proposals || []
   const gitOps = session?.gitOps || []
+  const askCards = session?.askCards || []
+  const citeCards = session?.citeCards || []
 
   useEffect(() => {
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [session?.messages, session?.proposals, session?.gitOps, streamBuffer, agentPhase, agentToolName])
+  }, [session?.messages, session?.proposals, session?.gitOps, session?.askCards, session?.citeCards, streamBuffer, agentPhase, agentToolName, pendingAsk])
 
   return (
     <aside className="ai-panel" aria-label={t('ai.title')}>
@@ -589,10 +648,28 @@ export function AiPanel() {
               m.role === 'assistant' ? proposalsForMessage(m.id, proposals, lastAssistantId) : []
             const turnGitOps =
               m.role === 'assistant' ? gitOpsForMessage(m.id, gitOps, lastAssistantId) : []
+            const turnAsk =
+              m.role === 'assistant'
+                ? askCards.filter((c) => c.messageId === m.id || (!c.messageId && m.id === lastAssistantId))
+                : []
+            const turnCites =
+              m.role === 'assistant'
+                ? citeCards.filter((c) => c.messageId === m.id || (!c.messageId && m.id === lastAssistantId))
+                : []
+            const pendingHere =
+              pendingAsk &&
+              m.role === 'assistant' &&
+              (pendingAsk.messageId === m.id || (!streamBuffer && m.id === lastAssistantId)) &&
+              !askCards.some((c) => c.id === pendingAsk.askId)
             const assistantText =
               m.role === 'assistant' ? visibleAssistantText(m.content) : ''
             const hasBody = m.role === 'user' || Boolean(assistantText)
-            const hasCards = turnProposals.length > 0 || turnGitOps.length > 0
+            const hasCards =
+              turnProposals.length > 0 ||
+              turnGitOps.length > 0 ||
+              turnAsk.length > 0 ||
+              turnCites.length > 0 ||
+              Boolean(pendingHere)
             const editable = m.role === 'user' && m.id === lastUserId
             const editing = editable && editingUserId === m.id
             if (!hasBody && !hasCards) return null
@@ -641,6 +718,27 @@ export function AiPanel() {
                     {turnGitOps.map((op) => (
                       <GitResultCard key={op.id} op={op} />
                     ))}
+                    {turnCites.map((c) => (
+                      <CiteWorkspaceCard key={c.id} links={c.links} />
+                    ))}
+                    {turnAsk.map((c) => (
+                      <AskUserCard
+                        key={c.id}
+                        title={c.title}
+                        questions={c.questions}
+                        pending={false}
+                        cancelled={c.status === 'cancelled'}
+                        answers={c.answers}
+                      />
+                    ))}
+                    {pendingHere && pendingAsk ? (
+                      <AskUserCard
+                        title={pendingAsk.title}
+                        questions={pendingAsk.questions}
+                        pending
+                        onConfirm={(answers) => void answerPendingAsk(answers)}
+                      />
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -651,12 +749,21 @@ export function AiPanel() {
               <div className="ai-msg-body ai-msg-streaming">
                 <SimpleMarkdown text={visibleAssistantText(streamBuffer) || streamBuffer} />
               </div>
-              {streaming && agentPhase === 'tool' && agentToolName ? (
+              {streaming && agentPhase === 'tool' && agentToolName && agentToolName !== 'ask_user' ? (
                 <div className="ai-msg-proposals">
                   <ToolBlock
                     title={agentToolName}
                     tag={toolTagFor(agentToolName)}
                     pending
+                  />
+                </div>
+              ) : streaming && pendingAsk && !pendingOnList ? (
+                <div className="ai-msg-proposals">
+                  <AskUserCard
+                    title={pendingAsk.title}
+                    questions={pendingAsk.questions}
+                    pending
+                    onConfirm={(answers) => void answerPendingAsk(answers)}
                   />
                 </div>
               ) : streaming ? (
@@ -671,7 +778,14 @@ export function AiPanel() {
           ) : null}
           {streaming && !streamBuffer ? (
             <div className="ai-msg ai-msg-assistant ai-msg-activity" aria-label={t('ai.agent')}>
-              {agentPhase === 'tool' && agentToolName ? (
+              {pendingAsk && !pendingOnList ? (
+                <AskUserCard
+                  title={pendingAsk.title}
+                  questions={pendingAsk.questions}
+                  pending
+                  onConfirm={(answers) => void answerPendingAsk(answers)}
+                />
+              ) : agentPhase === 'tool' && agentToolName ? (
                 <ToolBlock
                   title={agentToolName}
                   tag={toolTagFor(agentToolName)}

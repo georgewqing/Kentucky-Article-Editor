@@ -36,6 +36,8 @@ import {
   rejectGitOp,
   rejectProposal,
   runAgentTurn,
+  answerAskUser,
+  settleStalePendingAsk,
   type EditorContextPayload
 } from './agentLoop'
 import {
@@ -55,6 +57,7 @@ function sessionForSender(e: Electron.IpcMainInvokeEvent, id: string) {
   const session = loadSession(id)
   if (!session) return null
   if (!sameWorkspace(session.workspacePath, senderWorkspaceOrNull(e))) return null
+  settleStalePendingAsk(session)
   return session
 }
 
@@ -234,6 +237,26 @@ export function registerAiIpc(): void {
     (e, payload: { sessionId: string; opId: string }) => {
       if (!sessionForSender(e, payload.sessionId)) return null
       return rejectGitOp(payload.sessionId, payload.opId)
+    }
+  )
+
+  ipcMain.handle(
+    'ai:answerAskUser',
+    (e, payload: { sessionId: string; askId: string; answers: unknown }) => {
+      if (!sessionForSender(e, payload.sessionId)) return false
+      const answers = Array.isArray(payload.answers) ? payload.answers : []
+      const clean = answers
+        .filter((a) => a && typeof a === 'object')
+        .map((a) => {
+          const rec = a as Record<string, unknown>
+          return {
+            questionId: String(rec.questionId || ''),
+            optionId: String(rec.optionId || ''),
+            otherText: typeof rec.otherText === 'string' ? rec.otherText : undefined
+          }
+        })
+        .filter((a) => a.questionId && a.optionId)
+      return answerAskUser(payload.sessionId, payload.askId, clean)
     }
   )
 

@@ -2,6 +2,14 @@ import { existsSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import { getAiChatsDir } from './appBodyPaths'
+import {
+  parseAskUserArgs,
+  type AskUserAnswer,
+  type AskUserCard,
+  type CiteCard,
+  type CiteLink,
+  type PendingAskSnapshot
+} from '../../shared/agentAsk'
 
 export type ChatRole = 'user' | 'assistant' | 'system' | 'tool'
 
@@ -108,6 +116,12 @@ export interface ChatSession {
   proposals: FileProposal[]
   /** Pending / history Agent Git ops (confirm card). */
   gitOps?: GitPendingOp[]
+  /** Answered / cancelled ask_user cards. */
+  askCards?: AskUserCard[]
+  /** cite_workspace chips (do not steal editor focus). */
+  citeCards?: CiteCard[]
+  /** Live ask_user wait; cleared when answered or the run ends. */
+  pendingAsk?: PendingAskSnapshot
 }
 
 function sessionPath(id: string): string {
@@ -152,9 +166,11 @@ export function loadSession(id: string): ChatSession | null {
   try {
     const session = JSON.parse(readFileSync(p, 'utf-8')) as ChatSession
     if (!session.gitOps) session.gitOps = []
+    if (!session.askCards) session.askCards = []
+    if (!session.citeCards) session.citeCards = []
     // Migrate legacy pending file proposals (Accept UI removed): treat as applied if after
     // looks like a real write, else rejected. Legacy pending gitOps (Confirm removed) → rejected.
-    let dirty = false
+    let dirty = hydrateAskCiteFromMessages(session)
     for (const prop of session.proposals || []) {
       if (prop.status !== 'pending') continue
       prop.status = prop.after != null && String(prop.after).length >= 0 ? 'applied' : 'rejected'
@@ -189,7 +205,9 @@ export function createSession(workspacePath: string | null): ChatSession {
     messages: [],
     plan: [],
     proposals: [],
-    gitOps: []
+    gitOps: [],
+    askCards: [],
+    citeCards: []
   }
   saveSession(session)
   return session
@@ -231,6 +249,15 @@ export function rewindToUserTurn(
   session.gitOps = (session.gitOps || []).filter(
     (g) => !g.messageId || !removedAssistantIds.has(g.messageId)
   )
+  session.askCards = (session.askCards || []).filter(
+    (c) => !c.messageId || !removedAssistantIds.has(c.messageId)
+  )
+  session.citeCards = (session.citeCards || []).filter(
+    (c) => !c.messageId || !removedAssistantIds.has(c.messageId)
+  )
+  if (session.pendingAsk && removedAssistantIds.has(session.pendingAsk.messageId)) {
+    delete session.pendingAsk
+  }
   return true
 }
 
@@ -244,4 +271,76 @@ export function estimateSessionTokens(session: ChatSession): number {
   let n = 0
   for (const m of session.messages) n += estimateTokensFromText(m.content)
   return n
+}
+
+type MsgEx = ChatMessage & {
+  toolCalls?: Array<{ id: string; name: string; arguments: string }>
+}
+
+function parseJsonObject(raw: string): Record<string, unknown> | null {
+  try {
+    const v = JSON.parse(raw) as unknown
+    if (v && typeof v === 'object' && !Array.isArray(v)) return v as Record<string, unknown>
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
+/** Rebuild ask/cite cards from tool rows when older sessions omitted them. Returns true if it added any. */
+export function hydrateAskCiteFromMessages(session: ChatSession): boolean {
+  if (!session.askCards) session.askCards = []
+  if (!session.citeCards) session.citeCards = []
+  const haveAsk = new Set(session.askCards.map((c) => c.id))
+  const haveCite = new Set(session.citeCards.map((c) => c.id))
+  const msgs = session.messages as MsgEx[]
+  let added = false
+  for (let i = 0; i < msgs.length; i++) {
+    const m = msgs[i]
+    if (m.role !== 'tool' || !m.toolCallId) continue
+    const body = parseJsonObject(m.content || '')
+    if (!body) continue
+    let ownerId: string | undefined
+    for (let j = i - 1; j >= 0; j--) {
+      const prev = msgs[j]
+      if (prev.role === 'assistant' && prev.toolCalls?.some((t) => t.id === m.toolCallId)) {
+        ownerId = prev.id
+        break
+      }
+    }
+    if (!ownerId) continue
+    if (m.toolName === 'ask_user' && !haveAsk.has(m.toolCallId)) {
+      const owner = msgs.find((x) => x.id === ownerId)
+      const argRaw = owner?.toolCalls?.find((t) => t.id === m.toolCallId)?.arguments
+      const parsed = argRaw ? parseAskUserArgs(parseJsonObject(argRaw) || {}) : { ok: false as const }
+      const answers = Array.isArray(body.answers) ? (body.answers as AskUserAnswer[]) : undefined
+      const cancelled = body.cancelled === true || (body.ok === false && !answers)
+      if (!parsed.ok && !answers?.length) continue
+      session.askCards.push({
+        id: m.toolCallId,
+        messageId: ownerId,
+        title: parsed.ok ? parsed.title : undefined,
+        questions: parsed.ok ? parsed.questions : [],
+        status: cancelled ? 'cancelled' : 'answered',
+        answers
+      })
+      haveAsk.add(m.toolCallId)
+      added = true
+    }
+    if (
+      m.toolName === 'cite_workspace' &&
+      body.ok &&
+      Array.isArray(body.links) &&
+      !haveCite.has(m.toolCallId)
+    ) {
+      session.citeCards.push({
+        id: m.toolCallId,
+        messageId: ownerId,
+        links: body.links as CiteLink[]
+      })
+      haveCite.add(m.toolCallId)
+      added = true
+    }
+  }
+  return added
 }

@@ -1422,6 +1422,21 @@ Agent「思考中 / 正在调用工具」的 CSS spinner 换成 `thinking-orbs`�
 
 `story_state.yaml` / `revisions/` 等资源管理器不显示的文件，Agent 仍会开后台标签，文件夹会黄、子项却看不到点。回退现在按绝对路径关标签/还原缓冲；资源管理器开始列出 `.yaml`/`.yml`；`revisions/` 等隐藏路径不再偷偷开标签。须**完整退出**后再测。
 
+## 184. Ask 多选、CSV 表格、工作区超链
+
+- **`ask_user`**：Agent/Plan/Outline 阻塞选择题（每卡 ≤3 题、单选+其他、统一确认；每轮最多 8 次）。Ask 仍零工具。挂 `/grill` 必须走此工具。
+- 普通 `.csv` 与无后缀严格 sniff 的表 → 可编辑表格 + 源码；不碰台词图 / `characters.csv`。
+- **`cite_workspace`** 聊天引用卡不抢焦点；`open_in_editor` 才切标签。聊天 Markdown 链与反引号 `path:line` 可点；正文单击未拖选即跳。
+- 出厂 `grill` skill（独立于游戏八件套）。指纹 **`toolApi: 2026-08-25-a`**。须**完整退出** Electron。
+
+## 185. 正文超链不再「找不到 + 弹出浏览器」
+
+相对路径（`ch.md`、`docs/a.md`）点下去曾同时 toast「工作区里找不到这个文件」并打开系统浏览器：TipTap 默认 `target=_blank`，Vite 把相对 href 解析成 `http://localhost:…/ch.md`，`setWindowOpenHandler` 把任意 http 丢给 `openExternal`；同时只按工作区根拼接，同目录的 `b.md` 对不上。现：链无 `_blank`、应用 origin 不外开、先试当前文件目录再试根、假 `https://docs/a.md` 当工作区路径。改了 `ipcSandbox`，须**完整退出** Electron。
+
+## 186. Agent 调用「链接到段落」跳转
+
+导图右键「链接到文件 / 链接到段落」的跳转引擎一直是 `openFile` + `lineFlash`。Agent 侧已有 `open_in_editor`，但 WHEN 写成「尽量别用」，模型只会贴 Markdown。现：点名某一句必须 `open_in_editor(path, snippet 或 line)`；`cite_workspace` 也可带 `snippet`。匹配规则与正文高亮同一套（`src/shared/articleLine.ts`）。不新开工具名。须**完整退出** Electron。
+
 
 
 

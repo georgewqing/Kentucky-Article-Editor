@@ -232,6 +232,11 @@ const api = {
     sessionId: string
     opId: string
   }): Promise<unknown> => ipcRenderer.invoke('ai:rejectGitOp', payload),
+  aiAnswerAskUser: (payload: {
+    sessionId: string
+    askId: string
+    answers: Array<{ questionId: string; optionId: string; otherText?: string }>
+  }): Promise<boolean> => ipcRenderer.invoke('ai:answerAskUser', payload),
   aiApplyAllProposals: (sessionId: string): Promise<unknown[]> =>
     ipcRenderer.invoke('ai:applyAllProposals', sessionId),
   aiListSkills: (): Promise<unknown[]> => ipcRenderer.invoke('ai:listSkills'),

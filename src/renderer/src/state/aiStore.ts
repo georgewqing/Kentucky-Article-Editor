@@ -3,6 +3,7 @@ import { getPlatform } from '@/platform'
 import { useAppStore } from '@/state/appStore'
 import { askConfirm } from '@/state/confirmDialogStore'
 import { collectFileRestoresAfterUser } from '@shared/rewindFiles'
+import type { AskUserAnswer, AskUserCard, AskUserQuestion, CiteCard, PendingAskSnapshot } from '@shared/agentAsk'
 import i18n from '@/i18n'
 
 export type AgentMode = 'ask' | 'plan' | 'outline' | 'agent'
@@ -116,6 +117,9 @@ export interface AiSession {
   planFileRel?: string | null
   proposals: AiProposal[]
   gitOps?: AiGitOp[]
+  askCards?: AskUserCard[]
+  citeCards?: CiteCard[]
+  pendingAsk?: PendingAskSnapshot
 }
 
 interface AiState {
@@ -133,6 +137,13 @@ interface AiState {
   agentPhase: 'idle' | 'thinking' | 'streaming' | 'tool'
   agentToolName: string | null
   error: string | null
+  pendingAsk: {
+    sessionId: string
+    askId: string
+    messageId: string
+    title?: string
+    questions: AskUserQuestion[]
+  } | null
   contextUsed: number
   contextLimit: number
   contextBuckets: AiContextBucket[]
@@ -177,6 +188,7 @@ interface AiState {
   /** Switch to Agent, bind plan file, open AI panel, and start executing the plan. */
   executePlanFile: (absPath: string) => Promise<void>
   abort: () => Promise<void>
+  answerPendingAsk: (answers: AskUserAnswer[]) => Promise<void>
   retryLast: () => Promise<void>
   applyProposal: (id: string) => Promise<void>
   rejectProposal: (id: string) => Promise<void>
@@ -228,6 +240,7 @@ export const useAiStore = create<AiState>((set, get) => ({
   agentPhase: 'idle',
   agentToolName: null,
   error: null,
+  pendingAsk: null,
   contextUsed: 0,
   contextLimit: 128000,
   contextBuckets: [],
@@ -287,7 +300,8 @@ export const useAiStore = create<AiState>((set, get) => ({
       agentPhase: 'idle',
       agentToolName: null,
       composerAttachments: [],
-      composerSkillId: null
+      composerSkillId: null,
+      pendingAsk: null
     })
     if (sessions[0]) {
       await get().openSession(sessions[0].id)
@@ -488,7 +502,8 @@ export const useAiStore = create<AiState>((set, get) => ({
       showHistory: false,
       draft: '',
       composerAttachments: [],
-      composerSkillId: null
+      composerSkillId: null,
+      pendingAsk: null
     })
     await get().refreshSessions()
     await get().refreshContextUsage()
@@ -511,7 +526,26 @@ export const useAiStore = create<AiState>((set, get) => ({
       set({ error: 'Chat belongs to another workspace.' })
       return
     }
-    set({ session, error: null, streamBuffer: '', showHistory: false })
+    const live = session.pendingAsk
+    const livePending = live
+      ? {
+          sessionId: session.id,
+          askId: live.askId,
+          messageId: live.messageId,
+          title: live.title,
+          questions: live.questions
+        }
+      : null
+    set({
+      session,
+      error: null,
+      streamBuffer: '',
+      showHistory: false,
+      pendingAsk: livePending,
+      streaming: Boolean(livePending) || get().streaming,
+      agentPhase: livePending ? 'tool' : get().agentPhase,
+      agentToolName: livePending ? 'ask_user' : get().agentToolName
+    })
     await get().refreshContextUsage()
   },
 
@@ -580,7 +614,7 @@ export const useAiStore = create<AiState>((set, get) => ({
 
   send: async (text, opts) => {
     const replacing = opts?.replaceUserMessageId
-    if (get().streaming && !replacing) return false
+    if ((get().streaming || get().pendingAsk) && !replacing) return false
     const draftText = (text ?? get().draft).trim()
     const chipSkill = get().composerSkillId?.trim() || null
     const pendingAttachments = get().composerAttachments
@@ -767,7 +801,18 @@ export const useAiStore = create<AiState>((set, get) => ({
 
   abort: async () => {
     await getPlatform().aiAbort()
-    set({ streaming: false, agentPhase: 'idle', agentToolName: null })
+    set({ streaming: false, agentPhase: 'idle', agentToolName: null, pendingAsk: null })
+  },
+
+  answerPendingAsk: async (answers) => {
+    const pending = get().pendingAsk
+    if (!pending) return
+    await getPlatform().aiAnswerAskUser({
+      sessionId: pending.sessionId,
+      askId: pending.askId,
+      answers
+    })
+    set({ pendingAsk: null })
   },
 
   retryLast: async () => {
@@ -898,7 +943,8 @@ export const useAiStore = create<AiState>((set, get) => ({
           error: data.message,
           streaming: false,
           agentPhase: 'idle',
-          agentToolName: null
+          agentToolName: null,
+          pendingAsk: null
         })
       }),
       p.onAiEvent('ai:done', (payload) => {
@@ -909,7 +955,8 @@ export const useAiStore = create<AiState>((set, get) => ({
           streamMessageId: null,
           agentPhase: 'idle',
           agentToolName: null,
-          agentRunId: null
+          agentRunId: null,
+          pendingAsk: null
         })
         void get().refreshContextUsage()
       }),
@@ -937,6 +984,42 @@ export const useAiStore = create<AiState>((set, get) => ({
         if (data.autoApplied) {
           void get().syncAppliedFile(data.proposal, data.writeDisk === true, data.isNew === true)
         }
+      }),
+      p.onAiEvent('ai:askUser', (payload) => {
+        if (!fromThisRun(payload)) return
+        const data = payload as {
+          sessionId: string
+          askId: string
+          messageId: string
+          title?: string
+          questions: AskUserQuestion[]
+        }
+        if (!data.askId || !Array.isArray(data.questions)) return
+        set({
+          pendingAsk: {
+            sessionId: data.sessionId,
+            askId: data.askId,
+            messageId: data.messageId,
+            title: data.title,
+            questions: data.questions
+          },
+          agentPhase: 'tool',
+          agentToolName: 'ask_user',
+          streaming: true
+        })
+      }),
+      p.onAiEvent('ai:citeWorkspace', (payload) => {
+        if (!fromThisRun(payload)) return
+        const data = payload as { sessionId?: string; messageId: string; links: CiteCard['links'] }
+        const cur = get().session
+        if (!cur || (data.sessionId && cur.id !== data.sessionId)) return
+        if (!data.links) return
+        const card: CiteCard = {
+          id: `cite-${data.messageId}-${(cur.citeCards || []).length}`,
+          messageId: data.messageId,
+          links: data.links
+        }
+        set({ session: { ...cur, citeCards: [...(cur.citeCards || []), card] } })
       }),
       p.onAiEvent('ai:gitOp', (payload) => {
         const data = payload as { sessionId: string; op: AiGitOp; highlight?: boolean }

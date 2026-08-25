@@ -16,7 +16,7 @@
 | 导图插图 | 与 `.kmind` 同级 `名.assets/` 目录，复制进目录（非外链路径）；精简缩略图+文件名+移除 |
 | 导图参考图 | 空白右键**多选导入**；`imageOnly` 纯图节点（无文字区）；选中角点锁比例缩放；四边连线手柄照旧；右键仅移除图/删节点（均删 assets 副本）；节点「插入图片」不变；不做旋转/透明度/锁定/裁剪/分组/独立窗/拖入画布 |
 | 导图批注 | 每节点一段纯文本「黑下巴」；右键添加后立刻展开可打字；展开态写入 `.kmind`；下巴绝对定位在节点下沿，不计入 height/连线；**节点原描边保留**，下巴另延长同风格描边；中间分割线保留圆角；批注区黑底、随字增高、无滚动条；可选批注超链（文字后小图标）；不做多条/时间戳/MD/全局展开/搜索 |
-| 编辑器 | **`.md`**：TipTap 所见即所得 + Monaco 源码切换；**其它文本**：软化 Monaco |
+| 编辑器 | **`.md`**：TipTap 所见即所得 + Monaco 源码切换；**普通 `.csv` / 无后缀且严格 sniff 为表的文件**：表格 + 源码（不动 `*.dialogue.csv` / `characters.csv`）；**其它文本**：软化 Monaco |
 | 字数 | **不计空白的字符数**（中英数字标点均按码点计 1，见 `wordCount.ts`）；UI「N 字」 |
 | 资源管理器 | 右键「在文件资源管理器中显示」：文件→定位并选中；**文件夹/工作区→打开该目录本身**（`openPath`，勿用 `showItemInFolder` 以免进上一级）；台词 meta/choices/layout 在树里**视觉挂在**对应 csv 下（默认折叠；磁盘同级）；**右键菜单贴视口**（`fitContextMenu.ts`，changelog §116） |
 | 语言 | 中文 + 英文 UI |
@@ -67,24 +67,26 @@
 |----|------|
 | 协议 | OpenAI 兼容；**多配置档**（label/baseUrl/model/contextWindow/**thinkingLevel** high·mid·low + 每档加密 Key），输入栏切换。请求带 `reasoning_effort`（mid → medium）；网关 400 不认则去掉再试一次 |
 | UI | 编辑区右侧面板；**Cursor 风格 composer**（模式 / 配置档 / **行内挂载芯片**；资源树拖入挂载；**Skill 暖色胶囊** + 发送注入 SKILL 正文 / 上传 / 发送）；主题色变量 |
-| 模式 | **Ask** 无工具且主进程拒绝执行任何 tool_call（`tool_choice: none`，历史 tool 记录压成文本）；**Plan** 只读调研 + `create_plan`；**Outline** 结构/导图；**Agent** 全工具且**始终自动写盘**（无 Accept）。计划真相 = md 文件；**对话栏上方不挂常驻计划列表**。计划 md 顶栏 **开始执行 / Build**：切 Agent、绑定 `planFileRel`、发执行提示。Agent 若会话有 `planFileRel` 则 InjectPath；`update_plan_step` Soft 勾选 md（保留正文） |
+| 模式 | **Ask** 无工具且主进程拒绝执行任何 tool_call（`tool_choice: none`，历史 tool 记录压成文本）；**Plan** 只读调研 + `create_plan` + `ask_user` / `cite_workspace`；**Outline** 结构/导图 + 同上问句/引用；**Agent** 全工具且**始终自动写盘**（无 Accept）。Grill 挂在 Ask 里不能出选项——须切 Plan/Agent。计划真相 = md 文件；**对话栏上方不挂常驻计划列表**。计划 md 顶栏 **开始执行 / Build**：切 Agent、绑定 `planFileRel`、发执行提示。Agent 若会话有 `planFileRel` 则 InjectPath；`update_plan_step` Soft 勾选 md（保留正文） |
+| 问用户 | **`ask_user`**：阻塞多选卡（每调用 ≤3 题、单选 +「其他」、一张卡统一确认；每轮最多 8 次）。Pending 时 Send 禁用（Stop 取消）。已答写入会话；未答完也会落盘，完整退出后只读「已中断」。事实禁止问用户。无 `window.confirm`。 |
+| 工作区超链 | 聊天 `[text](rel)` 与反引号 `` `rel.md:12` `` 可点；`cite_workspace` 引用卡不抢编辑器焦点。**`open_in_editor(path, snippet 或 line)`** = 导图「链接到段落」同一套跳转（开标签、滚到句、高亮）。点到某句时必须调这个，不要只贴 `[text](path)`。正文 `.md` 单击下划线且未拖选则跳。相对路径先试**当前文件同目录**再试工作区根；真 http(s) 才外开。TipTap 链 **禁止** `target=_blank`。 |
 | 工作区文件结构 | Agent 可用 **`workspace_mkdir` / `workspace_copy` / `workspace_move` / `workspace_delete`**（主进程 Node FS，**非** Shell）。用于归档/迁移；move/delete 同步台词 sidecar 与 `.kmind` assets；UI 刷新树并关闭受影响标签。路径必须在打开的工作区内（§121 IPC 与 Agent 同一套沙箱）。 |
 | 写文件 | **始终自动写盘**（无 Accept/Reject）。黄● = 相对上次 Ctrl+S/打开/Git 重载的 baseline。AiPanel 只读变更卡 + diff。误改靠 **Source Control 丢弃** 或编辑器 Undo。 |
 | 脏/新建色 | 改过未保存 = **黄**；新建 = **蓝**。标签栏仍是名前 ●；资源管理器是文件名着色、圆点在**行尾**（Cursor）。保存后清除 |
 | Git | 工作区打开时若无仓则**自动**在**该根** `git init` + 默认 `.gitignore`（`kentucky.autoInit`）；**不向上**复用父仓。**`.git`/点文件在资源管理器与 `list_dir` 不可见**。活动栏 SCM：status/diff/discard/stage/commit。Agent 工具见下行。无任意 Shell。完整说明：[`AGENT-GIT.md`](./AGENT-GIT.md)。 |
-| Git Agent 工具 | **全部立即执行**（无 Confirm）：`git_status`/`git_diff`/`git_log`/`git_pull`/`git_push`/`git_add`/`git_commit`/`git_remote_add`/`git_remote_remove`。写操作 → **高亮卡 + Toast**。本地/`file://` URL（可含空格）；缺失本地路径 → 自动 `git init --bare`。空提交 → 清晰 Nothing to commit/staged。remote 重加后 push 用 setUpstream。每轮 **Git (L5)** + **`GIT_AGENT_PLAYBOOK`**。**禁止** force。指纹 `toolApi: 2026-08-14-a`。文件工具沙箱仅本工作区；**打开工作区拒绝主目录/盘符根/系统目录**（§121）。工作区可放 `agent-GIT环境说明.md` 固化**本根**远程/分支（勿跨仓复用）。 |
-| 焦点 | AI 改多文件时**不切换**当前标签（不闪页）；后台挂标签并刷新树 |
+| Git Agent 工具 | **全部立即执行**（无 Confirm）：`git_status`/`git_diff`/`git_log`/`git_pull`/`git_push`/`git_add`/`git_commit`/`git_remote_add`/`git_remote_remove`。写操作 → **高亮卡 + Toast**。本地/`file://` URL（可含空格）；缺失本地路径 → 自动 `git init --bare`。空提交 → 清晰 Nothing to commit/staged。remote 重加后 push 用 setUpstream。每轮 **Git (L5)** + **`GIT_AGENT_PLAYBOOK`**。**禁止** force。指纹 `toolApi: 2026-08-25-a`。文件工具沙箱仅本工作区；**打开工作区拒绝主目录/盘符根/系统目录**（§121）。工作区可放 `agent-GIT环境说明.md` 固化**本根**远程/分支（勿跨仓复用）。 |
+| 焦点 | AI 改多文件时**不切换**当前标签（不闪页）；后台挂标签并刷新树。`cite_workspace` 不切页；`open_in_editor` 与用户点击超链可以切页。 |
 | 数据 | 软件本体 `data/`（打包后与 exe 同目录；开发态 `win/dev-data/data/`）；**不**进项目、**不**用 `%APPDATA%` |
 | 密钥 | 每配置档 `safeStorage` 加密 blob：`data/ai-keys/<id>.bin`（旧单 Key 会迁入默认档） |
 | 会话 | 多会话 JSON：`data/ai-chats/`；**按工作区路径严格隔离**（列表/打开均过滤，互不互通） |
 | 面板开关 | **绑定工作区**：启动默认关闭；`data/ai-workspace-prefs.json` 记住各工作区是否打开；无工作区时不可开 AI |
 | 上下文 | **L5**：当前文件/选区/`@` + 角色表摘要 + **Git (L5)**；有 `design/` 树时 **Design (L5)** 列出实际存在的 gdd/concept/characters/glossary/`*.dialogue.csv`（只报存在、不灌正文）并提示先读；同时系统提示注入 **Design playbook**；上下文占用进度条；接近满时禁止静默丢弃历史 |
-| 工具 | 只读 list/read；continuity；角色；scene↔kmind（含子树）；台词图；文学记忆 YAML（非 Git）；**Git** 全套（见 [`AGENT-GIT.md`](./AGENT-GIT.md)）；Skills；可选联网；**无**通用 Shell |
+| 工具 | 只读 list/read；continuity；角色；scene↔kmind（含子树）；台词图；文学记忆 YAML（非 Git）；**Git** 全套（见 [`AGENT-GIT.md`](./AGENT-GIT.md)）；**`ask_user` / `cite_workspace` / `open_in_editor`**；Skills；可选联网；**无**通用 Shell |
 | 文学记忆文件 | 工作区根按需创建：`story_state.yaml`、`foreshadow.yaml`、`voice_anchor.yaml`、`voice_bank.yaml`、`glossary.yaml`；`materials/`。`revisions/` 同样按需创建，但资源树 / 根 `list_dir` 隐藏（Agent 专用快照柜）。启用态 = story_state 存在且至少一章。语义冲突只警告不挡写入。M1 schema 冻结后只增不改。 |
 | 快照上限 | `maxRevisionSnaps`（默认 20，AI 设置可配）；满则删最旧再写入，不拒建 |
 | 导图可读性 | AI 须建树/分层 DAG（非角色↔场景全连接网）；缺省 Sugiyama/LR；乱图可 `layout_kmind` |
 | 台词图能力 | AI 按协议 **v1.3** 读写：`read_dialogue` 看 options / 空 text 链；角色 `operable`；`propose_dialogue_graph` 整图（csv+choices+layout，线性也写空 text options）；`propose_set_dialogue_choices` / `layout_dialogue` / 行级增改排；speaker=角色 id；`propose_upsert_character` 可写 operable |
-| Skills | 全局 `data/ai-skills/<id>/SKILL.md`；随包装 **caveman（内置，开启则每轮注入系统提示，勿 `read_skill`）** + `literary-voice` + **8 个中文游戏策划 skill**（双主线默认开，纯小说可关）；`copy-if-missing` 不覆盖用户已有文件（含 `examples.md`）；`seenBundledSkillIds` 只欢迎从未见过的 bundled id（关掉后不复活）；catalog；`list_skills` / `read_skill`；挂载 skill 时注入 examples/reference。**不**执行 scripts。工作区硬约定 `design/`。详见 [`REQ-indie-game-skills.md`](./REQ-indie-game-skills.md) |
+| Skills | 全局 `data/ai-skills/<id>/SKILL.md`；随包装 **caveman（内置，开启则每轮注入系统提示，勿 `read_skill`）** + **`grill`（不注入；挂上或用户说烤才强制 `ask_user`；独立于游戏八件套开关）** + `literary-voice` + **8 个中文游戏策划 skill**（双主线默认开，纯小说可关）；`copy-if-missing` 不覆盖用户已有文件（含 `examples.md`）；`seenBundledSkillIds` 只欢迎从未见过的 bundled id（关掉后不复活）；catalog；`list_skills` / `read_skill`；挂载 skill 时注入 examples/reference。**不**执行 scripts。工作区硬约定 `design/`。详见 [`REQ-indie-game-skills.md`](./REQ-indie-game-skills.md) |
 | 联网搜索 | 设置 `webSearchEnabled`（默认关）；`web_search` + `web_research`；DuckDuckGo 失败自动回退 Bing；可直选 Bing |
 
 | 加载态 | 思考中 / 调工具时必须有可见指示，禁止长时间空白像卡死 |
@@ -97,7 +99,7 @@
 
 | 项 | 决定 |
 |----|------|
-| 显示名 | 默认隐藏已知后缀；类型靠彩色字母图标（C/M/D/MD/T/SB/PNG/MP4/PDF…） |
+| 显示名 | 默认隐藏已知后缀；类型靠彩色字母图标（C/M/D/MD/CSV/T/SB/PNG/MP4/PDF…） |
 | 新建/重命名 | 只编辑主名，后缀芯片固定或自动保留，降低误删后缀风险 |
 | PNG 预览 | 工作区 `.png` 可打开为只读图片预览（滚轮定点缩放 / 拖拽平移 / 适应 / Reveal）；不经文本 DocumentHub |
 | MP4 预览 | 工作区 `.mp4` 可打开为只读视频预览（原生 `<video controls>` / 时长 / Reveal）；`kentucky-file` **Range/206** 流式；与 PNG 共用 `isMediaPreviewKind`（跳过 `docOpen`）；不经 DocumentHub。**不做** jpg/webp/webm/mov、自定义播放器皮肤 |

@@ -1,20 +1,9 @@
 import type { Editor } from '@tiptap/core'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { Range } from 'monaco-editor'
+import { normalizeSearchText } from '@shared/articleLine'
 
 const FLASH_CLASS = 'kmind-line-flash'
-
-function normalizeSearchText(raw: string): string {
-  return raw
-    .replace(/^#{1,6}\s+/, '')
-    .replace(/^>\s?/, '')
-    .replace(/^[-*+]\s+/, '')
-    .replace(/^\d+\.\s+/, '')
-    .replace(/^\[\s?[xX ]\]\s+/i, '')
-    .replace(/[*_`~]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
 
 function collectTextblockPositions(editor: Editor): number[] {
   const positions: number[] = []

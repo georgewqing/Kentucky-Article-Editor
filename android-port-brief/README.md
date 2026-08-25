@@ -2,7 +2,7 @@
 title: Kentucky → Android tablet port brief
 audience: AI agents and humans starting a greenfield Android app
 win_version: 0.3.2
-toolApi: 2026-08-14-a
+toolApi: 2026-08-25-a
 win_repo: https://github.com/CCFOX12/Kentucky-Article-Editor
 created: 2026-08-19
 ---
@@ -34,6 +34,7 @@ The Windows app in this git repo is the **only source of truth**. Treat any olde
 9. [`07-build-plan.md`](./07-build-plan.md) — phases P0–P7 + definition of done.
 10. [`08-invariants.md`](./08-invariants.md) — MUST / NEVER (keep open while coding).
 11. [`09-gotchas.md`](./09-gotchas.md) — Win bugs that will recur if “simplified”.
+12. [`10-update-ask-csv-links.md`](./10-update-ask-csv-links.md) — **this round’s delta** (changelog §184–§186 plus composer **`/`** / **`@`**, explorer **Save All**, **Agent edit highlights**: pale blue added / pale yellow modified, **click applied-change filename to open the file**, `toolApi: 2026-08-25-a`). Implement against this file + Win paths.
 
 Machine index: [`INDEX.yaml`](./INDEX.yaml).
 
@@ -45,7 +46,7 @@ Win deep dives live under [`../project-memory/`](../project-memory/README.md). *
 2. **No runtime import** from this Electron tree. Copy files by hand; rewrite IO.
 3. **Renderer never talks to disk.** All FS/Git/AI/media go through a `Platform` (or equivalent) implemented in native/plugin code.
 4. **Agent always writes to disk.** No Accept. Yellow ● = unsaved vs last explicit save. Ask mode = **no tools**.
-5. **Do not bump `TOOL_API_VERSION`** unless the tool JSON protocol changes. Current: `2026-08-14-a`.
+5. **Do not bump `TOOL_API_VERSION`** unless the tool JSON protocol changes. Current: `2026-08-25-a`.
 6. **No** `framer-motion`. **No** `ffmpeg-static`. **No** `window.prompt` / `window.confirm`. **No** arbitrary Shell. **No** git `--force`.
 7. **No phone UI.** Tablet chrome. Hardware keyboard shortcuts where Win has Ctrl+*.
 8. Product tables in Win `project-memory/product-decisions.md` are locked. Do not silently overturn them.
@@ -71,7 +72,7 @@ React Native (full native UI) is allowed only if the user explicitly chooses it;
 | Key | Value |
 |-----|--------|
 | Package | `0.3.2` |
-| `toolApi` | `2026-08-14-a` (`src/main/ai/proposalGate.ts`) |
+| `toolApi` | `2026-08-25-a` (`src/main/ai/proposalGate.ts`) |
 | Git remote | https://github.com/CCFOX12/Kentucky-Article-Editor |
 | Godot dialogue protocol | **v1.3** (`extras/godot-kentucky-dialogue/README.md`) |
 | Kyboard schema | v1, additive only (`src/shared/kyboardSchema.ts`) |
@@ -94,6 +95,7 @@ React Native (full native UI) is allowed only if the user explicitly chooses it;
 | [07-build-plan.md](./07-build-plan.md) | P0–P7 + copy order |
 | [08-invariants.md](./08-invariants.md) | MUST / NEVER |
 | [09-gotchas.md](./09-gotchas.md) | Win pitfalls that will recur |
+| [10-update-ask-csv-links.md](./10-update-ask-csv-links.md) | Delta: ask_user, CSV, links, composer `/` `@`, Save All, Agent blue/yellow edit paint, change-card title jump |
 
 ## What this pack is not
 

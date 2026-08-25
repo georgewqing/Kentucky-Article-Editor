@@ -168,6 +168,8 @@ export function AiComposer() {
   const send = useAiStore((s) => s.send)
   const abort = useAiStore((s) => s.abort)
   const streaming = useAiStore((s) => s.streaming)
+  const pendingAsk = useAiStore((s) => s.pendingAsk)
+  const busy = streaming || Boolean(pendingAsk)
   const agentMode = useAiStore((s) => s.agentMode)
   const setAgentMode = useAiStore((s) => s.setAgentMode)
   const newChat = useAiStore((s) => s.newChat)
@@ -587,7 +589,7 @@ export function AiComposer() {
       className="ai-composer-beam"
     >
       <div
-        className={`ai-composer${dropActive ? ' is-drop-target' : ''}${streaming ? ' is-streaming' : ''}`}
+        className={`ai-composer${dropActive ? ' is-drop-target' : ''}${busy ? ' is-streaming' : ''}`}
         onDragEnter={onDragEnter}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
@@ -682,14 +684,14 @@ export function AiComposer() {
               return
             }
           }
-          if (e.key === 'Escape' && streaming) {
+          if (e.key === 'Escape' && busy) {
             e.preventDefault()
             void abort()
             return
           }
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault()
-            if (!streaming) void send()
+            if (!busy) void send()
           }
           }}
         />
@@ -741,7 +743,7 @@ export function AiComposer() {
           >
             <Paperclip size={22} strokeWidth={1.75} aria-hidden />
           </button>
-          {streaming ? (
+          {busy ? (
             <button
               type="button"
               className="ai-composer-send is-stop"

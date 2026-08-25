@@ -23,6 +23,9 @@ import { countArticleWords } from './wordCount'
 import { markdownToPrintHtml } from '@/export/markdownToPrintHtml'
 import { SOFT_MONACO_OPTIONS, defineKentuckyMonacoThemes } from './softMonaco'
 import { bindMonacoLinePick, resolveArticleLineEl } from './monacoLineNav'
+import { AgentEditHighlight, agentEditPluginKey, syncMonacoAgentSpans } from './agentEditHighlight'
+import { hrefFromAnchor, openWorkspaceHref } from '@/workbench/workspaceLinks'
+import { agentEditPathKey } from '@shared/agentEditSpans'
 
 function getMarkdownFromEditor(ed: { storage: object }): string {
   const md = (ed.storage as { markdown?: { getMarkdown?: () => string } }).markdown
@@ -59,6 +62,7 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
   const clearLineFlash = useAppStore((s) => s.clearLineFlash)
   const showToast = useAppStore((s) => s.showToast)
   const linePickSession = useAppStore((s) => s.linePickSession)
+  const agentChangeRanges = useAppStore((s) => s.agentChangeRanges)
   const confirmLinePick = useAppStore((s) => s.confirmLinePick)
   const cancelLinePick = useAppStore((s) => s.cancelLinePick)
   const executePlanFile = useAiStore((s) => s.executePlanFile)
@@ -83,6 +87,7 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
   useOverlayScroll(scrollerRef)
   const [monacoTick, setMonacoTick] = useState(0)
   const appliedFlashNonce = useRef<number | null>(null)
+  const linkDownRef = useRef<{ x: number; y: number } | null>(null)
 
   const placeholder = t('article.placeholder')
 
@@ -94,7 +99,8 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
       }),
       Link.configure({
         openOnClick: false,
-        HTMLAttributes: { class: 'article-link' }
+        autolink: false,
+        HTMLAttributes: { class: 'article-link', target: null, rel: null }
       }),
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -116,7 +122,8 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
         breaks: false,
         transformPastedText: true,
         transformCopiedText: false
-      })
+      }),
+      AgentEditHighlight
     ],
     [placeholder]
   )
@@ -130,6 +137,39 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
       attributes: {
         class: 'article-prose',
         spellcheck: 'false'
+      },
+      handleDOMEvents: {
+        pointerdown: (_view, event) => {
+          linkDownRef.current = { x: event.clientX, y: event.clientY }
+          return false
+        },
+        click: (_view, event) => {
+          const down = linkDownRef.current
+          if (down && Math.hypot(event.clientX - down.x, event.clientY - down.y) > 4) {
+            return false
+          }
+          const el = event.target
+          if (!(el instanceof Element)) return false
+          const a = el.closest('a')
+          if (!a) return false
+          event.preventDefault()
+          event.stopPropagation()
+          const fromAbs = useAppStore.getState().tabs.find((x) => x.id === tabId)?.path
+          void openWorkspaceHref(hrefFromAnchor(a), { fromAbs })
+          return true
+        },
+        auxclick: (_view, event) => {
+          if (event.button !== 1) return false
+          const el = event.target
+          if (!(el instanceof Element)) return false
+          const a = el.closest('a')
+          if (!a) return false
+          event.preventDefault()
+          event.stopPropagation()
+          const fromAbs = useAppStore.getState().tabs.find((x) => x.id === tabId)?.path
+          void openWorkspaceHref(hrefFromAnchor(a), { fromAbs })
+          return true
+        }
       }
     },
     onCreate: ({ editor: ed }) => {
@@ -194,6 +234,31 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
       hydratedRef.current = true
     })
   }, [tab?.id, tab?.content, editor, mode, tab])
+
+  useEffect(() => {
+    if (!editor || mode !== 'wysiwyg' || !tab) return
+    const spans = agentChangeRanges[agentEditPathKey(tab.path)] || []
+    const markdown = tab.content
+    let cancelled = false
+    let retryId = 0
+    const apply = (): void => {
+      if (cancelled) return
+      if (applyingRef.current) {
+        retryId = window.setTimeout(apply, 20)
+        return
+      }
+      editor.view.dispatch(
+        editor.state.tr
+          .setMeta('addToHistory', false)
+          .setMeta(agentEditPluginKey, { spans, markdown })
+      )
+    }
+    retryId = window.setTimeout(apply, 0)
+    return () => {
+      cancelled = true
+      window.clearTimeout(retryId)
+    }
+  }, [editor, mode, tab, tab?.path, tab?.content, agentChangeRanges])
 
   useEffect(() => {
     hydratedRef.current = false
@@ -313,6 +378,12 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
     return bindMonacoLinePick(ed, (line) => confirmLinePick(line))
   }, [picking, confirmLinePick, mode, monacoTick])
 
+  useEffect(() => {
+    if (mode !== 'source' || !tab) return
+    const spans = agentChangeRanges[agentEditPathKey(tab.path)] || []
+    return syncMonacoAgentSpans(monacoRef.current, spans)
+  }, [mode, tab, tab?.path, tab?.content, agentChangeRanges, monacoTick])
+
   const wordCount = useMemo(
     () => countArticleWords(tab?.content ?? ''),
     [tab?.content]
@@ -356,11 +427,12 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
 
   const applyLink = useCallback(() => {
     if (!editor) return
-    const url = linkUrl.trim()
+    let url = linkUrl.trim()
+    if (url === 'https://' || url === 'http://') url = ''
     if (!url) {
       editor.chain().focus().extendMarkRange('link').unsetLink().run()
     } else {
-      editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+      editor.chain().focus().extendMarkRange('link').setLink({ href: url, target: null }).run()
     }
     setLinkOpen(false)
   }, [editor, linkUrl])
@@ -416,6 +488,7 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
       {linkOpen && !picking ? (
         <form
           className="article-link-form"
+          noValidate
           onSubmit={(e) => {
             e.preventDefault()
             applyLink()
@@ -423,7 +496,10 @@ export function MarkdownArticleEditor({ tabId }: { tabId: string }) {
         >
           <input
             autoFocus
-            type="url"
+            type="text"
+            inputMode="url"
+            autoComplete="off"
+            spellCheck={false}
             placeholder={t('article.linkPlaceholder')}
             value={linkUrl}
             onChange={(e) => setLinkUrl(e.target.value)}

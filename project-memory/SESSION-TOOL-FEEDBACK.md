@@ -1,6 +1,6 @@
 # Win 工具反馈对接 · SESSION 交接
 
-> 更新：2026-08-14（当前 `toolApi: 2026-08-14-a`；沙箱 §121；Git/IPC 不向上找父仓）  
+> 更新：2026-08-25（当前 `toolApi: 2026-08-25-a`；沙箱 §121；Git/IPC 不向上找父仓；§184 ask_user / CSV / 超链）  
 > **安全专档**：[`SECURITY-AUDIT.md`](./SECURITY-AUDIT.md) · changelog **§120–§121**  
 > **Git 专档（完整）**：[`AGENT-GIT.md`](./AGENT-GIT.md)  
 > **基线**：[`AGENT-TOOL-TEST-BASELINE.md`](./AGENT-TOOL-TEST-BASELINE.md)  
@@ -10,7 +10,7 @@
 
 ## 部署指纹
 
-`toolApi: "2026-08-14-a"`（完整重启 Electron）
+`toolApi: "2026-08-25-a"`（完整重启 Electron）
 
 本机沙箱 **§121** 未 bump `toolApi`，但改了协议/preload/导航/IPC：验证前同样须**完整退出**再开。权威：[SECURITY-AUDIT.md](./SECURITY-AUDIT.md)。
 
@@ -80,7 +80,7 @@
 - 主进程：`bindClientAreaFill` — Android 只搬 CSS
 
 ```
-重启后确认 toolApi:"2026-08-14-a"
+重启后确认 toolApi:"2026-08-25-a"
 U4/U12：挂载夹问「这个文件夹里有什么」→ 列该夹内容，勿整仓盘点
 Git 专档：win/project-memory/AGENT-GIT.md
 打开无仓文件夹 → 自动 .git（树里看不见点文件）

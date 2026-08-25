@@ -82,6 +82,7 @@ function FileIcon({ entry }: { entry: FileEntry }) {
   if (ext === '.mp4') return <span className="tree-icon tree-icon-video">MP4</span>
   if (ext === '.pdf') return <span className="tree-icon tree-icon-pdf">PDF</span>
   if (ext === '.md') return <span className="tree-icon tree-icon-md">MD</span>
+  if (ext === '.csv') return <span className="tree-icon tree-icon-csv">CSV</span>
   return <span className="tree-icon tree-icon-file">T</span>
 }
 

@@ -8,6 +8,7 @@ import { MarkdownArticleEditor } from '@/editors/MarkdownArticleEditor'
 import { MindMapEditor } from '@/editors/MindMapEditor'
 import { DialogueEditor } from '@/editors/DialogueEditor'
 import { CharactersEditor } from '@/editors/CharactersEditor'
+import { CsvTableEditor } from '@/editors/CsvTableEditor'
 import { StoryboardEditor } from '@/editors/StoryboardEditor'
 import { ImagePreviewEditor } from '@/editors/ImagePreviewEditor'
 import { VideoPreviewEditor } from '@/editors/VideoPreviewEditor'
@@ -169,6 +170,8 @@ function EditorPane({
         <DialogueEditor tabId={tab.id} />
       ) : tab.kind === 'characters' ? (
         <CharactersEditor tabId={tab.id} />
+      ) : tab.kind === 'csv' ? (
+        <CsvTableEditor key={tab.id} tabId={tab.id} />
       ) : tab.kind === 'storyboard' ? (
         <StoryboardEditor key={tab.id} tabId={tab.id} />
       ) : tab.kind === 'image' ? (

@@ -41,8 +41,8 @@ Port `src/main/ai/workspacePath.ts` ideas onto SAF URIs:
 | Win | Android |
 |-----|---------|
 | `contextIsolation` + no `nodeIntegration` | WebView: **no** `file` access to the whole device; Capacitor bridge methods must re-check jail |
-| Navigation lock | Block in-WebView navigation to unknown https origins. External links → `openExternal`. |
-| New window deny | No `window.open` to random URLs |
+| Navigation lock | Block in-WebView navigation **except the app shell** (`index.html` / `/`). Relative `ch.md` must not replace the WebView. External **foreign** https → `openExternal`. |
+| New window deny | No `window.open` / `target=_blank` into Custom Tabs for the WebView origin. Relative article links are in-app. |
 | CSP | Keep a strict CSP. Monaco may need `'unsafe-eval'` — **intentional** (same as Win). Do not add `unsafe-inline` for everything. |
 | Cleartext | Production: HTTPS APIs only. |
 

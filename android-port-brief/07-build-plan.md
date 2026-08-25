@@ -8,7 +8,7 @@ Create the Android app in a **sibling folder** (example `Kentucky-Android/`), em
 
 Keep `BOARD.md` in the Android repo with these exact phase ids. A phase is done only if IO **persists** (no stub that pretends to save).
 
-Win snapshot to match: package **0.3.2**, `toolApi` **`2026-08-14-a`**.
+Win snapshot to match: package **0.3.2**, `toolApi` **`2026-08-25-a`**. Delta: [`10-update-ask-csv-links.md`](./10-update-ask-csv-links.md).
 
 ## Suggested repo layout (Android)
 
@@ -93,11 +93,11 @@ Copy **by hand**. Never `file:` import from the Win tree at runtime.
 
 **Goal:** Same agent product as Win 0.3.2 (minus git/storyboard/pdf if still stubbed — those have later phases, but **tool names** for files/dialogue/literary must exist).
 
-- Port `agentLoop`, `tools`, `literaryTools`, `proposalGate` (`TOOL_API_VERSION` unchanged), `askGuard`, `openaiCompatClient`, `chatSessions`, `skills`, `planFiles`.
+- Port `agentLoop`, `tools`, `literaryTools`, `proposalGate` (copy current `TOOL_API_VERSION` **`2026-08-25-a`**), `askGuard`, `openaiCompatClient`, `chatSessions`, `skills`, `planFiles`. Blocking `ask_user` = in-process Promise, not Electron IPC.
 - App-private `data/` + Keystore keys.
 - Ask / Plan / Outline / Agent. Ask = no tools. Agent = always write.
 - Stop + abort persist; edit **last** user bubble only; rewind files with confirm (`src/shared/rewindFiles.ts`).
-- `@` picker, `/` skills, Caveman every-turn inject, context bar.
+- `@` picker, `/` skills, Caveman every-turn inject, context bar. Algorithm: `10-update-ask-csv-links.md` §3 Composer (copy `AiComposer.tsx`; do not invent a native `<select>`).
 - Settings: multi-profile, **draft-on-blur**, 45s **connect** timeout only.
 - `ai:workspaceOp` updates tree/tabs. Hidden paths (`story_state.yaml` is **visible**; `revisions/` is **not**) must not spawn ghost yellow tabs.
 
@@ -106,11 +106,14 @@ Copy **by hand**. Never `file:` import from the Win tree at runtime.
 ```
 [ ] Ask cannot write
 [ ] Agent write on disk immediately; explorer yellow until user save
-[ ] toolApi 2026-08-14-a on write results
+[ ] toolApi 2026-08-25-a on write / ask_user / cite_workspace results
+[ ] Plan/Agent grill card + Ask-mode zero tools (see 10-update-ask-csv-links.md)
+[ ] Ask cards persist across process restart; orange #ff7a00 per 10-update §3
 [ ] Stop leaves partial assistant
 [ ] Edit last user + confirm restores/deletes files from that turn
 [ ] Sessions isolated per workspace
 [ ] Empty base URL fails fast; long stream is not killed at 45s
+[ ] `/` opens skills+commands; pick skill → chip, token gone; `@` mounts files via chips (see 10-update §3)
 ```
 
 Stub git/storyboard/pdf tools with clear errors until P4–P6 if needed — do not silently no-op writes.

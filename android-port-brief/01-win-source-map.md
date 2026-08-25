@@ -12,7 +12,7 @@ All paths below are relative to the **Win repo root** (this clone).
 | Kind | Win path | Android action |
 |------|----------|----------------|
 | **Copy (adapt imports)** | `src/renderer/src/**` | Primary UI. Swap `getPlatform()` impl. |
-| **Copy shared contracts** | `src/shared/**`, `src/common/**` | Keep in Android `src/shared` / `src/common`. |
+| **Copy shared contracts** | `src/shared/**`, `src/common/**` | Keep in Android `src/shared` / `src/common`. Includes `agentAsk.ts`, `articleLine.ts`, `csvTable.ts`, `agentEditSpans.ts`. |
 | **Port logic, drop Electron** | `src/main/ai/**` | New `src/ai-runtime/**` (or similar). Replace `fs` with workspace IO. |
 | **Port logic, drop git.exe** | `src/main/git/gitService.ts` | isomorphic-git. Keep product rules. |
 | **Port schema + math** | `src/shared/kyboardSchema.ts`, `src/main/storyboard/**` | Keep schema. Rewrite PNG/ffmpeg to Android. |
@@ -27,8 +27,8 @@ All paths below are relative to the **Win repo root** (this clone).
 |------|------|
 | `src/renderer/src/App.tsx` | Shell: shortcuts, dialogs, doc apply |
 | `src/renderer/src/workbench/*` | Activity bar, tree, tabs, SCM, settings, welcome, dialogs |
-| `src/renderer/src/editors/*` | md, kmind, dialogue, characters, storyboard, media previews |
-| `src/renderer/src/ai/*` | Panel, composer, `@` menu, markdown, chips |
+| `src/renderer/src/editors/*` | md, kmind, dialogue, characters, **generic CSV**, storyboard, media previews |
+| `src/renderer/src/ai/*` | Panel, composer, **`/`** skills menu, **`@`** file menu, markdown, chips (`AiComposer.tsx`, `FileMountChip.tsx`) |
 | `src/renderer/src/state/*` | `appStore`, `aiStore`, `settingsStore`, confirm/unsaved |
 | `src/renderer/src/platform/index.ts` | **`Platform` interface — implement this** |
 | `src/renderer/src/styles/global.css` | Theme tokens, workbench, storyboard, AI |
@@ -48,7 +48,7 @@ All paths below are relative to the **Win repo root** (this clone).
 | `src/main/ai/openaiCompatClient.ts` | Streaming fetch, 45s **connect** only | Port; see PACKAGED-AI-UX |
 | `src/main/ai/chatSessions.ts` | Session JSON | Port to app-private dir |
 | `src/main/ai/workspacePath.ts` | Path jail | Port to SAF tree |
-| `src/main/ai/skills.ts` | Skills load, caveman | Port |
+| `src/main/ai/skills.ts` | Skills load, caveman, **grill** (not game octet) | Port |
 | `src/main/ai/planFiles.ts` | `plans/*.plan.md` | Port |
 | `src/main/ai/webSearch.ts` | DDG + Bing fallback | Port (network) |
 | `src/main/documentHub.ts` | Buffer authority, dirty, agent write | JS hub in Android process |
@@ -62,6 +62,7 @@ These bytes must round-trip with Win.
 | File | Spec |
 |------|------|
 | `*.md` / `*.txt` | UTF-8 text; md via TipTap HTML round-trip |
+| generic `*.csv` / extensionless tables | UTF-8 delimited text; **not** `*.dialogue.csv` / `characters.csv` |
 | `*.kmind` | v2 JSON nodes+edges; sibling `*.assets/` |
 | `*.dialogue.csv` | 11 columns; sidecars: `.meta.json`, `.choices.json`, `.layout.json` |
 | `characters.csv` | Workspace **root**; columns `id,name,color,note,model_node,operable` |

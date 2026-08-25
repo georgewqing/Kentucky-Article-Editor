@@ -3,7 +3,7 @@
 
 win_repo: https://github.com/CCFOX12/Kentucky-Article-Editor
 win_package: "0.3.2"
-toolApi: "2026-08-14-a"
+toolApi: "2026-08-25-a"
 godot_dialogue: "v1.3"
 kyboard_schema: 1
 created: "2026-08-19"
@@ -26,6 +26,7 @@ read_order:
   - 07-build-plan.md
   - 08-invariants.md
   - 09-gotchas.md
+  - 10-update-ask-csv-links.md
 
 keep_open_while_coding:
   - 08-invariants.md

@@ -38,14 +38,84 @@ import {
   type FileProposalEx,
   type GateDecision
 } from './proposalGate'
-import { skillsCatalogText, cavemanSystemBlock, loadSkill } from './skills'
+import { skillsCatalogText, cavemanSystemBlock, loadSkill, GRILL_SKILL_ID } from './skills'
 import { buildDesignL5Summary, workspaceHasDesignTree } from './designGddL5'
 import { looksLikeToolDump, sanitizeAskAssistantContent } from './askGuard'
+import { TOOL_API_VERSION } from './proposalGate'
+import type { AskUserAnswer, AskUserQuestion, CiteLink } from '../../shared/agentAsk'
+import { parseAskUserArgs } from '../../shared/agentAsk'
 
 type ActiveRun = { ac: AbortController; runId: string }
 const activeRuns = new Map<number, ActiveRun>()
 const MAX_CTX_FILE_CHARS = 24000
 const MAX_CHAR_SUMMARY_CHARS = 6000
+
+type AskWaitResult =
+  | { cancelled: true }
+  | { cancelled?: false; answers: AskUserAnswer[] }
+
+const pendingAsks = new Map<string, { resolve: (v: AskWaitResult) => void }>()
+
+function askWaitKey(sessionId: string, askId: string): string {
+  return `${sessionId}:${askId}`
+}
+
+export function answerAskUser(
+  sessionId: string,
+  askId: string,
+  answers: AskUserAnswer[]
+): boolean {
+  const w = pendingAsks.get(askWaitKey(sessionId, askId))
+  if (!w) return false
+  w.resolve({ answers })
+  return true
+}
+
+export function hasOpenAskWait(sessionId: string, askId: string): boolean {
+  return pendingAsks.has(askWaitKey(sessionId, askId))
+}
+
+/** Drop a disk pendingAsk that no waiter can resume (process restart). */
+export function settleStalePendingAsk(session: ChatSession): void {
+  const snap = session.pendingAsk
+  if (!snap) return
+  if (hasOpenAskWait(session.id, snap.askId)) return
+  if (!session.askCards) session.askCards = []
+  if (!session.askCards.some((c) => c.id === snap.askId)) {
+    session.askCards.push({
+      id: snap.askId,
+      messageId: snap.messageId,
+      title: snap.title,
+      questions: snap.questions,
+      status: 'cancelled'
+    })
+  }
+  delete session.pendingAsk
+  closeIncompleteToolRound(session)
+  saveSession(session)
+}
+
+function waitForAskUser(
+  sessionId: string,
+  askId: string,
+  ac: AbortController
+): Promise<AskWaitResult> {
+  return new Promise((resolve) => {
+    const key = askWaitKey(sessionId, askId)
+    const finish = (v: AskWaitResult): void => {
+      ac.signal.removeEventListener('abort', onAbort)
+      pendingAsks.delete(key)
+      resolve(v)
+    }
+    const onAbort = (): void => finish({ cancelled: true })
+    if (ac.signal.aborted) {
+      resolve({ cancelled: true })
+      return
+    }
+    ac.signal.addEventListener('abort', onAbort)
+    pendingAsks.set(key, { resolve: finish })
+  })
+}
 
 export interface EditorContextPayload {
   workspacePath: string | null
@@ -667,6 +737,7 @@ export async function runAgentTurn(opts: {
     send(opts.win, 'ai:done', { sessionId: opts.sessionId, runId })
     return
   }
+  settleStalePendingAsk(session)
   const persist = (): boolean => {
     if (!alive()) return false
     saveSession(session)
@@ -806,6 +877,12 @@ export async function runAgentTurn(opts: {
     }
   }
 
+  if (mode === 'ask' && skillId === GRILL_SKILL_ID) {
+    const grillAsk =
+      'CRITICAL: Ask mode cannot call ask_user. Tell the user to switch the composer from Ask to Plan or Agent, then resend. Do not write numbered questions as if they were clickable buttons.'
+    turnHint = turnHint ? `${turnHint}\n\n${grillAsk}` : grillAsk
+  }
+
   const mountHint = buildMountedFilesHint(opts.editor.workspacePath, attachedPaths)
   if (mountHint) {
     turnHint = turnHint ? `${mountHint}\n\n${turnHint}` : mountHint
@@ -937,99 +1014,224 @@ export async function runAgentTurn(opts: {
       }
       session.messages.push(assistantMsg)
 
+      persist()
+      emitSession()
+
       if (!workspaceRoot) {
         emit('ai:error', { message: 'Open a workspace folder to use agent tools.' })
         persist()
         break
       }
 
-      for (const tc of toolCalls) {
-        if (ac.signal.aborted || !alive()) break
-        emit('ai:tool', { sessionId: session.id, name: tc.name, status: 'running' })
-        const result = await runTool(tc.name, tc.arguments, {
-          workspaceRoot,
-          onProposal: (p) => {
-            if (!alive() || ac.signal.aborted) {
-              return {
-                autoApplied: false,
-                writeDisk: false,
-                gate: { reason: 'aborted', kind: 'other', otherTurnPaths: 0 }
-              }
-            }
-            const r = commitProposal(
-              opts.win,
-              session,
-              p as FileProposalEx,
-              assistantId,
-              turnPaths,
-              loadAiSettings()
-            )
-            return {
-              autoApplied: r.autoApplied,
-              writeDisk: r.writeDisk,
-              gate: {
-                reason: r.gate.reason,
-                kind: r.gate.kind,
-                otherTurnPaths: r.gate.otherTurnPaths
-              }
-            }
-          },
-          onGitOp: async (partial) => {
-            if (!alive() || ac.signal.aborted) {
-              return {
-                ...partial,
-                status: 'rejected' as const,
-                error: 'Aborted',
-                messageId: assistantId
-              }
-            }
-            return commitGitOp(opts.win, session, assistantId, partial)
-          },
-          onPlan: (stepsIn, planFileRel) => {
-            if (!alive() || ac.signal.aborted) return
-            session.plan = stepsIn
-            if (planFileRel) session.planFileRel = planFileRel
-            emit('ai:plan', {
-              sessionId: session.id,
-              plan: session.plan,
-              planFileRel: session.planFileRel ?? null
-            })
-          },
-          onPlanUpdate: (patch) => {
-            if (!alive() || ac.signal.aborted) return
-            let step: PlanStep | undefined
-            if (patch.id) step = session.plan.find((s) => s.id === patch.id)
-            else if (typeof patch.index === 'number') step = session.plan[patch.index]
-            if (!step) return
-            if (
-              patch.status === 'pending' ||
-              patch.status === 'in_progress' ||
-              patch.status === 'done'
-            ) {
-              step.status = patch.status
-            }
-            if (patch.text) step.text = patch.text
-            emit('ai:plan', {
-              sessionId: session.id,
-              plan: session.plan,
-              planFileRel: session.planFileRel ?? null
-            })
-          },
-          onOpenFile: (relPath, line) => {
-            if (!alive()) return
-            emit('ai:workspaceOp', { op: 'openFile', path: relPath, line })
-          },
-          onWorkspaceFs: (payload) => {
-            if (!alive()) return
-            emit('ai:workspaceOp', payload)
-          },
-          getPlan: () => session.plan,
-          getPlanFileRel: () => session.planFileRel,
-          webSearchEnabled: settings.webSearchEnabled,
-          webSearchProvider: settings.webSearchProvider,
-          webSearchMaxResults: settings.webSearchMaxResults
+      const extras = toolCalls.filter((t) => t.name === 'ask_user').slice(1)
+      const ordered = [
+        ...toolCalls.filter((t) => t.name !== 'ask_user'),
+        ...toolCalls.filter((t) => t.name === 'ask_user').slice(0, 1)
+      ]
+      for (const extra of extras) {
+        session.messages.push({
+          id: randomUUID(),
+          role: 'tool',
+          content: JSON.stringify({
+            error: 'Only one ask_user per step; extra calls ignored.',
+            toolApi: TOOL_API_VERSION
+          }),
+          createdAt: Date.now(),
+          toolName: extra.name,
+          toolCallId: extra.id
         })
+      }
+
+      const toolCtx = {
+        workspaceRoot,
+        askUserCallsThisTurn: 0,
+        currentToolCallId: '',
+        sessionId: session.id,
+        messageId: assistantId,
+        onProposal: (p: FileProposalEx) => {
+          if (!alive() || ac.signal.aborted) {
+            return {
+              autoApplied: false,
+              writeDisk: false,
+              gate: { reason: 'aborted', kind: 'other', otherTurnPaths: 0 }
+            }
+          }
+          const r = commitProposal(
+            opts.win,
+            session,
+            p,
+            assistantId,
+            turnPaths,
+            loadAiSettings()
+          )
+          return {
+            autoApplied: r.autoApplied,
+            writeDisk: r.writeDisk,
+            gate: {
+              reason: r.gate.reason,
+              kind: r.gate.kind,
+              otherTurnPaths: r.gate.otherTurnPaths
+            }
+          }
+        },
+        onGitOp: async (partial: Parameters<typeof commitGitOp>[3]) => {
+          if (!alive() || ac.signal.aborted) {
+            return {
+              ...partial,
+              status: 'rejected' as const,
+              error: 'Aborted',
+              messageId: assistantId
+            }
+          }
+          return commitGitOp(opts.win, session, assistantId, partial)
+        },
+        onPlan: (
+          stepsIn: Array<{ id: string; text: string; status: 'pending' | 'in_progress' | 'done' }>,
+          planFileRel?: string
+        ) => {
+          if (!alive() || ac.signal.aborted) return
+          session.plan = stepsIn
+          if (planFileRel) session.planFileRel = planFileRel
+          emit('ai:plan', {
+            sessionId: session.id,
+            plan: session.plan,
+            planFileRel: session.planFileRel ?? null
+          })
+        },
+        onPlanUpdate: (patch: Partial<{ id: string; index: number; status: string; text: string }>) => {
+          if (!alive() || ac.signal.aborted) return
+          let step: PlanStep | undefined
+          if (patch.id) step = session.plan.find((s) => s.id === patch.id)
+          else if (typeof patch.index === 'number') step = session.plan[patch.index]
+          if (!step) return
+          if (
+            patch.status === 'pending' ||
+            patch.status === 'in_progress' ||
+            patch.status === 'done'
+          ) {
+            step.status = patch.status
+          }
+          if (patch.text) step.text = patch.text
+          emit('ai:plan', {
+            sessionId: session.id,
+            plan: session.plan,
+            planFileRel: session.planFileRel ?? null
+          })
+        },
+        onOpenFile: (relPath: string, line?: number) => {
+          if (!alive()) return
+          emit('ai:workspaceOp', { op: 'openFile', path: relPath, line })
+        },
+        onWorkspaceFs: (payload: {
+          op: 'refreshTree' | 'fsMoved' | 'fsDeleted' | 'fsCopied'
+          from?: string
+          to?: string
+          path?: string
+        }) => {
+          if (!alive()) return
+          emit('ai:workspaceOp', payload)
+        },
+        getPlan: () => session.plan,
+        getPlanFileRel: () => session.planFileRel,
+        webSearchEnabled: settings.webSearchEnabled,
+        webSearchProvider: settings.webSearchProvider,
+        webSearchMaxResults: settings.webSearchMaxResults,
+        onAskUser: async (payload: {
+          askId: string
+          title?: string
+          questions: import('../../shared/agentAsk').AskUserQuestion[]
+        }) => {
+          if (!alive() || ac.signal.aborted) return { cancelled: true as const }
+          session.pendingAsk = {
+            askId: payload.askId,
+            messageId: assistantId,
+            title: payload.title,
+            questions: payload.questions
+          }
+          persist()
+          emit('ai:askUser', {
+            sessionId: session.id,
+            askId: payload.askId,
+            messageId: assistantId,
+            title: payload.title,
+            questions: payload.questions
+          })
+          const result = await waitForAskUser(session.id, payload.askId, ac)
+          delete session.pendingAsk
+          if (!result.cancelled && result.answers) {
+            if (!session.askCards) session.askCards = []
+            if (!session.askCards.some((c) => c.id === payload.askId)) {
+              session.askCards.push({
+                id: payload.askId,
+                messageId: assistantId,
+                title: payload.title,
+                questions: payload.questions,
+                status: 'answered',
+                answers: result.answers
+              })
+            }
+          }
+          persist()
+          return result
+        },
+        onCiteWorkspace: (links: CiteLink[]) => {
+          if (!alive()) return
+          if (!session.citeCards) session.citeCards = []
+          session.citeCards.push({
+            id: randomUUID(),
+            messageId: assistantId,
+            links
+          })
+          emit('ai:citeWorkspace', {
+            sessionId: session.id,
+            messageId: assistantId,
+            links
+          })
+        }
+      }
+
+      for (const tc of ordered) {
+        if (ac.signal.aborted || !alive()) break
+        toolCtx.currentToolCallId = tc.id
+        emit('ai:tool', { sessionId: session.id, name: tc.name, status: 'running' })
+        const result = await runTool(tc.name, tc.arguments, toolCtx)
         if (!alive()) break
+        if (tc.name === 'ask_user') {
+          try {
+            const parsed = JSON.parse(result) as {
+              ok?: boolean
+              cancelled?: boolean
+              answers?: AskUserAnswer[]
+            }
+            if (parsed.ok && parsed.answers) {
+              if (!session.askCards) session.askCards = []
+              if (!session.askCards.some((c) => c.id === tc.id)) {
+                let qs: AskUserQuestion[] = []
+                let title: string | undefined
+                try {
+                  const args = JSON.parse(tc.arguments || '{}') as Record<string, unknown>
+                  const p = parseAskUserArgs(args)
+                  if (p.ok) {
+                    qs = p.questions
+                    title = p.title
+                  }
+                } catch {
+                  /* ignore */
+                }
+                session.askCards.push({
+                  id: tc.id,
+                  messageId: assistantId,
+                  title,
+                  questions: qs,
+                  status: 'answered',
+                  answers: parsed.answers
+                })
+              }
+            }
+          } catch {
+            /* ignore */
+          }
+        }
         session.messages.push({
           id: randomUUID(),
           role: 'tool',

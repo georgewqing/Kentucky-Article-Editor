@@ -26,6 +26,8 @@ Copy the TypeScript interface from `src/renderer/src/platform/index.ts` (`export
 
 `openFolder`, `readDir`, `readFile`, `writeFile`, `mkdir`, `rename`, `delete`, `exists`, `isDirectory`, `copyFile`, `openImage(s)`, `openContextFiles`, path helpers (`joinPath`, `basename`, `dirname`, `extname`, `relativeTo`).
 
+Composer **paperclip** uses `openContextFiles`. In-tree → mount rel; out-of-tree → `copyFile` into `.kentucky/refs/` then mount (same as Win `aiStore.pickComposerAttachments`). Composer **`@` browse** uses in-memory `fileTree` first, then `readDir` when a folder has no `children` yet. Jail every path. See `10-update-ask-csv-links.md` §3 Composer.
+
 `readDir` must **hide** the same names as Win `src/main/index.ts` `shouldInclude`:
 
 - names starting with `.`

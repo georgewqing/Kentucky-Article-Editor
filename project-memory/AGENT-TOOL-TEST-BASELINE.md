@@ -49,7 +49,7 @@
 
 ## 📚 四、Round H · 文学记忆（M1–M4）自测清单
 
-指纹：`toolApi: "2026-08-14-a"`
+指纹：`toolApi: "2026-08-25-a"`
 
 1. 空工作区随笔：`continuity_check` aspects timeline → `story_state_missing` info，**无** stale  
 2. `propose_upsert_story_state` 一章（含 sourcePath）→ 启用；L5 出现计数摘要 + 「Before write / After chapter」调用提示（无道具名）  

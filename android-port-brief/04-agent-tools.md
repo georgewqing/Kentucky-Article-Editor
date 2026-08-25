@@ -1,6 +1,6 @@
 ---
 title: Agent loop, tools, chat UX
-toolApi: 2026-08-14-a
+toolApi: 2026-08-25-a
 ---
 
 # 04 — Agent, tools, chat
@@ -14,8 +14,8 @@ Deep Win docs: `project-memory/AGENT-TOOL-FEEDBACK.md`, `PACKAGED-AI-UX.md`, `RE
 | Mode | Tools |
 |------|--------|
 | **Ask** | **None.** `tool_choice: none`. Never execute `tool_call`. `askGuard.ts` strips DSML dumps. |
-| **Plan** | Read + search + `create_plan` (no file-mutating propose_* except plan md as designed) |
-| **Outline** | Structure / kmind-oriented subset |
+| **Plan** | Read + search + `create_plan` + `ask_user` + `cite_workspace` + `open_in_editor` (no file-mutating propose_* except plan md as designed) |
+| **Outline** | Structure / kmind-oriented subset + `ask_user` + `cite_workspace` + `open_in_editor` |
 | **Agent** | Full tool set; **always auto-write** |
 
 Plan truth = workspace `plans/<slug>.plan.md`. No permanent plan list in the chat header. Markdown toolbar **Build** switches to Agent, binds `planFileRel`, sends execute hint.
@@ -46,14 +46,24 @@ Connect timeout: **45s until response headers**, then drop the timer so long SSE
 
 ## Composer UX (match Win)
 
-- Modes + profile switcher at bottom.
-- Paperclip + send (same 22px affordance).
-- `/` skills menu; `@` workspace file picker (recent tabs, in-menu browse, chips).
-- Mounted files go `attachedPaths` (CRITICAL subject).
-- Skills chip injects SKILL.md (+ examples/reference when present).
-- **Caveman** skill: if enabled, inject every turn; do not `read_skill` it as optional.
+Full `/` and `@` algorithm, DOM, inject rules: [`10-update-ask-csv-links.md`](./10-update-ask-csv-links.md) §3 **Composer**. Copy `AiComposer.tsx` + `FileMountChip.tsx`; port inject in `agentLoop.ts`.
 
-Context bar: label + color track; token numbers in popover only.
+| Piece | Win truth |
+|-------|-----------|
+| Trigger | Last token `/[^\s]*` or `@[^\s]*` at start or after space. `@` closes `/`. |
+| `/` list | Enabled skills except **caveman** (first 4 + show more), then commands `/agent` `/plan` `/outline` `/ask` `/new`. |
+| `/` pick skill | Strip token; warm `/{id}` chip; body typed beside it. Do **not** leave `/grill` in the textarea. |
+| `/` pick command | Switch mode, or `/new` → new chat. |
+| `@` list | Recent = open tabs then tree (24 / search 40 / flatten 400). Browse walks folders. Overlay scroll. |
+| `@` pick | **File** → chip + strip `@token`. **Folder / Browse / Up** → navigate only. Folder mounts = paperclip (trailing `/`). |
+| Paperclip | In-tree mount; out-of-tree copy to `.kentucky/refs/`. Jail every path. |
+| Keyboard | Arrows / Enter / Tab apply; Escape closes; Enter does not send while a menu is open. |
+| Menus in DOM | Siblings of `BorderBeam` on `.ai-composer-shell`, **not** inside `.ai-composer`. |
+| Payload | `skillId` + `editor.attachedPaths`. UI shows chips; API gets SKILL.md + up to 8 mount bodies. |
+| L5 | Mounts = PRIMARY SUBJECT. If any mount, **omit** active-file body. |
+| Caveman | If enabled, inject every turn; do not put it in the `/` list; do not `read_skill` it as optional. |
+
+Context bar: label + color track; token numbers in popover only. Do **not** bump `toolApi` for these menus.
 
 ## Settings (AI)
 
@@ -65,17 +75,20 @@ Context bar: label + color track; token numbers in popover only.
 ## Sessions
 
 - JSON in app-private `data/ai-chats/`.
+- Persist `askCards`, `citeCards`, and in-flight `pendingAsk` (see `10-update-ask-csv-links.md` §3). On load: `hydrateAskCiteFromMessages`; `settleStalePendingAsk` if no waiter.
 - List/open **strictly filtered** by workspace id (SAF tree).
 - Near-full context → refuse send; **never** silently drop history.
-- L5 editor context: active file, selection, `@`, characters summary, Git L5, Design L5 if `design/` exists.
+- L5 editor context: active file (body omitted if mounts), selection, leftover `@mentions`, `attachedPaths`, characters summary, Git L5, Design L5 if `design/` exists.
 
 ## Tool list (names must match)
 
-Fingerprint every **write** result with `"toolApi": "2026-08-14-a"`.
+Fingerprint every **write** result (and `ask_user` / `cite_workspace`) with `"toolApi": "2026-08-25-a"`.
+
+Delta for this fingerprint: [`10-update-ask-csv-links.md`](./10-update-ask-csv-links.md).
 
 ### Files / workspace
 
-`list_dir`, `read_file`, `propose_write_file`, `propose_text_patch`, `workspace_mkdir`, `workspace_copy`, `workspace_move`, `workspace_delete`, `open_in_editor`, `export_workspace_pdf`
+`list_dir`, `read_file`, `propose_write_file`, `propose_text_patch`, `workspace_mkdir`, `workspace_copy`, `workspace_move`, `workspace_delete`, `open_in_editor`, `cite_workspace`, `ask_user`, `export_workspace_pdf`
 
 ### Dialogue / cast
 
@@ -103,10 +116,10 @@ Memory files at workspace root, created on demand: `story_state.yaml`, `foreshad
 
 ## Events (renderer)
 
-Keep the same channel names if possible: `ai:session`, `ai:chunk`, `ai:done`, `ai:error`, `ai:proposal`, `ai:gitOp`, `ai:tool`, `ai:plan`, `ai:workspaceOp`, `ai:assistant_start`. Include `runId`.
+Keep the same channel names if possible: `ai:session`, `ai:chunk`, `ai:done`, `ai:error`, `ai:proposal`, `ai:gitOp`, `ai:tool`, `ai:plan`, `ai:workspaceOp`, `ai:assistant_start`, `ai:askUser`, `ai:citeWorkspace`. Include `runId`. Blocking `ask_user` is a Promise in the AI runtime — see `10-update-ask-csv-links.md`. Do not `window.confirm`.
 
 `ai:workspaceOp`: `openFile`, `refreshTree`, `fsDeleted`, `fsMoved`, `fsCopied` — update tabs/tree.
 
 ## Bundled skills
 
-Win `resources/ai-skills/`. Copy-if-missing into `data/ai-skills`. Caveman + literary-voice + 8 design skills. **Do not execute skill scripts.**
+Win `resources/ai-skills/`. Copy-if-missing into `data/ai-skills`. Caveman (inject every turn if enabled) + **grill** (no inject; independent of the eight `game-*` toggles) + literary-voice + 8 design skills. **Do not execute skill scripts.**

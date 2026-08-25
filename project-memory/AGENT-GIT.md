@@ -1,6 +1,6 @@
 # Agent / SCM Git — 完整记录（Win）
 
-> **状态**：已定稿落地 · 当前指纹 `toolApi: "2026-08-14-a"`（全局工具版本；Git 专档历史见表）；**本机沙箱扩展见 changelog §121**（须完整重启 Electron）  
+> **状态**：已定稿落地 · 当前指纹 `toolApi: "2026-08-25-a"`（全局工具版本；Git 专档历史见表）；**本机沙箱扩展见 changelog §121**（须完整重启 Electron）  
 > **时间线**：[`changelog.md`](./changelog.md) §80–§95、**§120–§121**  
 > **产品表**：[`product-decisions.md`](./product-decisions.md) · **踩坑**：[`gotchas.md`](./gotchas.md)  
 > **Android：** 从零独立工程，用 isomorphic-git，禁止 `git.exe`。交接 [`../android-port-brief/05-git-storyboard-pdf.md`](../android-port-brief/05-git-storyboard-pdf.md)。忽略旧 `../Kentucky for Android/`。  
@@ -211,7 +211,7 @@ node_modules/
 ## 9. 验收清单（重启后）
 
 ```
-toolApi === "2026-08-14-a"
+toolApi === "2026-08-25-a"
 打开无仓文件夹 → 自动有 .git（资源树看不见）
 git_status → remotes/branch/dirty；可能 repoCreated / gitignoreUpdated
 L5 点名 env 说明 → 先 read_file；无则勿臆造其它仓 remote（如 test2-remote）

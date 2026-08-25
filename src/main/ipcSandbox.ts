@@ -97,13 +97,33 @@ function rendererDir(): string {
   return resolve(join(__dirname, '../renderer'))
 }
 
+const APP_SHELL_PAGES = new Set(['index.html', 'splash.html', 'pdf-print.html'])
+
+function isAppShellPathname(pathname: string): boolean {
+  const norm = pathname.replace(/\\/g, '/')
+  if (norm === '/' || norm === '') return true
+  const last = norm.split('/').filter(Boolean).pop() || ''
+  return APP_SHELL_PAGES.has(last)
+}
+
+function isRendererDevOrigin(url: URL): boolean {
+  const dev = process.env.ELECTRON_RENDERER_URL
+  if (!dev) return false
+  try {
+    const allowed = new URL(dev)
+    return url.protocol === allowed.protocol && url.host === allowed.host
+  } catch {
+    return false
+  }
+}
+
 export function isAllowedNavigationUrl(url: string): boolean {
   const dev = process.env.ELECTRON_RENDERER_URL
   if (dev) {
     try {
-      const allowed = new URL(dev)
       const u = new URL(url)
-      return u.protocol === allowed.protocol && u.host === allowed.host
+      if (!isRendererDevOrigin(u)) return false
+      return isAppShellPathname(u.pathname)
     } catch {
       return false
     }
@@ -113,7 +133,7 @@ export function isAllowedNavigationUrl(url: string): boolean {
     if (u.protocol !== 'file:') return false
     const p = fileURLToPath(u)
     assertInsideWorkspace(rendererDir(), p)
-    return true
+    return isAppShellPathname(p.replace(/\\/g, '/'))
   } catch {
     return false
   }
@@ -129,6 +149,8 @@ export function bindNavigationGuard(wc: WebContents): void {
   wc.setWindowOpenHandler(({ url }) => {
     try {
       const parsed = new URL(url)
+      // Relative article links resolve to the Vite origin (`/ch.md`). Never dump those into the browser.
+      if (isRendererDevOrigin(parsed)) return { action: 'deny' }
       if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
         void shell.openExternal(parsed.toString())
       }

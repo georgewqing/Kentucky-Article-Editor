@@ -5,6 +5,7 @@ import { MonacoTextEditor } from '@/editors/MonacoTextEditor'
 import { MarkdownArticleEditor } from '@/editors/MarkdownArticleEditor'
 import { MindMapEditor } from '@/editors/MindMapEditor'
 import { DialogueEditor } from '@/editors/DialogueEditor'
+import { CsvTableEditor } from '@/editors/CsvTableEditor'
 import { StoryboardEditor } from '@/editors/StoryboardEditor'
 import { ImagePreviewEditor } from '@/editors/ImagePreviewEditor'
 import { VideoPreviewEditor } from '@/editors/VideoPreviewEditor'
@@ -36,6 +37,8 @@ export function FloatWorkbench() {
           <MindMapEditor tabId={tab.id} />
         ) : tab.kind === 'dialogue' ? (
           <DialogueEditor tabId={tab.id} />
+        ) : tab.kind === 'csv' ? (
+          <CsvTableEditor key={tab.id} tabId={tab.id} />
         ) : tab.kind === 'storyboard' ? (
           <StoryboardEditor key={tab.id} tabId={tab.id} />
         ) : tab.kind === 'image' ? (

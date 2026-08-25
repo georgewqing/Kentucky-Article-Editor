@@ -38,7 +38,7 @@ node_modules/
 
 ### Tool contract (names + modes)
 
-Copy descriptions/WHEN from Win `src/main/ai/tools.ts`. Write results include `"toolApi": "2026-08-14-a"`. Write ops emit `ai:gitOp`.
+Copy descriptions/WHEN from Win `src/main/ai/tools.ts`. Write results include `"toolApi": "2026-08-25-a"`. Write ops emit `ai:gitOp`.
 
 | Tool | Modes | Notes |
 |------|-------|-------|

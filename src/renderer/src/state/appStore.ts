@@ -20,9 +20,25 @@ import {
 import i18n from '@/i18n'
 import { askUnsavedConfirm } from '@/state/unsavedDialogStore'
 import { clipLines } from '@shared/clipLines'
+import { looksLikeDelimitedTable } from '@shared/csvTable'
+import {
+  agentEditPathKey,
+  mergeAgentWriteSpans,
+  mapSpansThroughUserEdit,
+  type AgentEditSpan
+} from '@shared/agentEditSpans'
 import { isExplorerHiddenAbs } from '@/workbench/explorerHidden'
 
-export type EditorKind = 'text' | 'mindmap' | 'dialogue' | 'characters' | 'storyboard' | 'image' | 'video' | 'pdf'
+export type EditorKind =
+  | 'text'
+  | 'csv'
+  | 'mindmap'
+  | 'dialogue'
+  | 'characters'
+  | 'storyboard'
+  | 'image'
+  | 'video'
+  | 'pdf'
 export type ActiveView = 'explorer' | 'settings' | 'home' | 'scm'
 
 export interface LinePickSession {
@@ -85,8 +101,8 @@ export type Toast = { id: number; message: string; type: 'error' | 'info' } | nu
 /** True while applying a remote DocumentHub snapshot (skip doc:patch echo). */
 let applyingFromHub = false
 
-/** Explorer action row (6×26px buttons + gaps + 8px pad). Sash cannot go below this. */
-export const SIDEBAR_MIN_WIDTH = 184
+/** Explorer action row (7×26px buttons + gaps + 8px pad). Sash cannot go below this. */
+export const SIDEBAR_MIN_WIDTH = 212
 export const SIDEBAR_MAX_WIDTH = 480
 
 interface AppState {
@@ -158,14 +174,13 @@ interface AppState {
   syncTabsAfterFileRewind: (
     restores: Array<{ absPath: string; before: string; isNew: boolean }>
   ) => Promise<void>
-  /** Agent change highlight ranges (1-based lines), cleared on save/close/git reload */
-  agentChangeRanges: Record<string, Array<{ startLine: number; endLine: number }>>
-  setAgentChangeRanges: (
-    absPath: string,
-    ranges: Array<{ startLine: number; endLine: number }>
-  ) => void
+  /** Agent-written spans (UTF-16). Added = blue, modified = yellow. Cleared on save. */
+  agentChangeRanges: Record<string, AgentEditSpan[]>
+  setAgentChangeRanges: (absPath: string, ranges: AgentEditSpan[]) => void
   clearAgentChangeRanges: (absPath?: string) => void
   saveTab: (id?: string) => Promise<boolean>
+  /** Persist every dirty editor tab (mind-map / dialogue / storyboard flush included). */
+  saveAllDirtyTabs: () => Promise<boolean>
   discardTab: (id: string) => Promise<void>
   closeTab: (id: string, force?: boolean) => Promise<boolean>
   handleWindowCloseRequest: () => Promise<void>
@@ -194,16 +209,24 @@ interface AppState {
 
 const RECENT_KEY = 'kentucky.recentFolders'
 
-function detectKind(path: string): EditorKind {
+function detectKind(path: string, content?: string): EditorKind {
   if (isDialoguePath(path)) return 'dialogue'
   if (isCharactersPath(path)) return 'characters'
   const ext = getPlatform().extname(path).toLowerCase()
+  if (ext === '.csv') return 'csv'
   if (ext === '.kmind') return 'mindmap'
   if (ext === '.kyboard') return 'storyboard'
   if (ext === '.png') return 'image'
   if (ext === '.mp4') return 'video'
   if (ext === '.pdf') return 'pdf'
+  if (!ext && content != null && looksLikeDelimitedTable(content)) return 'csv'
   return 'text'
+}
+
+function maybePromoteCsv(path: string, kind: EditorKind, content: string): EditorKind {
+  if (kind !== 'text') return kind
+  if (getPlatform().extname(path)) return kind
+  return looksLikeDelimitedTable(content) ? 'csv' : kind
 }
 
 function isMediaPreviewKind(kind: EditorKind): boolean {
@@ -381,12 +404,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setAgentChangeRanges: (absPath, ranges) =>
     set((s) => ({
-      agentChangeRanges: { ...s.agentChangeRanges, [absPath.replace(/\//g, '\\').toLowerCase()]: ranges }
+      agentChangeRanges: { ...s.agentChangeRanges, [agentEditPathKey(absPath)]: ranges }
     })),
   clearAgentChangeRanges: (absPath) =>
     set((s) => {
       if (!absPath) return { agentChangeRanges: {} }
-      const key = absPath.replace(/\//g, '\\').toLowerCase()
+      const key = agentEditPathKey(absPath)
       const next = { ...s.agentChangeRanges }
       delete next[key]
       return { agentChangeRanges: next }
@@ -649,7 +672,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         id: tabIdFor(snap.path),
         path: snap.path,
         title: platform.basename(snap.path),
-        kind: detectKind(snap.path),
+        kind: detectKind(snap.path, snap.content),
         content: snap.content,
         originalContent: snap.originalContent,
         dirty: snap.dirty,
@@ -688,11 +711,12 @@ export const useAppStore = create<AppState>((set, get) => ({
               : snap.originalContent,
           dirty: hubClean ? false : snap.rev > tab.docRev ? snap.dirty : tab.isNew || tab.dirty || snap.dirty,
           isNew: hubClean ? false : snap.rev > tab.docRev ? Boolean(tab.isNew) && snap.dirty : Boolean(tab.isNew),
+          kind: maybePromoteCsv(tab.path, tab.kind, snap.content),
           docRev: snap.rev
         }
         const patch: Partial<AppState> = { tabs: next }
         if (hubClean) {
-          const key = snap.path.replace(/\//g, '\\').toLowerCase()
+          const key = agentEditPathKey(snap.path)
           const ranges = { ...s.agentChangeRanges }
           delete ranges[key]
           patch.agentChangeRanges = ranges
@@ -764,6 +788,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     const tab = get().tabs.find((t) => t.id === id)
     if (!tab) return
     const dirty = contentIsDirty(tab.path, content, tab.originalContent)
+    const key = agentEditPathKey(tab.path)
+    const prevSpans = get().agentChangeRanges[key]
+    const nextSpans =
+      prevSpans?.length && tab.content !== content
+        ? mapSpansThroughUserEdit(prevSpans, tab.content, content)
+        : prevSpans
     set((s) => ({
       tabs: s.tabs.map((t) =>
         t.id === id
@@ -774,7 +804,8 @@ export const useAppStore = create<AppState>((set, get) => ({
               isNew: t.isNew && content !== t.originalContent ? t.isNew : t.isNew
             }
           : t
-      )
+      ),
+      ...(nextSpans !== prevSpans ? { agentChangeRanges: { ...s.agentChangeRanges, [key]: nextSpans || [] } } : {})
     }))
     if (!applyingFromHub) {
       void getPlatform()
@@ -819,8 +850,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     const originalContent = before
 
     try {
-      const { computeChangeRanges } = await import('@/ai/proposalDiff')
-      get().setAgentChangeRanges(absPath, computeChangeRanges(before, content))
+      const key = agentEditPathKey(absPath)
+      const existing = get().agentChangeRanges[key] || []
+      get().setAgentChangeRanges(
+        absPath,
+        mergeAgentWriteSpans(existing, before ?? '', content)
+      )
     } catch {
       /* ignore */
     }
@@ -835,14 +870,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (existing) {
       set((s) => ({
-        tabs: s.tabs.map((t) => (t.id === existing.id ? patchTab(t) : t))
+        tabs: s.tabs.map((t) =>
+          t.id === existing.id
+            ? { ...patchTab(t), kind: maybePromoteCsv(absPath, t.kind, content) }
+            : t
+        )
       }))
     } else {
       const tab: OpenTab = {
         id: tabIdFor(absPath),
         path: absPath,
         title: platform.basename(absPath),
-        kind: detectKind(absPath),
+        kind: detectKind(absPath, content),
         content,
         originalContent,
         dirty,
@@ -922,6 +961,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
     await get().refreshTree()
+  },
+
+  saveAllDirtyTabs: async () => {
+    const dirty = get().tabs.filter((t) => t.dirty && !isMediaPreviewKind(t.kind))
+    for (const tab of dirty) {
+      const ok = await get().saveTab(tab.id)
+      if (!ok) return false
+    }
+    return true
   },
 
   saveTab: async (id) => {
@@ -1019,6 +1067,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     } finally {
       applyingFromHub = false
     }
+    get().clearAgentChangeRanges(tab.path)
   },
 
   closeTab: async (id, force = false) => {

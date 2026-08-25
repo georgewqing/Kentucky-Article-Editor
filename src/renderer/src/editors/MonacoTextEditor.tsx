@@ -7,6 +7,8 @@ import { useSettingsStore } from '@/state/settingsStore'
 import { getPlatform } from '@/platform'
 import { SOFT_MONACO_OPTIONS, defineKentuckyMonacoThemes } from './softMonaco'
 import { bindMonacoLinePick, flashMonacoLine } from './monacoLineNav'
+import { syncMonacoAgentSpans } from './agentEditHighlight'
+import { agentEditPathKey } from '@shared/agentEditSpans'
 
 function languageForPath(path: string): string {
   const ext = getPlatform().extname(path)
@@ -92,32 +94,9 @@ export function MonacoTextEditor({ tabId }: { tabId: string }) {
   }, [tab, flashForTab, showToast, t, clearLineFlash, monacoTick])
 
   useEffect(() => {
-    const ed = monacoRef.current
-    if (!ed || !tab) return
-    const key = tab.path.replace(/\//g, '\\').toLowerCase()
-    const ranges = agentChangeRanges[key] || []
-    const model = ed.getModel()
-    if (!model) return
-    const deco = ranges.map((r) => ({
-      range: {
-        startLineNumber: r.startLine,
-        startColumn: 1,
-        endLineNumber: r.endLine,
-        endColumn: model.getLineMaxColumn(Math.min(r.endLine, model.getLineCount()))
-      },
-      options: {
-        isWholeLine: true,
-        className: 'monaco-agent-change',
-        overviewRuler: {
-          color: 'rgba(128,128,128,0.4)',
-          position: 4
-        }
-      }
-    }))
-    const ids = ed.deltaDecorations([], deco as never)
-    return () => {
-      ed.deltaDecorations(ids, [])
-    }
+    if (!tab) return
+    const spans = agentChangeRanges[agentEditPathKey(tab.path)] || []
+    return syncMonacoAgentSpans(monacoRef.current, spans)
   }, [tab, agentChangeRanges, monacoTick])
 
   useEffect(() => {

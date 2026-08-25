@@ -20,7 +20,7 @@ If a sentence here conflicts with an old Android folder or a Win `changelog.md` 
 | M8 | Agent **Agent-mode** = write disk immediately. No Accept/Reject product UI. |
 | M9 | Dirty **yellow** = unsaved vs last explicit user save / git reload. New file **blue**. |
 | M10 | `commitProposal`: `status: 'applied'`, upsert `session.proposals`, write disk, emit `ai:proposal`. |
-| M11 | `TOOL_API_VERSION` stays **`2026-08-14-a`** unless the tool JSON protocol changes. Write results include `"toolApi": "2026-08-14-a"`. |
+| M11 | `TOOL_API_VERSION` stays **`2026-08-25-a`** unless the tool JSON protocol changes. Write / `ask_user` / `cite_workspace` results include `"toolApi": "2026-08-25-a"`. |
 | M12 | Confirmations: in-app dialogs only. |
 | M13 | Sessions/keys/skills live in **app-private** `data/`, never in the novel tree. Keys = Keystore. |
 | M14 | Chat list/open **filtered by this workspace id**. |
@@ -40,6 +40,12 @@ If a sentence here conflicts with an old Android folder or a Win `changelog.md` 
 | M28 | Skills: copy-if-missing; Caveman injects every turn when enabled; **never execute** skill scripts. |
 | M29 | Web search **off** by default. `web_fetch` rejects private IPs. |
 | M30 | PDF/HTML size caps; storyboard export ≤ 15 min; PNG/layout clamps. |
+| M31 | `ask_user` is Plan/Outline/Agent only. One card ≤3 questions, one Confirm; pending disables Send. Host = Promise + UI callback, never `window.confirm` / `ipcMain`. Persist answered `askCards` and in-flight `pendingAsk`. Process kill → cancelled read-only card. Chrome: `#ff7a00` per `10-update-ask-csv-links.md` §3, not `--accent`. |
+| M32 | `cite_workspace` must not steal the active editor. `open_in_editor` (and user clicks, including the **applied-change card filename**) may — same `lineFlash` as mind-map 链接到段落 (`articleLine.ts` `snippet`; change cards use `computeChangeRanges` first line). Agent multi-file writes still must not flash the current tab. |
+| M33 | Generic CSV table must not hijack `*.dialogue.csv` or `characters.csv`. Extensionless sniff is strict (LICENSE stays text). |
+| M34 | Bundled `grill` is not part of the eight `game-*` skills and is not caveman-injected. |
+| M35 | Composer **`/`** opens the Win skills+commands popover (not a native `<select>`). Picking a skill → chip + strip `/token`. **`@`** opens the Win file popover; file → `attachedPaths` chip; folder rows navigate. Jail in SAF. With mounts, omit active-tab body. Spec: `10-update-ask-csv-links.md` §3 Composer. |
+| M36 | Agent markdown paint: **added** pale blue, **modified** pale yellow, UTF-16 spans in `agentEditSpans.ts`. User edits never create spans and never grow them; save/discard/rewind clears. Not tab-dirty yellow, not `lineFlash`. |
 
 ## NEVER
 
@@ -70,6 +76,8 @@ If a sentence here conflicts with an old Android folder or a Win `changelog.md` 
 | N23 | Never let `Number('')` snap context window back to 128000 on settings blur. |
 | N24 | Never call `upsertProfile` on every keystroke. |
 | N25 | Never invent jpg/webp/webm/mov workspace preview, command palette, cloud sync, or billing UI. |
+| N26 | Never replace composer `/` or `@` with only a native `<select>` / full-screen sheet. |
+| N27 | Never grow Agent edit highlights onto user insertions, paint user typing, or restore whole-line `.monaco-agent-change`. |
 
 ## Locked product (do not silently overturn)
 
@@ -83,6 +91,13 @@ Short list:
 - Cursor-like chrome; dark `#0A0A0A`; no PR-island storyboard skin.
 - Save ≠ commit.
 - Multi-window DocumentHub is Win-shaped; Android P1 is **one** WebView hub.
+- Ask = zero tools. Grill on Ask → tell user to switch mode; no fake option buttons.
+- `grill` toggle independent of `game-*`.
+- `ask_user` cards persist in session JSON; bright orange `#ff7a00`.
+- Relative `ch.md` stays in-app (no Custom Tabs). `open_in_editor` = 链接到段落, not a second jump tool.
+- Composer `/` and `@` match Win popovers; skill = chip not leftover `/id`; mounts = `attachedPaths` CRITICAL.
+- Agent prose paint: blue added / yellow modified; save clears; user inserts unmarked.
+- Applied-change card **filename** click opens that file (user gesture); tag `edit` only folds the diff.
 
 ## Win files to keep in the other-device editor
 
@@ -94,7 +109,13 @@ project-memory/product-decisions.md
 src/renderer/src/platform/index.ts
 src/main/ai/proposalGate.ts
 src/shared/rewindFiles.ts
+src/shared/agentAsk.ts
+src/shared/articleLine.ts
+src/shared/csvTable.ts
+src/shared/agentEditSpans.ts
 src/shared/kyboardSchema.ts
+src/renderer/src/ai/AiComposer.tsx
+android-port-brief/10-update-ask-csv-links.md
 extras/godot-kentucky-dialogue/README.md
 project-memory/PACKAGED-AI-UX.md
 project-memory/AGENT-GIT.md

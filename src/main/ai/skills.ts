@@ -34,6 +34,9 @@ export interface SkillDetail extends SkillMeta {
 /** Built-in always-applied voice skill (seeded like game skills; user may disable). */
 export const CAVEMAN_SKILL_ID = 'caveman'
 
+/** Grill / ask_user skill — not part of the game-design octet; not auto-injected. */
+export const GRILL_SKILL_ID = 'grill'
+
 /** Factory game-design skills shipped in resources/ai-skills. */
 export const BUNDLED_GAME_SKILL_IDS = [
   'game-brainstorm',
@@ -46,7 +49,7 @@ export const BUNDLED_GAME_SKILL_IDS = [
   'game-consistency'
 ] as const
 
-const BUNDLED_SKILL_IDS = [CAVEMAN_SKILL_ID, ...BUNDLED_GAME_SKILL_IDS] as const
+const BUNDLED_SKILL_IDS = [CAVEMAN_SKILL_ID, GRILL_SKILL_ID, ...BUNDLED_GAME_SKILL_IDS] as const
 
 const SAMPLE_ID = 'literary-voice'
 const SAMPLE_SKILL = `---

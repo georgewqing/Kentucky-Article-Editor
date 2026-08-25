@@ -27,7 +27,7 @@ export type FileProposalEx = FileProposal & {
 }
 
 /** Bump when write-gate / tool result shape changes — agents can detect stale main process. */
-export const TOOL_API_VERSION = '2026-08-14-a'
+export const TOOL_API_VERSION = '2026-08-25-a'
 
 const MEMORY_KINDS = new Set<ProposalKind>([
   'story_state',

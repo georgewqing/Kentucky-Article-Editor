@@ -25,7 +25,7 @@ Kentucky 是**本机工作区编辑器**。用户级权限下，真正危险的�
 | 渲染层被控（导航到外站、预加载泄漏） | 无沙箱的 `fs:*` / `git:setPath` | 任意读写下用户能碰的全部路径；换成任意 exe 当 git | 导航锁 + IPC 绑窗口工作区 + git.exe 探活 |
 | 用户误操作 | 把 `C:\` / `C:\Users\…` 当工作区打开 | Agent 递归删除工作区内几乎所有东西 | Toast `errors.unsafeWorkspace`，不进入工作区 |
 
-Electron 基线（审计前已有，**勿回退**）：主窗 `contextIsolation: true`、`nodeIntegration: false`；`shell:openExternal` 仅 `http:`/`https:`。Agent 文件工具走 `workspacePath.ts`。沙箱落地当时指纹 `2026-08-12-q`（§121 **未** bump）；**当前全局** `toolApi: 2026-08-14-a`。
+Electron 基线（审计前已有，**勿回退**）：主窗 `contextIsolation: true`、`nodeIntegration: false`；`shell:openExternal` 仅 `http:`/`https:`。Agent 文件工具走 `workspacePath.ts`。沙箱落地当时指纹 `2026-08-12-q`（§121 **未** bump）；**当前全局** `toolApi: 2026-08-25-a`。
 
 ---
 
@@ -196,8 +196,8 @@ BrowserWindow.webContents
 
 | 事件 | 规则 |
 |------|------|
-| `will-navigate` / `will-redirect` | `isAllowedNavigationUrl`：dev 仅 `ELECTRON_RENDERER_URL` 的 protocol+host；打包仅 `file:` 且 `fileURLToPath` 落在 `out/renderer/`（`assertInsideWorkspace(rendererDir(), p)`） |
-| `setWindowOpenHandler` | **一律 `{ action: 'deny' }`**；若 URL 是 `http:`/`https:` 则 `shell.openExternal`（沿用仅 http(s) 的限制） |
+| `will-navigate` / `will-redirect` | `isAllowedNavigationUrl`：dev 仅 Vite origin **且** pathname 是应用壳（`/`、`index.html`、`splash.html`、`pdf-print.html`）。打包仅 `file:` 且落在 `out/renderer/` **且** 文件名是上述壳。相对链解析成 `/ch.md` **不得**整页跳走。 |
+| `setWindowOpenHandler` | **一律 `{ action: 'deny' }`**。真外站 `http:`/`https:` 才 `shell.openExternal`。**禁止**对 Vite origin / 应用壳 `openExternal`（`<a target="_blank" href="ch.md">` 会变成 `http://localhost:5173/ch.md`）。 |
 | `setPermissionRequestHandler` | 全部 `callback(false)`（摄像头、通知、地理位置等） |
 
 禁止再给主窗加 `nodeIntegration` 或关掉 `contextIsolation`。CSP `'unsafe-eval'` 留给 Monaco，**靠本锁 + IPC 沙箱兜底**，不要为了 Monaco 放开导航。
@@ -270,7 +270,7 @@ changelog **§85** 曾规定：有父级 Git 仓时**不**嵌套 init，复用�
 | `gitUnstage` | 路径走 `resolveWorkspacePath` |
 | 本地裸仓 | 可在工作区外，但仍走 `assertSafeExternalGitPath` |
 
-完整 Git 产品契约：[`AGENT-GIT.md`](./AGENT-GIT.md)。§121 当时未 bump；**当前全局** `toolApi: 2026-08-14-a`。
+完整 Git 产品契约：[`AGENT-GIT.md`](./AGENT-GIT.md)。§121 当时未 bump；**当前全局** `toolApi: 2026-08-25-a`。
 
 ### 分镜头 / 媒体上限
 

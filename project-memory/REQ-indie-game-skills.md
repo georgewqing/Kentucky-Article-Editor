@@ -31,7 +31,7 @@ design/
   marketing/          # steam-store.md、devlog.md
 ```
 
-文学 YAML（`story_state.yaml` 等）、`characters.csv`、台词、`.kyboard` 仍在工作区根或各自目录。游戏 skill **先读再写 lore**。
+文学 YAML（`story_state.yaml` 等）、`characters.csv`、台词、`.kyboard` 仍在工作区根或各自目录。游戏 skill **先读再写 lore**。出厂 **`grill`** 是另一条 skill（追问卡 / `ask_user`），**不**算八件套；关掉 `game-*` 不应关掉 grill。
 
 ## 八个 skill
 

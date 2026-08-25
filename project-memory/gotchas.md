@@ -89,7 +89,9 @@
 - 写作与思维导图 **不自动同步**。
 - 欢迎卡片最多展示 6 个，不做真实文件夹截图。
 - 渲染层只依赖 `getPlatform()`。安卓是独立工程，勿在本目录混入 Capacitor。
-- 台词：仅 `*.dialogue.csv` 走 DialogueEditor；basename `characters.csv` 走 CharactersEditor；其它 `.csv` 仍 Monaco。`characters.csv` 路径约定工作区根，勿做成可配置。
+- 台词：仅 `*.dialogue.csv` 走 DialogueEditor；basename `characters.csv` 走 CharactersEditor。**普通 `.csv` 与无后缀严格 sniff 的表**走 `CsvTableEditor`（表格+源码）；`LICENSE` / `Makefile` 仍 txt。`characters.csv` 路径约定工作区根，勿做成可配置。
+- `ask_user` pending：Send 禁用（作曲框显示 Stop）；Stop / 改写重发 / 切会话须 cancel Promise。已答题写入会话 JSON；未答完的题也会落盘，完整退出后变成只读「已中断」卡（无法接着答）。Ask 模式零工具；挂 `/grill` 只能提示切 Plan/Agent，禁止 Markdown 假装按钮。
+- 聊天超链只认 `[text](rel)` 与反引号 `` `rel.md:12` ``；裸 `foo.md:12` 不要自动变链。`cite_workspace` 不切标签；**`open_in_editor`** 才切，且与导图「链接到段落」共用 `lineFlash`（可 `snippet` 对句，不必猜行号）。正文插入链：相对路径、不要 `type="url"`。TipTap Link 必须 `target: null` + `openOnClick: false`；`setWindowOpenHandler` **不得**把应用自身 origin 丢进系统浏览器。解析先同目录再工作区根；`#标题` 不当文件名；`#L12` 才是行号。
 - 台词 id 唯一性要扫工作区全部 `.dialogue.csv`（不只当前文件）；改 text/meta 默认不改 id。
 - Godot 热编辑：打开工程内 `dialogue/` 当工作区即可同文件联动；执行器参考 [ai_river_godot](https://github.com/CCFOX12/ai_river_godot)（Kentucky **不**附带插件），契约见 `extras/godot-kentucky-dialogue/README.md`（**v1.3**）。勿把「导出 CSV」当热编辑主路径。
 - 启动闪屏主题：读 `userData/kentucky-theme.json`；dev 下 splash 走 Vite URL（避免 `out/renderer/boot-theme.js` 过期）；query 里 accent **不带 `#`**；主进程在 `dom-ready`/`did-finish-load` **注入** `--boot-accent*`，不单靠页面脚本。
@@ -125,11 +127,11 @@
 - AI Skills：只读 `SKILL.md` / reference / examples；**永不**执行 skill 内 `scripts/`。技能在软件本体 `data/ai-skills/`，不跟工作区走。厂家 `resources/ai-skills/` 只 **copy-if-missing**（用户改过的 `SKILL.md` / `examples.md` 永不覆盖；缺的 extra 文件会补上）。`seenBundledSkillIds` 只把从未见过的 bundled id 追加进白名单；用户关掉后下次启动不得再打开。**caveman** 是内置：开启则每轮把 `SKILL.md` 注入系统提示，catalog 标明已应用、勿再 `read_skill`。游戏策划文档硬约定工作区根 `design/`。有 `design/` 树：系统提示 Design playbook；**Design L5** 列出本根实际存在的 gdd/concept/characters/glossary/dialogue csv（无 `gdd.md` 也会出 L5）。纯小说工作区无 `design/` 则两套都不注入。`/game-narrative` 挂载时注入 `examples.md`。
 - 思考强度随配置档：High / Mid / Low（默认 Mid）。请求带 `reasoning_effort`（mid → `medium`）。非推理模型 400 且报该字段时，去掉再试一次。须完整退出后再测。
 - AI 联网：默认关；DDG 超时自动回退 Bing；搜索结果会抓取前几条页面写入 `excerpt`（天气站可解析预报卡）；需要更深可读 `web_fetch`。Brave/Tavily 未实现。
-- **Ask 无工具、不写盘**：请求 `tool_choice: none`；同会话里先前 Agent 的 tool_calls 会压成纯文本再发给模型。模型若仍吐出 `read_file` / `propose_text_patch`，主进程**不执行**。DeepSeek 可能把 DSML XML 写成气泡正文——Ask 会丢掉并改成「请切 Agent」。气泡标题「代理人」只是助手角色名，不是当前模式——看输入栏模式胶囊。Ask 启动时 `ai:contextUsage` 不得因空工具列表抛错，否则会黑屏。测 C1 须完整退出后再开（Ask 引入时 `2026-08-13-d`；**当前全局** `toolApi: 2026-08-14-a`）。
+- **Ask 无工具、不写盘**：请求 `tool_choice: none`；同会话里先前 Agent 的 tool_calls 会压成纯文本再发给模型。模型若仍吐出 `read_file` / `propose_text_patch`，主进程**不执行**。DeepSeek 可能把 DSML XML 写成气泡正文——Ask 会丢掉并改成「请切 Agent」。气泡标题「代理人」只是助手角色名，不是当前模式——看输入栏模式胶囊。Ask 启动时 `ai:contextUsage` 不得因空工具列表抛错，否则会黑屏。测 C1 须完整退出后再开（Ask 引入时 `2026-08-13-d`；**当前全局** `toolApi: 2026-08-25-a`）。
 - Plan 模式：计划真相是工作区 `plans/<slug>.plan.md`（同 slug 覆盖），**不是**会话 JSON  alone；AI 面板**不**再挂常驻计划列表。`update_plan_step` 只改 Todos 勾选，勿整文件覆盖冲掉用户改的正文。`plans/` 可随项目提交。
 - Agent 归档/迁移：用 `workspace_mkdir` / `workspace_copy` / `workspace_move` / `workspace_delete`，**不要**说「没有 shell / 不能移动删除」。删除须用户明确要求。勿对归档读全文再 `propose_write_file` 抄写。
 - 写入门禁：**Agent 一律自动写盘**（无 Accept）。黄● = 相对上次 Ctrl+S 的 original。看 `written`/`reviewHint`/`gateDetail`/`toolApi`。误改用 Source Control 丢弃。
-- Agent Git 完整契约与验收：[AGENT-GIT.md](./AGENT-GIT.md)（当前指纹 `2026-08-14-a`）。
+- Agent Git 完整契约与验收：[AGENT-GIT.md](./AGENT-GIT.md)（当前指纹 `2026-08-25-a`）。
 - `git()` allowFail：空 stderr 勿回退到 `Command failed: git …`（会盖住 stdout 的 `nothing to commit`）。
 - remote 删除重加后上游丢失：下一次 `git_push` 须 `setUpstream`+`branch`（GIT-3，非缺陷）。
 - 工作区根 `agent-GIT环境说明.md`（或 `AGENT-GIT-ENV.md`）：固化**该根**远程/分支；仅当 L5 点名才读。勿把其它仓（如 test2-remote）带到新工作区。
@@ -138,7 +140,7 @@
 - **`revisions/` 对用户不可见**：工作区根快照柜（Agent `list_revisions` / create / restore）。资源树与根目录 `list_dir` 隐藏；磁盘仍在；`read_file` 与文学工具照常。`.gitignore` 会幂等补 `revisions/`（与 `.kentucky/` 一样），SCM 不刷快照。须完整退出后生效。环形上限默认 20：再拍会删最旧一份（`evicted[]`），不拒建。
 - Agent Git：`git_status` / `git_diff` / `git_log` / `git_pull` / `git_push` / `git_add` / `git_commit` / `git_remote_add` / `git_remote_remove`（**禁止 force**）。写操作立即执行，聊天高亮卡 + Toast；discard 仍 UI。
 - `git_status` **非纯只读**：可能自动 init（`repoCreated`）并/或追加 `.gitignore` 的 `.kentucky/`、`revisions/`（`gitignoreUpdated`）。
-- 指纹：工具结果须含 `toolApi`（当前 `2026-08-14-a`）；缺则完整重启 Electron。
+- 指纹：工具结果须含 `toolApi`（当前 `2026-08-25-a`）；缺则完整重启 Electron。
 - 工作区沙箱：`workspacePath.ts` + `ipcSandbox.ts` — 跨盘符绝对 relative、symlink realpath fail-closed、拒盘符根裸仓与危险工作区根；文件工具与 `fs:*` 不能逃出打开的文件夹。详见 [SECURITY-AUDIT.md](./SECURITY-AUDIT.md) §121。
 - `git_remote_add`：本地路径 / `file://` / 带空格路径合法；缺失目录会自动 `git init --bare`。`git_push` 对已配本地 remote 同样补建。清理远程用 `git_remote_remove`。
 - 新对话仍会调用 Git：系统提示含 `GIT_AGENT_PLAYBOOK`；每条用户消息末尾有 **Git (L5)** 快照（该轮开头冻结；同轮写盘后以 `git_status` 为准）。
@@ -228,7 +230,7 @@
 - 导出用隐藏 `BrowserWindow` 加载仓内 `pdf-print.html`（dev：Vite 同源；prod：`out/renderer`），再 `printToPDF`。**禁止** `loadURL(data:)`——导航锁 `isAllowedNavigationUrl` 只放行 dev server / `out/renderer`。
 - `.md` 用当前 TipTap HTML（源码模式则 markdown→HTML）；`.kmind` 须在渲染层栅格化（主进程画不出 React Flow）。未激活的导图标签是卸载的，树右键导出会先 `openFile` 再等 capturer。
 - `dialog:savePdf` 与 `pdf:export` 走 `assertWritableLocalPath` / write allowlist；HTML ≤ 2MB、PDF ≤ 50MB。失败只 Toast i18n，不抛英文栈。
-- Agent `export_workspace_pdf` 与 UI 共用 `printHtmlToPdf`。只写工作区 `.md`→`.pdf`（无对话框；覆盖 sibling）。主进程 GFM 子集不是 TipTap。`.kmind` 仍须 UI。该工具引入时指纹 `2026-08-13-a`；**当前全局** `toolApi: 2026-08-14-a`，须完整退出 Electron。
+- Agent `export_workspace_pdf` 与 UI 共用 `printHtmlToPdf`。只写工作区 `.md`→`.pdf`（无对话框；覆盖 sibling）。主进程 GFM 子集不是 TipTap。`.kmind` 仍须 UI。该工具引入时指纹 `2026-08-13-a`；**当前全局** `toolApi: 2026-08-25-a`，须完整退出 Electron。
 - **不做** puppeteer、导图矢量/分页、台词图/分镜头/纯 txt 导出、Agent 导图 PDF。Android **要移植**预览与导出（BOARD A4；不抄 `printToPDF`）。
 
 ## 本机安全（changelog §120–§122）

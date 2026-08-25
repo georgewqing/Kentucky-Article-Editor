@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FilePlus, FolderPlus, MessagesSquare, RefreshCw, Waypoints, Clapperboard } from 'lucide-react'
+import { FilePlus, FolderPlus, MessagesSquare, RefreshCw, Waypoints, Clapperboard, SaveAll } from 'lucide-react'
 import { useAppStore, SIDEBAR_MIN_WIDTH } from '@/state/appStore'
 import { useOverlayScroll } from '@/hooks/useOverlayScroll'
 import { FileTree } from './FileTree'
@@ -24,6 +24,10 @@ export function Sidebar() {
   const sidebarWidth = useAppStore((s) => s.sidebarWidth)
   const setSidebarWidth = useAppStore((s) => s.setSidebarWidth)
   const refreshTree = useAppStore((s) => s.refreshTree)
+  const saveAllDirtyTabs = useAppStore((s) => s.saveAllDirtyTabs)
+  const hasDirtyTabs = useAppStore((s) =>
+    s.tabs.some((t) => t.dirty && t.kind !== 'image' && t.kind !== 'video' && t.kind !== 'pdf')
+  )
   const createFile = useAppStore((s) => s.createFile)
   const createFolder = useAppStore((s) => s.createFolder)
   const createMindMap = useAppStore((s) => s.createMindMap)
@@ -235,6 +239,15 @@ export function Sidebar() {
               onClick={() => openCreate('dialogue')}
             >
               <MessagesSquare {...actionIcon} />
+            </button>
+            <button
+              type="button"
+              title={t('explorer.saveAll')}
+              aria-label={t('explorer.saveAll')}
+              disabled={!workspacePath || !hasDirtyTabs}
+              onClick={() => void saveAllDirtyTabs()}
+            >
+              <SaveAll {...actionIcon} />
             </button>
             <button
               type="button"

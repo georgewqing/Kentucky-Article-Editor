@@ -1,5 +1,6 @@
 ---
 title: Workbench, editors, on-disk formats
+toolApi: 2026-08-25-a
 ---
 
 # 03 — Workbench and editors
@@ -11,7 +12,7 @@ Copy Win UI. Match `project-memory/product-decisions.md`. Visual target: **Curso
 | Piece | Win file | Notes |
 |-------|----------|--------|
 | Activity bar | `workbench/ActivityBar.tsx` | home / explorer / scm / settings / AI |
-| Sidebar + tree | `Sidebar.tsx`, `FileTree.tsx` | overlay scroll, dirty/new **name color + trailing dot** |
+| Sidebar + tree | `Sidebar.tsx`, `FileTree.tsx` | overlay scroll, dirty/new **name color + trailing dot**. Explorer actions: new file/folder/kmind/storyboard/dialogue, **Save All** (`SaveAll`), refresh — see `10-update-ask-csv-links.md` §3 Explorer Save All |
 | Editor tabs | `EditorArea.tsx` | wheel-horizontal tab strip; drag reorder; split panes |
 | Welcome | `WelcomePage.tsx` | ≤6 recent workspace cards |
 | Settings | `SettingsPage.tsx` | theme, accent, font, locale, AI profiles (**local draft + blur save**) |
@@ -31,6 +32,7 @@ Multi-workspace in one window (Win): keep if cheap; else one SAF tree at a time 
 - Copy from WYSIWYG must paste as **plain speech**, not Markdown source (`PACKAGED-AI-UX.md` §4).
 - Word count: non-whitespace code points (`wordCount.ts`).
 - Agent `propose_text_patch` must not smash tables/`>` — Win already fixed in tools + TipTap; keep that.
+- Agent write paint (pale blue added / pale yellow modified): `10-update-ask-csv-links.md` §3 **Agent edit highlights**. Not `lineFlash`.
 
 ## Mind map `.kmind`
 
@@ -59,6 +61,19 @@ Empty CSV write on incomplete load is a known Win gotcha — do not regress (`go
 ## Characters
 
 `CharactersEditor.tsx` when opening `characters.csv`.
+
+## Generic CSV (not dialogue / cast)
+
+`EditorKind: 'csv'` → `CsvTableEditor.tsx`. Detection order in `appStore.detectKind`:
+
+1. `*.dialogue.csv` → dialogue graph (unchanged).
+2. `characters.csv` → cast editor (unchanged).
+3. Path ends with `.csv` → table.
+4. **No extension**: strict sniff (`src/shared/csvTable.ts` `looksLikeDelimitedTable`) → table; otherwise text (`LICENSE`, `Makefile`).
+
+Do not flip kind while the user is typing. After Agent writes an extensionless file, `maybePromoteCsv` may upgrade `text` → `csv`. Disk is still UTF-8; keep the original delimiter. Toolbar: table vs Monaco source. Parse fail → banner + source only.
+
+See `10-update-ask-csv-links.md`.
 
 ## Storyboard / media previews
 

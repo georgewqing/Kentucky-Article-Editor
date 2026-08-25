@@ -15,7 +15,7 @@
 |----|-----|
 | 软件根 | 本目录 · `package.json` **0.3.2** |
 | 壳 | Electron 37 + electron-vite · React 19 · Zustand |
-| 当前 `toolApi` | **`2026-08-14-a`**（`proposalGate.ts` `TOOL_API_VERSION`） |
+| 当前 `toolApi` | **`2026-08-25-a`**（`proposalGate.ts` `TOOL_API_VERSION`） |
 | 沙箱 | `ipcSandbox.ts` + `workspacePath.ts`（changelog §121–§122） |
 | Agent 写盘 | **始终自动写盘**；无 Accept。黄● = 相对上次 Ctrl+S。改动卡只读 |
 | Git | 工作区根自动 `git init`（**不向上**找父仓）；Agent `git_*` 立即执行、无 force |

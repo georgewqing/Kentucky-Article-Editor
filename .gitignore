@@ -11,6 +11,10 @@ mcp
 release
 *.tsbuildinfo
 
+# noVNC 网页根:运行时由 run-headless.sh 生成指向 /usr/share/novnc 的符号链接
+novnc-web/*
+!novnc-web/index.html
+
 dev-data/
 data/
 

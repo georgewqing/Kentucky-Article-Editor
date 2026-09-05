@@ -56,6 +56,10 @@ function authed(req: IncomingMessage): boolean {
   return !!auth && auth === `Bearer ${TOKEN}`
 }
 
+function log(msg: string): void {
+  console.log(`[web ${new Date().toISOString()}] ${msg}`)
+}
+
 // ---------- boot main-process logic under the electron shim ----------
 
 import { ipcMain, __setBridgeSend, BrowserWindow } from './electron-shim'
@@ -122,7 +126,8 @@ function serveStatic(req: IncomingMessage, res: ServerResponse, pathname: string
   }
   const isHtml = abs.endsWith('.html')
   res.writeHead(200, {
-    'Content-Type': MIME[extname(abs).toLowerCase()] || 'application/octet-stream'
+    'Content-Type': MIME[extname(abs).toLowerCase()] || 'application/octet-stream',
+    ...(isHtml ? { 'Cache-Control': 'no-cache' } : {})
   })
   if (req.method === 'HEAD') {
     res.end()
@@ -234,6 +239,7 @@ const server = createServer((req, res) => {
   }
   if (p === '/api/boot') {
     if (!authed(req)) {
+      log(`401 /api/boot from ${req.socket.remoteAddress} (token missing/invalid)`)
       sendJson(res, 401, { ok: false, error: 'unauthorized' })
       return
     }
@@ -242,6 +248,7 @@ const server = createServer((req, res) => {
   }
   if (p === '/api/media' || p === '/api/download') {
     if (!authed(req)) {
+      log(`401 ${p} from ${req.socket.remoteAddress}`)
       sendJson(res, 401, { ok: false, error: 'unauthorized' })
       return
     }
@@ -255,6 +262,7 @@ const server = createServer((req, res) => {
   }
   if (p === '/api/upload' && req.method === 'POST') {
     if (!authed(req)) {
+      log(`401 /api/upload from ${req.socket.remoteAddress}`)
       sendJson(res, 401, { ok: false, error: 'unauthorized' })
       return
     }
@@ -275,6 +283,7 @@ attachWsServer(
     const workspacePath = u.searchParams.get('workspace') || WORKSPACE
     const filePath = u.searchParams.get('file') || null
     mkdirSync(workspacePath, { recursive: true })
+    log(`WS connected role=${role} workspace=${workspacePath} from ${req.socket.remoteAddress}`)
 
     // Each browser tab looks like one BrowserWindow/webContents to the main logic.
     const win = new BrowserWindow({})
@@ -308,11 +317,16 @@ attachWsServer(
       }
     })
     conn.on('close', () => {
+      log('WS closed')
       connByWcId.delete(win.webContents.id)
       win.destroy()
     })
   },
-  (req) => urlOf(req).searchParams.get('token') === TOKEN
+  (req) => {
+    const ok = urlOf(req).searchParams.get('token') === TOKEN
+    if (!ok) log(`WS upgrade REJECTED (bad token) from ${req.socket.remoteAddress}`)
+    return ok
+  }
 )
 
 server.listen(PORT, HOST, () => {

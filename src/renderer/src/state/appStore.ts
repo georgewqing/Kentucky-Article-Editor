@@ -533,8 +533,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   addWorkspaceViaDialog: async () => {
-    const path = await getPlatform().openFolder()
-    if (path) await get().openWorkspace(path)
+    try {
+      const path = await getPlatform().openFolder()
+      if (path) await get().openWorkspace(path)
+    } catch {
+      get().showToast(i18n.t('errors.loadTreeFailed'))
+    }
   },
 
   refreshTree: async () => {

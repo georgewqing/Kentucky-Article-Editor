@@ -31,6 +31,50 @@ function initToken(): string {
 
 const token = initToken()
 
+// ---------------- auth gate ----------------
+
+let authGateShown = false
+
+/** Full-screen token prompt shown when the server rejects us (missing/expired token). */
+function showAuthGate(reason: string): void {
+  if (authGateShown || typeof document === 'undefined') return
+  authGateShown = true
+  const wrap = document.createElement('div')
+  wrap.style.cssText =
+    'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;' +
+    'background:#16181d;color:#e6e6e6;font-family:system-ui,"Segoe UI","Microsoft YaHei",sans-serif;'
+  wrap.innerHTML = `
+    <form style="width:min(420px,86vw);background:#1f2229;border:1px solid #333842;border-radius:12px;padding:28px 26px;box-shadow:0 12px 40px rgba(0,0,0,.45)">
+      <div style="font-size:20px;font-weight:600;margin-bottom:6px">KENTUCKY</div>
+      <div style="font-size:13px;color:#9aa0aa;margin-bottom:18px">
+        ${reason === 'missing' ? '请输入访问令牌以连接服务。' : '访问令牌缺失或已失效,请重新输入。'}
+      </div>
+      <input name="token" autocomplete="off" placeholder="访问令牌"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;border:1px solid #3a3f4a;background:#16181d;color:#e6e6e6;font-size:14px;outline:none" />
+      <div name="hint" style="display:none;color:#f08080;font-size:12px;margin-top:8px"></div>
+      <button type="submit"
+        style="width:100%;margin-top:16px;padding:10px;border:0;border-radius:8px;background:#5b8cff;color:#fff;font-size:14px;font-weight:600;cursor:pointer">
+        进入
+      </button>
+    </form>`
+  const form = wrap.querySelector('form') as HTMLFormElement
+  const input = wrap.querySelector('input') as HTMLInputElement
+  input.value = token
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault()
+    const t = input.value.trim()
+    if (!t) return
+    try {
+      localStorage.setItem(TOKEN_KEY, t)
+    } catch {
+      /* storage unavailable; fall through with reload anyway */
+    }
+    location.reload()
+  })
+  document.body.appendChild(wrap)
+  input.focus()
+}
+
 // ---------------- posix path helpers (server is Linux) ----------------
 
 function joinPath(...parts: string[]): string {
@@ -70,7 +114,12 @@ let bootInfo: BootInfo | null = null
 
 async function boot(): Promise<BootInfo> {
   if (bootInfo) return bootInfo
+  if (!token) showAuthGate('missing')
   const res = await fetch(`/api/boot?token=${encodeURIComponent(token)}`)
+  if (res.status === 401 || res.status === 403) {
+    showAuthGate('unauthorized')
+    throw new Error('unauthorized')
+  }
   if (!res.ok) throw new Error(`boot failed: ${res.status}`)
   const json = (await res.json()) as BootInfo
   bootInfo = json
@@ -139,8 +188,9 @@ function connect(): Promise<void> {
           })
         }
       }
-      socket.onclose = () => {
+      socket.onclose = (ev) => {
         if (!opened) {
+          if (!token || ev.code === 1006) showAuthGate('unauthorized')
           rejectOpen(new Error('WebSocket closed during handshake'))
           return
         }

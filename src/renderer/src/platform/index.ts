@@ -1,3 +1,5 @@
+import { createWebPlatform } from './web'
+
 export interface FileEntry {
   name: string
   path: string
@@ -584,7 +586,15 @@ let platform: Platform | null = null
 
 export function getPlatform(): Platform {
   if (!platform) {
-    platform = window.kentucky ? createElectronPlatform() : createBrowserStubPlatform()
+    const isWeb =
+      typeof window !== 'undefined' &&
+      typeof location !== 'undefined' &&
+      (location.protocol === 'http:' || location.protocol === 'https:')
+    platform = isWeb
+      ? createWebPlatform()
+      : window.kentucky
+        ? createElectronPlatform()
+        : createBrowserStubPlatform()
   }
   return platform
 }
